@@ -1,0 +1,21 @@
+{
+  "schemaVersion": 1,
+  "kind": "quickTalk",
+  "id": "p_fridaydemo",
+  "name": "Friday demo",
+  "talks": [
+    {
+      "id": "t_fridaydemo",
+      "name": "Friday demo",
+      "description": "The checkout redesign for the whole team",
+      "targetSeconds": 720,
+      "segments": [
+        { "id": "s_welcome", "name": "Welcome", "kind": "intro", "plannedSeconds": 60, "openEnded": false, "points": ["Why we redid checkout"], "hints": [] },
+        { "id": "s_numbers", "name": "What changed", "kind": "topic", "plannedSeconds": 180, "openEnded": false, "points": ["Three steps became one", "Saved cards for returning buyers"], "hints": ["Keep it to the headline numbers"] },
+        { "id": "s_demo", "name": "Live demo", "kind": "demo", "plannedSeconds": 300, "openEnded": false, "points": ["Start from an empty cart", "Pay with the saved card"], "hints": ["Test card ends 4242"] },
+        { "id": "s_questions", "name": "Questions", "kind": "outro", "plannedSeconds": 180, "openEnded": true, "points": [], "hints": [] }
+      ],
+      "sessions": []
+    }
+  ]
+}

@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <!-- Record my voice (ADR 0041): shown in macOS's prompt the first time a deck records. -->
+  <key>NSMicrophoneUsageDescription</key>
+  <string>Oversay records your voice while a deck runs, for a transcript made on this computer. It never records the call's audio.</string>
+  <!-- Decks, workspaces and recordings live in Documents/Oversay: shown in macOS's prompt the first time Oversay opens that folder. -->
+  <key>NSDocumentsFolderUsageDescription</key>
+  <string>Oversay keeps your decks, workspaces and recordings in a folder named Oversay in your Documents folder.</string>
+</dict>
+</plist>

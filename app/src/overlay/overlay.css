@@ -1,0 +1,63 @@
+/* Overlay windows are transparent; only what a plugin paints is visible. */
+:root {
+  /* How solid the panels are: Settings › Overlays › Overlay opacity, set by OverlayHost.
+     Only the fill fades; text, kind colours and the hairline border stay solid. */
+  --panel-alpha: 0.78;
+  --panel-bg: rgba(18, 18, 22, var(--panel-alpha));
+  --panel-border: rgba(255, 255, 255, 0.12);
+  --text: #ffffff;
+  --text-muted: rgba(255, 255, 255, 0.6);
+  --text-faint: rgba(255, 255, 255, 0.42);
+
+  /* Segment kinds and states, tuned for the dark panels (the app's dark-theme kind colours). */
+  --k-intro: #7f9fff;
+  --k-topic: #4cc0b2;
+  --k-demo: #f0a050;
+  --k-outro: #aa94ee;
+  --k-break: #9aa4b6;
+  --warn: #ffb35c;
+  --late: #ff9a7a;
+  --early: #7fd8a6;
+  /* The Waveform style's two colours (ADR 0029) as RGB, so either can be drawn at any
+     strength: white on black, swapped by the Light panel (.ink-light). */
+  --ink: 255, 255, 255;
+  --paper: 0, 0, 0;
+  /* Hatching marks an overrun, so it doesn't rely on colour alone. */
+  --stripes: repeating-linear-gradient(135deg, rgba(0, 0, 0, 0.45) 0 4px, transparent 4px 9px);
+
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+  font-size: 15px;
+  line-height: 1.4;
+  color: var(--text);
+  -webkit-font-smoothing: antialiased;
+  /* A soft shadow behind the text that grows as the panel thins; none at today's 78%. */
+  text-shadow: 0 1px 2px rgba(0, 0, 0, max(0, calc((0.78 - var(--panel-alpha)) * 2)));
+}
+
+html,
+body,
+#app {
+  margin: 0;
+  height: 100%;
+  background: transparent;
+  overflow: hidden;
+  user-select: none;
+  -webkit-user-select: none;
+  cursor: default;
+}
+
+/* Waveform with the Light panel: black on white. */
+.ink-light {
+  --ink: 0, 0, 0;
+  --paper: 255, 255, 255;
+}
+
+/* Shared translucent panel plugins can use as their background. */
+.overlay-panel {
+  box-sizing: border-box;
+  height: 100%;
+  padding: 12px 16px;
+  background: var(--panel-bg);
+  border: 1px solid var(--panel-border);
+  border-radius: 12px;
+}

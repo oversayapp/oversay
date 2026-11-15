@@ -1,0 +1,94 @@
+[package]
+name = "oversay"
+version = "0.1.0"
+description = "Oversay: plan and present talks on time"
+authors = ["John Ryan"]
+license = "GPL-3.0-only"
+repository = "https://github.com/oversayapp/oversay"
+# Oversay is an app, not a library: this keeps `cargo publish` from ever putting it on crates.io.
+publish = false
+edition = "2024"
+rust-version = "1.90"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[lib]
+name = "oversay_lib"
+# Desktop only: the staticlib and cdylib forms are for Tauri's iOS and Android builds.
+crate-type = ["rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2.7.1", features = [] }
+
+[dependencies]
+serde_json = "1.0"
+chrono = { version = "0.4", default-features = false, features = ["clock"] }
+trash = "5"
+serde = { version = "1.0", features = ["derive"] }
+log = "0.4"
+tauri = { version = "2.12.1", features = ["macos-private-api", "tray-icon", "image-png"] }
+tauri-plugin-dialog = "2"
+tauri-plugin-log = "2"
+tauri-plugin-window-state = "2"
+# Session hotkeys that work while another app has focus (006/03).
+tauri-plugin-global-shortcut = "2"
+tauri-plugin-opener = "2"
+# Finds and installs updates, only in a build given a feed and key (ADR 0030, lib.rs).
+tauri-plugin-updater = "2"
+# Watches Quick notes and Quick talks for files changed outside Oversay (ADR 0034, quick.rs).
+notify-debouncer-mini = "0.7"
+# oversay:// links open and show notes and quick talks (ADR 0032, links.rs).
+tauri-plugin-deep-link = "2"
+# Saves the skill as a zip for the Claude app and ChatGPT to upload (skill.rs).
+zip = { version = "9", default-features = false, features = ["deflate"] }
+# Reads Markdown for Notes' Paste as note: WebKit's own clipboard read asks with a pop-up.
+tauri-plugin-clipboard-manager = "2"
+# `Oversay --check` applies the project schema written out from schema.ts (#205, check.rs).
+jsonschema = { version = "0.59", default-features = false }
+# `Oversay --check <note>.md` reads a note with the patterns lint.ts uses (#210, note_lint.rs).
+regex = "1"
+# Deck ids drawn evenly from the system's random source, as ids.ts does (ADR 0037, ids.rs).
+getrandom = "0.3"
+# Checks a URL dropped on a deck before it becomes a web link file (resources.rs).
+url = "2"
+# Record my voice (ADR 0041, recorder.rs): the default microphone, written as WAV until transcribed.
+cpal = "0.18.2"
+hound = "3.5.1"
+# Speech to text on the device (ADR 0041, transcriber.rs): whisper.cpp, its model downloaded once
+# (ureq) and checked by its SHA-256 (sha2). Building whisper.cpp needs cmake.
+whisper-rs = "0.16.0"
+ureq = "3.5.0"
+sha2 = "0.11.1"
+
+# Dependencies carry no debuginfo in dev builds: it was most of target/ (objc2-app-kit
+# alone was 176M per copy). Our own crate keeps full debuginfo for stepping.
+[profile.dev.package."*"]
+debug = false
+
+[target.'cfg(windows)'.dependencies]
+# The taskbar button's jump list runs the app again with --control-panel, and an oversay:// link
+# starts it with the link; this hands both to the running app instead (ADR 0028, 0032). Windows only: on a Mac, dev copies of the app run side by side.
+tauri-plugin-single-instance = { version = "2", features = ["deep-link"] }
+# The jump list itself (platform::install_jump_list), and the taskbar's theme (platform::tray_icon).
+windows = { version = "0.62", features = ["Win32_System_Registry", "Win32_UI_Shell", "Win32_UI_Shell_Common", "Win32_UI_Shell_PropertiesSystem", "Win32_System_Com", "Win32_System_Com_StructuredStorage", "Win32_Storage_EnhancedStorage", "Win32_System_Variant", "Win32_Foundation", "Win32_System_Console"] }
+
+[target.'cfg(target_os = "macos")'.dependencies]
+# Turns overlay windows into non-activating NSPanels so they can appear over
+# full-screen apps. Pinned to a reviewed commit on the v2.1 branch.
+tauri-nspanel = { git = "https://github.com/ahkohd/tauri-nspanel", rev = "6e595d776e9ac594b73e5a180155800f4da6c87d" }
+# Catch AppKit exceptions in the panel setup instead of aborting (platform::float_over_fullscreen).
+objc2 = { version = "0.6", features = ["exception"] }
+# Describes a native exception for the debug log (platform::log_native_exceptions).
+objc2-foundation = { version = "0.3", default-features = false, features = ["std", "NSString"] }
+# Finds the built-in (laptop) display for an overlay's first position.
+objc2-core-graphics = { version = "0.3", default-features = false, features = ["std", "libc", "CGError", "CGDirectDisplay", "CGDisplayConfiguration"] }
+# Whether Oversay may use the microphone, for Record my voice (recorder.rs).
+objc2-av-foundation = { version = "0.3.2", default-features = false, features = ["std", "AVCaptureDevice", "AVMediaFormat"] }
+# Whisper on the Mac's GPU.
+whisper-rs = { version = "0.16.0", features = ["metal"] }
+
+[target.'cfg(target_os = "linux")'.dependencies]
+# tauri-plugin-deep-link 2.6.2 builds a rust-ini ParseOption by its fields, and rust-ini 0.21.2
+# added fields in a patch release, which broke CI's Linux build (21 Oct). Held here until
+# deep-link fills them in. Not used by Oversay itself.
+rust-ini = "=0.21.1"

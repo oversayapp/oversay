@@ -1,0 +1,382 @@
+name: Build
+
+on:
+  push:
+    branches: [main]
+    # A version tag builds a release (docs/releasing.md). Path filters don't apply to tags.
+    tags: ["v*"]
+    paths:
+      - "app/**"
+      - "scripts/**"
+      - "Makefile"
+      - ".github/workflows/build.yml"
+  pull_request:
+    branches: [main]
+    paths:
+      - "app/**"
+      - "scripts/**"
+      - "Makefile"
+      - ".github/workflows/build.yml"
+  workflow_dispatch:
+    inputs:
+      feed:
+        description: "Test build only: the https:// address of a latest.json this build checks"
+        required: false
+      pubkey:
+        description: "Test build only: the public key of the throwaway key that signs the test packages"
+        required: false
+      sign:
+        description: "Sign and notarize the macOS build (needs the Apple secrets in the release environment; a version tag always does)"
+        type: boolean
+        default: false
+
+# Updates (ADR 0030): a build checks a feed only when given one with its key, and makes signed
+# update packages only when the signing key secret exists. Neither is set until Oversay goes public.
+# A newer push to the same branch or PR makes the older run pointless: cancel it. Tags and builds
+# started by hand always finish.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name != 'workflow_dispatch' && !startsWith(github.ref, 'refs/tags/') }}
+
+# Read-only by default; the two jobs that publish a release ask for more themselves.
+permissions:
+  contents: read
+
+env:
+  OVERSAY_UPDATE_FEED: ${{ inputs.feed || vars.OVERSAY_UPDATE_FEED }}
+  OVERSAY_UPDATE_PUBKEY: ${{ inputs.pubkey || vars.OVERSAY_UPDATE_PUBKEY }}
+
+jobs:
+  # Fast guardrail on every PR and push: the same checks as `make check`.
+  checks:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: app/package-lock.json
+
+      - name: Install Tauri system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libxdo-dev libssl-dev libayatana-appindicator3-dev librsvg2-dev libasound2-dev
+
+      - name: Install Rust stable
+        run: rustup toolchain install stable --profile minimal --component rustfmt,clippy && rustup default stable
+
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2
+        with:
+          workspaces: app/src-tauri -> target
+
+      # make check runs cargo audit; the version mise.toml pins.
+      - name: Install cargo-audit
+        run: cargo install cargo-audit --version 0.22.2 --locked
+
+      - run: npm ci
+        working-directory: app
+
+      - name: The tag matches the version
+        if: startsWith(github.ref, 'refs/tags/v')
+        run: node scripts/version.mjs --tag "$GITHUB_REF_NAME"
+
+      - run: make check
+        env:
+          CARGO: cargo
+
+  # Installers are only built for main, after the checks pass.
+  windows:
+    needs: checks
+    # Installers only for a version tag or a build started by hand (Actions › Build › Run workflow):
+    # a Windows minute counts twice and a macOS minute ten times against the plan's allowance,
+    # and building them on every push to main used it up in October.
+    if: github.event_name == 'workflow_dispatch' || startsWith(github.ref, 'refs/tags/v')
+    runs-on: windows-latest
+    defaults:
+      run:
+        working-directory: app
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: app/package-lock.json
+
+      - name: Install Rust stable
+        run: rustup toolchain install stable --profile minimal && rustup default stable
+
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2
+        with:
+          workspaces: app/src-tauri -> target
+
+      - run: npm ci
+
+      - run: npm test
+
+      - name: Rust tests
+        working-directory: app/src-tauri
+        run: cargo test
+
+      - name: Build app, NSIS installer and .msi
+        shell: bash
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        run: |
+          node ../scripts/build-config.mjs "$RUNNER_TEMP/build-config.json"
+          npx tauri build --bundles nsis,msi --config "$RUNNER_TEMP/build-config.json"
+
+      # The frontend is embedded in the exe, so the portable build is just the exe.
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        with:
+          name: oversay-windows-portable
+          path: app/src-tauri/target/release/oversay.exe
+
+      # Each installer is also its own update package; the .sig files exist only when signing is on.
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        with:
+          name: oversay-windows-nsis
+          path: |
+            app/src-tauri/target/release/bundle/nsis/*-setup.exe
+            app/src-tauri/target/release/bundle/nsis/*-setup.exe.sig
+
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        with:
+          name: oversay-windows-msi
+          path: |
+            app/src-tauri/target/release/bundle/msi/*.msi
+            app/src-tauri/target/release/bundle/msi/*.msi.sig
+
+  # Signing and notarizing (docs/platform/macos-signing.md): only for a version tag or a manual run
+  # with "sign" ticked. Those use the `release` environment, which holds the Apple secrets, so no
+  # other run (a fork's PR, a plain manual build) can read them. Any other run names the
+  # `unsigned` environment, which GitHub creates empty on first use.
+  macos:
+    needs: checks
+    if: github.event_name == 'workflow_dispatch' || startsWith(github.ref, 'refs/tags/v')
+    runs-on: macos-latest
+    # Notarization usually takes a minute or two; this stops a stuck submission using the allowance.
+    timeout-minutes: 75
+    environment: ${{ (inputs.sign || startsWith(github.ref, 'refs/tags/v')) && 'release' || 'unsigned' }}
+    env:
+      SIGN: ${{ (inputs.sign || startsWith(github.ref, 'refs/tags/v')) && 'true' || 'false' }}
+    defaults:
+      run:
+        working-directory: app
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: app/package-lock.json
+
+      # Runners are Apple Silicon; build universal so it also runs on Intel Macs.
+      - name: Install Rust stable (both Mac targets)
+        run: |
+          rustup toolchain install stable --profile minimal --target aarch64-apple-darwin --target x86_64-apple-darwin
+          rustup default stable
+
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2
+        with:
+          workspaces: app/src-tauri -> target
+
+      - run: npm ci
+
+      - run: npm test
+
+      - name: Rust tests
+        working-directory: app/src-tauri
+        run: cargo test
+
+      # Without Apple settings Tauri skips signing, so this is the build every run did before.
+      - name: Build universal .app and .dmg (unsigned)
+        if: env.SIGN != 'true'
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        run: |
+          node ../scripts/build-config.mjs "$RUNNER_TEMP/build-config.json"
+          npx tauri build --target universal-apple-darwin --bundles app,dmg --config "$RUNNER_TEMP/build-config.json"
+
+      # Tauri signs inside out, notarizes the .app and staples it (it builds its own temporary
+      # keychain from APPLE_CERTIFICATE). An empty value would be read as set, so a missing secret
+      # fails here, by name, before anything is built.
+      - name: Check the Apple secrets are all there
+        if: env.SIGN == 'true'
+        env:
+          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+          APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
+          APPLE_API_KEY: ${{ secrets.APPLE_API_KEY }}
+          APPLE_API_KEY_P8: ${{ secrets.APPLE_API_KEY_P8 }}
+        run: |
+          missing=0
+          for name in APPLE_CERTIFICATE APPLE_CERTIFICATE_PASSWORD APPLE_SIGNING_IDENTITY APPLE_API_ISSUER APPLE_API_KEY APPLE_API_KEY_P8; do
+            if [ -z "${!name}" ]; then echo "::error::The secret $name is not set in the release environment"; missing=1; fi
+          done
+          exit "$missing"
+
+      # Tauri reads the notarization key from a file. It lives in RUNNER_TEMP, readable only by
+      # this user, and the last step of the job deletes it.
+      - name: Write the notarization key file
+        if: env.SIGN == 'true'
+        env:
+          APPLE_API_KEY: ${{ secrets.APPLE_API_KEY }}
+          APPLE_API_KEY_P8: ${{ secrets.APPLE_API_KEY_P8 }}
+        run: |
+          umask 077
+          key_file="$RUNNER_TEMP/AuthKey_${APPLE_API_KEY}.p8"
+          printf '%s\n' "$APPLE_API_KEY_P8" > "$key_file"
+          echo "APPLE_API_KEY_PATH=$key_file" >> "$GITHUB_ENV"
+
+      - name: Build universal .app and .dmg (signed and notarized)
+        if: env.SIGN == 'true'
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+          APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
+          APPLE_API_KEY: ${{ secrets.APPLE_API_KEY }}
+        run: |
+          node ../scripts/build-config.mjs "$RUNNER_TEMP/build-config.json"
+          npx tauri build --target universal-apple-darwin --bundles app,dmg --config "$RUNNER_TEMP/build-config.json"
+
+      # Tauri signs the .dmg but doesn't notarize it. Do that now, before the file is uploaded, so
+      # the checksum anyone takes later (a Homebrew cask's) is of the stapled file.
+      - name: Notarize and staple the .dmg
+        if: env.SIGN == 'true'
+        env:
+          APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
+          APPLE_API_KEY: ${{ secrets.APPLE_API_KEY }}
+        run: |
+          dmg=$(ls src-tauri/target/universal-apple-darwin/release/bundle/dmg/*.dmg)
+          xcrun notarytool submit "$dmg" --key "$APPLE_API_KEY_PATH" --key-id "$APPLE_API_KEY" --issuer "$APPLE_API_ISSUER" --wait --timeout 30m
+          xcrun stapler staple "$dmg"
+
+      # Fails the run if the result isn't what a user needs: signed with the hardened runtime and a
+      # timestamp, only the microphone entitlement, both architectures, notarized and stapled.
+      - name: Verify the signed build
+        if: env.SIGN == 'true'
+        run: ../scripts/verify-macos.sh src-tauri/target/universal-apple-darwin/release/bundle
+
+      - name: Delete the notarization key file
+        if: always() && env.SIGN == 'true'
+        run: rm -f "$RUNNER_TEMP"/AuthKey_*.p8
+
+      # Only the .dmg is uploaded: artifact zips drop the exec bit inside a raw .app.
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        with:
+          name: oversay-macos-dmg
+          path: app/src-tauri/target/universal-apple-darwin/release/bundle/dmg/*.dmg
+
+      # The update package: the .app as a .tar.gz, made only when signing is on.
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        with:
+          name: oversay-macos-update
+          if-no-files-found: ignore
+          path: |
+            app/src-tauri/target/universal-apple-darwin/release/bundle/macos/Oversay.app.tar.gz
+            app/src-tauri/target/universal-apple-darwin/release/bundle/macos/Oversay.app.tar.gz.sig
+
+  # Replaces the rolling "latest" pre-release with this build, so the newest
+  # installers are always at https://github.com/<repo>/releases/tag/latest.
+  # A test build (one given a feed) never replaces it.
+  release:
+    needs: [windows, macos]
+    if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main' && !inputs.feed
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+    steps:
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8
+        with:
+          path: artifacts
+
+      - name: Collect files
+        run: |
+          mkdir release
+          cp artifacts/oversay-windows-nsis/*-setup.exe release/
+          cp artifacts/oversay-windows-msi/*.msi release/
+          cp artifacts/oversay-macos-dmg/*.dmg release/
+          cp artifacts/oversay-windows-portable/oversay.exe release/Oversay_portable_x64.exe
+          ls -l release
+
+      - name: Replace the latest pre-release
+        env:
+          SIGNED: ${{ inputs.sign }}
+        run: |
+          # The Windows installers are never signed; the macOS one is when this run ticked "sign".
+          if [ "$SIGNED" = true ]; then
+            mac="macOS: signed and notarized by Apple, so it opens like any downloaded app."
+          else
+            mac="macOS: unsigned, so use System Settings → Privacy & Security → Open Anyway."
+          fi
+          gh release delete latest --cleanup-tag --yes || true
+          gh release create latest release/* \
+            --prerelease \
+            --target "$GITHUB_SHA" \
+            --title "Latest build (${GITHUB_SHA::7})" \
+            --notes "Automatic build of \`main\` at ${GITHUB_SHA::7}. Windows: unsigned, so choose More info → Run anyway. $mac
+
+          - \`-setup.exe\`: Windows installer, for you only, no administrator rights needed
+          - \`.msi\`: Windows installer for all users, for IT departments
+          - \`Oversay_portable_x64.exe\`: Windows, no install needed
+          - \`.dmg\`: macOS (Intel and Apple Silicon)"
+
+  # A version tag vX.Y.Z (docs/releasing.md): a private release in this repository with the
+  # installers, the update packages and latest.json. Nothing is published anywhere public (ADR 0030).
+  tagged-release:
+    needs: [windows, macos]
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+      TAG: ${{ github.ref_name }}
+      # Where the files will be downloaded from, once there is a feed. Until then, this release.
+      FILES_BASE: ${{ vars.OVERSAY_UPDATE_FILES || format('https://github.com/{0}/releases/download/{1}', github.repository, github.ref_name) }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8
+        with:
+          path: artifacts
+
+      # What changed is written once, as the tag's message.
+      - name: Release notes from the tag
+        run: |
+          git fetch --force origin "refs/tags/$TAG:refs/tags/$TAG"
+          git for-each-ref "refs/tags/$TAG" --format='%(contents)' > "$RUNNER_TEMP/notes.md"
+          cat "$RUNNER_TEMP/notes.md"
+
+      - name: Collect files
+        run: |
+          mkdir release
+          cp artifacts/oversay-windows-nsis/* release/
+          cp artifacts/oversay-windows-msi/* release/
+          cp artifacts/oversay-macos-dmg/*.dmg release/
+          cp artifacts/oversay-macos-update/* release/ 2>/dev/null || true
+          cp artifacts/oversay-windows-portable/oversay.exe release/Oversay_portable_x64.exe
+          if ls release/*.sig > /dev/null 2>&1; then
+            node scripts/latest-json.mjs --dir release --version "${TAG#v}" --base "$FILES_BASE" --notes-file "$RUNNER_TEMP/notes.md"
+          else
+            echo "No signing key: installers only, no update packages or latest.json."
+          fi
+          ls -l release
+
+      - name: Create the private release
+        run: gh release create "$TAG" release/* --verify-tag --title "Oversay ${TAG#v}" --notes-file "$RUNNER_TEMP/notes.md"

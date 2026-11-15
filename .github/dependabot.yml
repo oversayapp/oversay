@@ -1,0 +1,20 @@
+# Dependabot: security updates only. Alerts and security-update PRs are switched on
+# in the repository's settings; a limit of 0 turns off routine version-update PRs, which leaves
+# security updates as they are. They run on GitHub's side, so they work while CI is off.
+version: 2
+updates:
+  - package-ecosystem: npm
+    directory: /app
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 0
+  - package-ecosystem: cargo
+    directory: /app/src-tauri
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 0
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 0

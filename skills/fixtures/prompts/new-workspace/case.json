@@ -1,0 +1,4 @@
+{
+  "creates": "Workspaces/AppSec June 2026/workspace.json",
+  "workspace": { "name": "AppSec June 2026", "tags": ["conferences"], "decks": ["d_panel7q2"], "when": "2026-06-02", "where": "zoom" }
+}

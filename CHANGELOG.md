@@ -1,0 +1,220 @@
+# Changelog
+
+Notable changes to Oversay, newest first. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and versions follow [Semantic Versioning](https://semver.org/).
+
+Oversay has not had a public release yet. Everything below is in **[Unreleased]**, which becomes **0.2.0**, the first public release. Within it, work is grouped by epic (linked to its issue), newest first, with the date it landed. Features that a later decision replaced are listed where they were added, and again where they went, so the story reads in order.
+
+## [Unreleased]
+
+### Deck widget: one widget, a Card view and an Agenda view · 2026-11-07
+
+#### Added
+- One widget for a running deck with two views of the same run: the **Card view** (the current card, upper left) and the **Agenda view** (every card as a bar along the bottom, with its title and never its points). An icon beside ✕ switches between them, and **V** does too.
+- Previous, Start or Pause, and Next in a tab that slides out from under the widget's edge, on both views, bigger for use during a meeting.
+- A record button in the widget's corner on every running deck.
+- Preview shows the view you last used.
+
+#### Changed
+- Recording is one setting for every deck: **Settings › Recordings** with **Auto record**, off by default.
+- After a deck runs, Oversay opens that run's session page instead of the deck editor.
+- The deck bar is always at the bottom.
+
+#### Removed
+- The separate flashcard and timeline widgets, and a deck's `timeline:`, `record:` and `deck-bar:` options. Older decks that have them still open; the options are kept as written and ignored.
+
+### App icon · 2026-11-07
+
+#### Added
+- Oversay's own app icon, a card over the call on green, in place of the default, with a one-colour version for the macOS menu bar and the Windows tray.
+
+### Sessions: look back on every run, note it, and have your AI review it · 2026-11-07
+
+#### Added
+- **Sessions** on the rail: every run of every deck, newest first, grouped by day, with filters by workspace, deck and dates, and search.
+- A session's page: each card's planned and actual time, overruns and pauses, your notes on how it went, and a way to delete a test run. Sessions with a note are kept.
+- Import a Zoom or Teams transcript into a session, split by card.
+- Record your own voice while a deck runs, and have it transcribed on your computer (Whisper, downloaded only after you agree). Only your microphone is recorded, never the call.
+- Your AI app reviews a session through the Oversay skill, and Oversay shows the review on the session's page.
+
+### Workspaces: decks grouped the way you work · 2026-10-27
+
+#### Added
+- **Workspaces** on the rail: a workspace is a group of decks, named for what you use Oversay for (a project, a course, a set of meetings), with its own date, place, notes and files. Tags group workspaces.
+- The Workspaces page has a sidebar of All, Pinned, Recent and each tag, and remembers your choice.
+- Search and New deck know about workspaces. The Oversay skill can make a workspace and add decks to it.
+
+#### Removed
+- **Projects and talks**, their screens and the talk editor: decks in workspaces replace them.
+
+### Decks as folders · 2026-10-25
+
+#### Added
+- A deck is a folder holding its cards, its sessions and its resources. It is known by an id inside it, so renaming or moving it, in Oversay, in Finder or Explorer, by an AI or a sync tool, loses nothing: sessions, pins, Recent and links all follow it.
+- Two decks can share a title. Each day's "Daily team meeting" is its own dated folder.
+- Drop files or links on a deck to keep them in its resources, and open them with a click.
+- Example decks on first run.
+
+### Decks and flashcards · 2026-10-24
+
+#### Added
+- A **deck** is a Markdown file of **flashcards**, each with points and an optional time like `[3m]`, written by hand or by your AI app.
+- The **flashcard widget** shows one card at a time. Timed cards move on by themselves (**Auto-advance**), turn amber in their last 10 seconds, and the last card counts over in red. Previous, Pause and Next steer by hand.
+- The deck editor, with times, kinds, each deck's options, and a live preview of the deck on screen.
+- Every run of a deck is recorded, with an **After the deck** view.
+- The Decks list, with Recent, pins and favourites, grouped by date and filtered by tag, audience and date.
+- One search bar for the whole app.
+
+#### Changed
+- The Oversay skill writes every note as a deck.
+
+#### Removed
+- Quick notes and quick talks, which became decks, and the earlier Timeline styles and Talking Points options.
+
+### The Oversay skill: notes from any AI chat · 2026-10-22
+
+#### Added
+- One Oversay skill for Claude Code, Codex, Gemini CLI, the Claude app (chat and Cowork), ChatGPT and the Gemini app, installed and updated from the new **AI** page in Oversay. Nothing is hosted.
+- Ask your AI app to make a note or add to one, and it appears in Oversay, whether or not Oversay is open.
+- `oversay://` links open a note or put it on screen.
+- Drop a note file anywhere on the window, or paste Markdown as a note.
+- Oversay notices notes added or changed outside it.
+- Notes record which version of the skill made them, and are checked as they are written.
+
+### Waveform · 2026-10-21
+
+#### Added
+- **Waveform**, a Timeline style and the new default: one colour on its opposite in a thick rounded frame, with a sine wave whose pattern differs by kind of segment, cancelled to a flat line as the talk goes. Hold the wave to look back at any point already passed.
+- Waveform and Blocks come in a dark and a light look; Talking Points takes the same look.
+
+### Control panel · 2026-10-20
+
+#### Added
+- A control panel docked to the right edge of the screen, never shown in a screen share, holding what is running, which overlays are up and how they look. It opens from the menu-bar icon, the Dock menu, the Windows tray and taskbar menus, or ⌃⌥P.
+
+#### Changed
+- Overlays lose their ⋯ menus; the look is set in the control panel and on Get ready.
+
+### Quick talks · 2026-10-20
+
+#### Added
+- Quick talks: an agenda with points and times, outside any project, run through Get ready like any talk. A quick note can become a quick talk, and a quick talk can move into a project and back out.
+- Recent and pins on the Talks and Projects pages.
+
+### Quick notes · 2026-10-20
+
+#### Added
+- Quick notes: Markdown files for a meeting, edited as topics and points or as Markdown, and shown on screen during a call with Previous and Next topic and a clock. A note edited elsewhere and saved unchanged stays byte for byte the same.
+- Recent, pins and Favourites for notes.
+
+### Talking Points · 2026-10-15
+
+#### Added
+- The **Talking Points** overlay: the current segment's points and hints, in one minimalist style, opening with every session away from the Timeline.
+- Choose whether talking points show as their own overlay, inside the Timeline, or not at all.
+- A little Markdown in points and hints, shown formatted on the overlays and in the editor.
+- An opacity setting for every overlay, and live opacity from the overlay itself.
+
+### Settings sections and About · 2026-10-14
+
+#### Added
+- Settings is one page with its sections listed down the side; the list follows as you scroll, and becomes a menu on a narrow window.
+- **About**: the version, build, platform, licence and third-party notices.
+
+### Timeline · 2026-10-10 to 2026-10-24
+
+#### Added
+- The **Timeline** overlay: a glance shows where you are in the segment and the talk, and whether you are running early or late.
+- Five Timeline styles, chosen in **Settings › Overlays**: the square wave (the default), an edge strip along the bottom of the screen, a clock card, a side rail, and one card with the talking points. The overlay window follows the chosen style.
+- Previous, Pause or Resume, and Next on the overlay itself, shown always, on hover or never.
+- The talk's plan as a bar in the talk editor.
+
+### Project workflow: a sidebar, a way back, and a Get ready page · 2026-10-11
+
+#### Added
+- It is always clear which project is open. Its talks sit in a sidebar, each with ▶, and their segments can be copied into the talk being edited.
+- Open another talk to copy from it, with a way back.
+- **Get ready**: pressing ▶ opens a page to check the overlays before you start; **Ready to start** puts the manager away and the overlays up.
+
+#### Removed
+- The Control Panel window of epic 006; Start and End moved onto the Timeline.
+
+### Quick start and a streamlined talk editor · 2026-10-10
+
+#### Added
+- Favourite talks in the rail, ready to start.
+- Starting a session puts the manager out of the way.
+- Drag a segment's length on the plan bar, in 30-second steps.
+
+#### Changed
+- The talk editor takes the clean plan-table look, with adding, deleting, reordering, points and hints in place.
+
+### Session control · 2026-10-09
+
+#### Added
+- Run a talk live: Start, Next, Previous, Pause and Resume, and End, from global hotkeys while your slides have focus.
+- Open-ended segments (a demo) pause the plan and count up until Next.
+- The session is recorded in the project file: planned against actual.
+- **Settings › Shortcuts**, with clashes shown.
+
+### Create project · 2026-10-08
+
+#### Added
+- A project has a description.
+- New project gives a project its own folder in `Documents/Oversay`.
+- Every save keeps earlier versions beside the file, so a project can be restored. Deleting a project moves it to the Trash.
+- A demo project.
+
+### Templates · 2026-10-08
+
+#### Added
+- 24 starter templates in seven categories, with search and a preview.
+- Start a talk from a template, save your own talks as templates, and organise them in your own categories.
+- Delete starter templates and restore them.
+
+### Appearance · 2026-10-07
+
+#### Added
+- Light, Dark or System appearance inside Oversay, remembered across restarts.
+
+### Manager · 2026-10-07
+
+#### Added
+- The main window for planning: an icon rail, Home, projects and the talk editor.
+- Talks made of segments with durations, talking points and hints; drag to reorder; copy a segment to another talk.
+- Unsaved changes are never lost without a warning.
+
+### Projects and the file format · 2026-10-07
+
+#### Added
+- Projects saved as readable `*.oversay.json` files that diff cleanly and keep fields the app doesn't know.
+- A clear message for a broken, invalid or too-new file, never a blank window.
+- Recent projects.
+
+### App foundation · 2026-10-06
+
+#### Added
+- Oversay for macOS (universal) and Windows, as a manager window and overlay windows.
+- Overlays are translucent, frameless and always on top, stay above full-screen slideshows, reopen where you left them, and are hidden from screen capture by default.
+
+### Overlay proof of concept · 2026-10-06
+
+#### Added
+- A first floating overlay showing a list of topics, on macOS and Windows from one codebase.
+
+### Development
+
+Work on how Oversay is built, checked and tracked, newest first.
+
+- 2026-11-09: The repository moved to the `oversayapp` organisation, with its issues and their numbers kept. Designs moved to their own repository.
+- 2026-11-08: Dependency audit passes again.
+- 2026-10-24: Security checks: every commit is checked for secrets and linted; dependencies are audited; one command runs the heavier checks before a pull request; every branch gets a security review.
+- 2026-10-24: Hardening from a security review: a Content Security Policy in every window, and note names handled safely by the skill. The rest of that review is being worked through.
+- 2026-10-22: Installers are built for a version tag or by hand.
+- 2026-10-21: Versions are set in one place; a release is built for each version tag, with signed update packages. The in-app updater is built and waits for a public update feed.
+- 2026-10-21: Each decision record states the current decision.
+- 2026-10-16: Text files check out with LF line endings on every platform.
+- 2026-10-13: Links open only through an allowlist; third-party notices are generated.
+- 2026-10-12: Work is tracked in GitHub Issues, with the history of the earlier tickets kept.
+- 2026-10-06: Builds for macOS and Windows in CI; checks on every pull request; actions logged without their content in development builds.
+
+[Unreleased]: https://github.com/oversayapp/oversay/commits/main

@@ -1,0 +1,10 @@
+{
+  "creates": "Decks/*/deck.md",
+  "topics": ["Pricing", "Support", "Next steps"],
+  "mentions": [
+    "Renewal is up 12%",
+    "two-year lock",
+    "Three P1s over SLA",
+    "Legal reviews the new terms"
+  ]
+}

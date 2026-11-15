@@ -1,0 +1,4 @@
+{
+  "creates": "Decks/Weekly standup 2026-10-20/reviews/*.md",
+  "review": { "session": "2026-10-27T09:00:04.120Z", "sections": ["What ran over", "What to change in the deck"], "mentions": ["Atlas"] }
+}

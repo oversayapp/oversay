@@ -1,0 +1,71 @@
+[
+  {
+    "case": "a good note from the skill",
+    "text": "---\nwith: Sam Ortiz\nwhen: Thu 22 Oct, 10:00\nlength: 30m\nmade-with: Oversay skill 0.1.0\n---\n\n## Q4 hiring plan [10m]\n- Two backend roles\n  - Priya has the numbers\n\n## Offsite [~5m, demo]\n- Dates: 12 or 19 Nov\n",
+    "problems": [],
+    "summary": "2 topics, 3 points"
+  },
+  {
+    "case": "Windows line endings, a title and a quote",
+    "text": "# Board prep\r\n\r\n## Numbers [1:30]\r\n- Q3 revenue\r\n> Don't share the slide\r\n## Ask [open]\r\n- Bridge round\r\n",
+    "problems": [],
+    "summary": "2 topics, 2 points"
+  },
+  {
+    "case": "front matter the app doesn't read",
+    "text": "---\nwith: Sam\nattendees: Sam, Priya\nlength: half an hour\nmade-with: Claude\nnot a field\n---\n## Plan\n- One\n",
+    "problems": [[3, "front-key"], [4, "front-length"], [5, "made-with"], [6, "front-line"]],
+    "summary": "1 topic, 1 point"
+  },
+  {
+    "case": "front matter never closed",
+    "text": "---\nwith: Sam\n## Plan\n- One\n",
+    "problems": [[1, "front-open"], [2, "before-topic"]],
+    "summary": "2 topics, 2 points"
+  },
+  {
+    "case": "topic times the app doesn't read",
+    "text": "## Intro [10 mins]\n- Hello\n## Demo [5m, show]\n- Run it\n## Later [soon]\n- Maybe\n## [5m]\n- Nameless\n",
+    "problems": [[1, "topic-time"], [3, "topic-time"], [7, "topic-name"]],
+    "summary": "4 topics, 4 points"
+  },
+  {
+    "case": "headings that aren't shown",
+    "text": "# Title\n## Plan\n- One\n### Detail\n- Two\n# Another title\n```\n### in code\n```\n",
+    "problems": [[4, "heading"], [6, "heading"]],
+    "summary": "1 topic, 2 points"
+  },
+  {
+    "case": "a point before the first topic, and points too deep",
+    "text": "- Loose point\n- Another\n## Plan\n- One\n  - Sub\n    - Too deep\n  - Sub again\n- Two\n  - Sub of two\n",
+    "problems": [[1, "before-topic"], [6, "deep-point"]],
+    "summary": "2 topics, 8 points"
+  },
+  {
+    "case": "nothing to show",
+    "text": "> Just a reminder\n\n### Not a topic\n",
+    "problems": [[3, "heading"], [null, "no-topics"]],
+    "summary": "0 topics, 0 points"
+  },
+  {
+    "case": "a good deck from the skill",
+    "deck": true,
+    "text": "---\naudience: Platform team\ntags: weekly, platform\ntimeline: waveform\ntiming: on\nauto-advance: on\ncolour: kinds\nhide: ends\nmade-with: Oversay skill 0.1.0\n---\n\n# Stand-up\n\n## Intro [1m, intro]\n- Goal for today\n\n## Atlas [3m]\n1. Shipped the importer\n2. **Blocked** on review\n",
+    "problems": [],
+    "summary": "2 cards, 3 points"
+  },
+  {
+    "case": "a deck written before audience, with its with line",
+    "deck": true,
+    "text": "---\nwith: Sam\n---\n## Catch-up [open]\n- Holidays\n",
+    "problems": [],
+    "summary": "1 card, 1 point"
+  },
+  {
+    "case": "deck options Oversay doesn't read; timeline and deck-bar, retired, are never flagged",
+    "deck": true,
+    "text": "---\nwhen: Thursday\ntimeline: sparkline\ntiming: maybe\ndeck-bar: Top\ncolour: rainbow\nhide: ends, clock, next\n---\n## A [1m]\n- b\n",
+    "problems": [[2, "front-key"], [4, "deck-value"], [6, "deck-value"], [7, "deck-value"]],
+    "summary": "1 card, 1 point"
+  }
+]

@@ -1,0 +1,11 @@
+{
+  "creates": "Decks/Weekly standup 2026-10-20/deck.md",
+  "keeps": "Decks/Weekly standup 2026-10-20/deck.md",
+  "topics": ["Yesterday", "Blockers", "Release on Friday"],
+  "mentions": [
+    "Paired with Ana on the rollout plan",
+    "Rollback script tested on staging",
+    "Keep it to fifteen minutes"
+  ],
+  "audience": "Platform team"
+}

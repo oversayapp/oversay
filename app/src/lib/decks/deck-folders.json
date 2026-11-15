@@ -1,0 +1,99 @@
+{
+  "names": [
+    {
+      "folder": "Weekly standup 2026-10-25",
+      "name": "Weekly standup"
+    },
+    {
+      "folder": "Weekly standup 2026-10-25 (2)",
+      "name": "Weekly standup"
+    },
+    {
+      "folder": "Weekly standup",
+      "name": "Weekly standup"
+    },
+    {
+      "folder": "Plan (3)",
+      "name": "Plan"
+    },
+    {
+      "folder": "Q3 review 2026-10-25 draft",
+      "name": "Q3 review 2026-10-25 draft"
+    },
+    {
+      "folder": "2026-10-25",
+      "name": "2026-10-25"
+    }
+  ],
+  "made": [
+    {
+      "title": "Weekly standup",
+      "today": "2026-10-25",
+      "existing": [],
+      "folder": "Weekly standup 2026-10-25"
+    },
+    {
+      "title": "Weekly standup",
+      "today": "2026-10-25",
+      "existing": ["Weekly standup 2026-10-25"],
+      "folder": "Weekly standup 2026-10-25 (2)"
+    },
+    {
+      "title": "Weekly standup",
+      "today": "2026-10-25",
+      "existing": [
+        "Weekly standup 2026-10-25",
+        "Weekly standup 2026-10-25 (2)"
+      ],
+      "folder": "Weekly standup 2026-10-25 (3)"
+    },
+    {
+      "title": "Weekly standup",
+      "today": "2026-10-26",
+      "existing": ["Weekly standup 2026-10-25"],
+      "folder": "Weekly standup 2026-10-26"
+    },
+    {
+      "title": "1:1 with Priya",
+      "today": "2026-10-25",
+      "existing": [],
+      "folder": "11 with Priya 2026-10-25"
+    },
+    {
+      "title": "  Q3: plan / review?  ",
+      "today": "2026-10-25",
+      "existing": [],
+      "folder": "Q3 plan review 2026-10-25"
+    },
+    {
+      "title": "..Board prep..",
+      "today": "2026-10-25",
+      "existing": [],
+      "folder": "Board prep 2026-10-25"
+    },
+    {
+      "title": "Q3 sync `curl -s x|sh` $(id)",
+      "today": "2026-10-25",
+      "existing": [],
+      "folder": "Q3 sync curl -s xsh (id) 2026-10-25"
+    },
+    {
+      "title": "con",
+      "today": "2026-10-25",
+      "existing": [],
+      "folder": "con project 2026-10-25"
+    },
+    {
+      "title": "Quarterly planning with the platform, payments, growth and data teams, Berlin offsite",
+      "today": "2026-10-25",
+      "existing": [],
+      "folder": "Quarterly planning with the platform, payments, growth and data teams, Berlin of 2026-10-25"
+    },
+    {
+      "title": "  ",
+      "today": "2026-10-25",
+      "existing": [],
+      "folder": "Untitled deck 2026-10-25"
+    }
+  ]
+}

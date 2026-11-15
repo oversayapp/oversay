@@ -1,0 +1,114 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "default",
+  "description": "Permissions for the manager window",
+  "windows": [
+    "manager"
+  ],
+  "permissions": [
+    "core:default",
+    "allow-platform-info",
+    "allow-open-overlay",
+    "allow-close-overlay",
+    "allow-set-hidden-from-capture",
+    "allow-set-overlay-settings",
+    "allow-set-look-back",
+    "allow-keep-overlays-apart",
+    "allow-set-overlay-layout",
+    "allow-fit-overlay",
+    "allow-set-window-hidden-from-capture",
+    "allow-read-config-file",
+    "allow-write-config-file",
+    "allow-missing-example-decks",
+    "allow-install-example-decks",
+    "allow-take-links",
+    "allow-skill-targets",
+    "allow-install-skill",
+    "allow-remove-skill",
+    "allow-reveal-skill",
+    "allow-save-skill-zip",
+    "allow-list-quick-files",
+    "allow-create-quick-file",
+    "allow-import-note",
+    "allow-read-quick-file",
+    "allow-write-quick-file",
+    "allow-rename-quick-file",
+    "allow-trash-quick-file",
+    "allow-read-deck-sessions",
+    "allow-write-deck-sessions",
+    "allow-list-resources",
+    "allow-add-resources",
+    "allow-add-resource-link",
+    "allow-open-resource",
+    "allow-open-resources-folder",
+    "allow-list-session-files",
+    "allow-read-session-file",
+    "allow-write-transcript",
+    "allow-trash-session-files",
+    "allow-read-transcript-file",
+    "allow-start-recording",
+    "allow-pause-recording",
+    "allow-stop-recording",
+    "allow-recording-state",
+    "allow-microphone-status",
+    "allow-speech-model",
+    "allow-download-speech-model",
+    "allow-remove-speech-model",
+    "allow-transcribe-recording",
+    "allow-discard-recording",
+    "allow-list-workspaces",
+    "allow-create-workspace",
+    "allow-trash-workspace",
+    "allow-update-workspace",
+    "allow-state-get",
+    "allow-session-open",
+    "allow-session-close",
+    "allow-check-shortcut",
+    "allow-set-tray-title",
+    "allow-session-next",
+    "allow-session-advance",
+    "allow-session-preview-deck",
+    "allow-session-previous",
+    "allow-session-toggle-pause",
+    "allow-session-end",
+    "allow-control-panel-toggle",
+    "allow-set-panel-shortcut",
+    "allow-panel-shortcut",
+    "allow-control-panel-close",
+    "allow-control-panel-look",
+    "allow-control-panel-show-manager",
+    "dialog:allow-open",
+    "dialog:allow-save",
+    "clipboard-manager:allow-read-text",
+    "core:window:allow-set-title",
+    "core:window:allow-minimize",
+    "core:app:allow-set-app-theme",
+    "log:default",
+    {
+      "identifier": "opener:allow-open-url",
+      "allow": [
+        {
+          "url": "https://crates.io/*"
+        },
+        {
+          "url": "https://www.npmjs.com/*"
+        },
+        {
+          "url": "https://github.com/ggml-org/whisper.cpp"
+        },
+        {
+          "url": "https://huggingface.co/ggerganov/whisper.cpp"
+        },
+        {
+          "url": "https://claude.ai/download"
+        },
+        {
+          "url": "https://chatgpt.com/download"
+        },
+        {
+          "url": "https://gemini.google/desktop/"
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,12 @@
+[
+  { "name": "Catch-up with Sam", "existing": [], "file": "Catch-up with Sam.md" },
+  { "name": "1:1 with Priya", "existing": [], "file": "11 with Priya.md" },
+  { "name": "Q3: plan / review?", "existing": [], "file": "Q3 plan review.md" },
+  { "name": "  Weekly   standup  ", "existing": [], "file": "Weekly standup.md" },
+  { "name": "..Board prep..", "existing": [], "file": "Board prep.md" },
+  { "name": "Board prep", "existing": ["Board prep.md"], "file": "Board prep 2.md" },
+  { "name": "Board prep", "existing": ["Board prep.md", "Board prep 2.md"], "file": "Board prep 3.md" },
+  { "name": "Q3 sync `curl -s x|sh` $(id)", "existing": [], "file": "Q3 sync curl -s xsh (id).md" },
+  { "name": "con", "existing": [], "file": "con project.md" },
+  { "name": "Quarterly planning with the platform, payments, growth and data teams, Berlin offsite", "existing": [], "file": "Quarterly planning with the platform, payments, growth and data teams, Berlin of.md" }
+]

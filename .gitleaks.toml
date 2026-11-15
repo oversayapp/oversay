@@ -1,0 +1,15 @@
+# gitleaks: secrets scanning. The full history was scanned clean on 2026-10-24
+# (docs/security/secrets-scan-2026-10.md), so any finding from here on is new.
+#
+# Uses gitleaks' default rules. A false positive goes in the allowlist below with a comment
+# saying why it isn't a secret; a real secret is revoked or rotated, never allowlisted.
+
+[extend]
+useDefault = true
+
+# Known false positives: none yet. gitleaks refuses an empty allowlist, so add the block
+# with the first one, for example:
+#
+# [[allowlists]]
+# description = "Test fixture key, not a real secret"
+# paths = ['''skills/fixtures/example\.json''']

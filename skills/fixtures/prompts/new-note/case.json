@@ -1,0 +1,7 @@
+{
+  "creates": "Decks/*/deck.md",
+  "topics": ["hiring plan", "promotion", "offsite"],
+  "mentions": ["backend roles", "Priya"],
+  "maxPoints": 3,
+  "audience": "Sam Ortiz"
+}

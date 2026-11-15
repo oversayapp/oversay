@@ -1,0 +1,9 @@
+{
+  "creates": "Decks/*/deck.md",
+  "deck": {
+    "times": [60, 180, 240, 300]
+  },
+  "topics": ["intro", "atlas", "beacon", "comet"],
+  "mentions": ["auth review", "empty states", "analytics"],
+  "maxPoints": 10
+}

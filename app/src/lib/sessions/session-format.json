@@ -1,0 +1,10 @@
+{
+  "sessions": { "file": "sessions.json", "version": 1, "keys": ["startedAt", "endedAt", "cards", "visits", "pausedSeconds", "note"] },
+  "name": "YYYY-MM-DD HH-mm",
+  "transcript": { "folder": "transcripts", "keys": ["session", "source"] },
+  "review": {
+    "folder": "reviews",
+    "keys": ["session", "made-with"],
+    "sections": ["What ran over", "What was rushed or skipped", "Where it wandered", "What to change in the deck"]
+  }
+}

@@ -1,0 +1,5 @@
+{
+  "file": "workspace.json",
+  "version": 1,
+  "keys": ["version", "id", "name", "tags", "decks", "when", "where", "notes"]
+}

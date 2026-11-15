@@ -1,0 +1,3 @@
+# Text files are checked out with LF on every platform. Windows' default is CRLF, which made
+# demo.oversay.json differ from what the app saves and failed the Windows `npm test` job.
+* text=auto eol=lf

@@ -1,0 +1,4 @@
+# cargo audit (make check). Every ignored advisory says why, and when to look again.
+
+[advisories]
+ignore = []

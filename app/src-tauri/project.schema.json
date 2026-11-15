@@ -1,0 +1,199 @@
+{
+  "$id": "https://oversay.app/schema/project-v1.json",
+  "type": "object",
+  "required": [
+    "schemaVersion",
+    "id",
+    "name",
+    "talks"
+  ],
+  "properties": {
+    "schemaVersion": {
+      "const": 1
+    },
+    "id": {
+      "type": "string",
+      "pattern": "^p_[a-z0-9]{1,16}$"
+    },
+    "name": {
+      "type": "string"
+    },
+    "description": {
+      "type": "string"
+    },
+    "talks": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/talk"
+      }
+    }
+  },
+  "$defs": {
+    "talk": {
+      "type": "object",
+      "required": [
+        "id",
+        "name",
+        "segments",
+        "sessions"
+      ],
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^t_[a-z0-9]{1,16}$"
+        },
+        "name": {
+          "type": "string"
+        },
+        "description": {
+          "type": "string"
+        },
+        "audience": {
+          "type": "string"
+        },
+        "targetSeconds": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "segments": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/segment"
+          }
+        },
+        "sessions": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/session"
+          }
+        }
+      }
+    },
+    "segment": {
+      "type": "object",
+      "required": [
+        "id",
+        "name",
+        "kind",
+        "plannedSeconds",
+        "openEnded",
+        "points",
+        "hints"
+      ],
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^s_[a-z0-9]{1,16}$"
+        },
+        "name": {
+          "type": "string"
+        },
+        "kind": {
+          "enum": [
+            "intro",
+            "topic",
+            "demo",
+            "outro",
+            "break"
+          ]
+        },
+        "plannedSeconds": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "openEnded": {
+          "type": "boolean"
+        },
+        "points": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "hints": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "session": {
+      "type": "object",
+      "required": [
+        "id",
+        "startedAt",
+        "plan",
+        "events"
+      ],
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^r_[a-z0-9]{1,16}$"
+        },
+        "startedAt": {
+          "type": "string",
+          "minLength": 1
+        },
+        "endedAt": {
+          "type": "string",
+          "minLength": 1
+        },
+        "plan": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": [
+              "segmentId",
+              "name",
+              "plannedSeconds",
+              "openEnded"
+            ],
+            "properties": {
+              "segmentId": {
+                "type": "string",
+                "pattern": "^s_[a-z0-9]{1,16}$"
+              },
+              "name": {
+                "type": "string"
+              },
+              "plannedSeconds": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "openEnded": {
+                "type": "boolean"
+              }
+            }
+          }
+        },
+        "events": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": [
+              "at",
+              "type"
+            ],
+            "properties": {
+              "at": {
+                "type": "string",
+                "minLength": 1
+              },
+              "type": {
+                "enum": [
+                  "start",
+                  "next",
+                  "previous",
+                  "pause",
+                  "resume",
+                  "end"
+                ]
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

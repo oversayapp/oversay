@@ -1,0 +1,12 @@
+[tools]
+rust = "stable"
+# CI builds with Node 24 (.github/workflows/build.yml); the app and make check need it.
+node = "24"
+# Secrets scanning in the pre-commit hook (.githooks).
+gitleaks = "8.30.1"
+# Known-vulnerable crates fail make check; built from source by mise.
+"cargo:cargo-audit" = "0.22.2"
+# Builds whisper.cpp for on-device transcription (ADR 0041, whisper-rs).
+cmake = "4"
+# Lints the shell scripts in scripts/ and .githooks (make setup, make doctor).
+shellcheck = "0.11.0"

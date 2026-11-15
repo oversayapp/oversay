@@ -1,0 +1,47 @@
+#!/bin/sh
+# Level-one checks on every commit. `make hooks` installs them for every checkout.
+# Skip them only in an emergency: git commit --no-verify.
+set -eu
+cd "$(git rev-parse --show-toplevel)"
+
+# Tools come from mise when it is there, at the versions mise.toml pins, as in the Makefile.
+run() {
+	if command -v mise > /dev/null 2>&1; then mise exec -- "$@"; else "$@"; fi
+}
+
+if ! run gitleaks version > /dev/null 2>&1; then
+	echo "pre-commit: gitleaks is missing: run mise install (or brew install gitleaks)." >&2
+	exit 1
+fi
+if ! run gitleaks git --pre-commit --staged --redact --no-banner --log-level warn --verbose; then
+	echo "pre-commit: refused, gitleaks found a secret in the staged changes (above)." >&2
+	echo "  Remove it, and revoke or rotate it if it is real. A false positive goes in" >&2
+	echo "  .gitleaks.toml's allowlist with a comment saying why." >&2
+	exit 1
+fi
+
+# Lint what the commit touches: ESLint on its TypeScript, Svelte and JavaScript files, and
+# rustfmt and clippy when it changes Rust. They read the working copy, so a file staged in part
+# is linted as it is on disk. `make check` lints everything.
+staged() {
+	git diff --cached --name-only --diff-filter=ACMR -z -- "$@"
+}
+# Paths relative to app/, where ESLint runs.
+staged_in_app() {
+	git diff --cached --name-only --diff-filter=ACMR --relative=app/ -z -- 'app/*.ts' 'app/*.svelte' 'app/*.js'
+}
+if [ -n "$(staged_in_app | tr -d '\0')" ]; then
+	# `--` ends ESLint's options: a file named like one (`-c`, `--config=x`) must not load a config.
+	if ! staged_in_app | (cd app && xargs -0 npx eslint --no-warn-ignored --); then
+		echo "pre-commit: refused, ESLint found problems (above). Fix them, or turn a rule off in" >&2
+		echo "  app/eslint.config.js (or with an eslint-disable comment) and say why." >&2
+		exit 1
+	fi
+fi
+if [ -n "$(staged 'app/src-tauri/*.rs' | tr -d '\0')" ]; then
+	if ! (cd app/src-tauri && run cargo fmt --check && run cargo clippy --all-targets -q -- -D warnings); then
+		echo "pre-commit: refused, rustfmt or clippy found problems (above). cargo fmt fixes the" >&2
+		echo "  formatting." >&2
+		exit 1
+	fi
+fi

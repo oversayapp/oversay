@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <!--
+    Signed macOS builds run under the hardened runtime, which notarization requires. It blocks
+    the microphone unless the app says it uses it, and then macOS never even asks.
+    This is the hardened-runtime key for an app outside the App Sandbox, which Oversay is not in
+    (it writes the AI skill into ~/.claude and ~/.agents). The sandbox's own microphone key is
+    not needed.
+
+    Add nothing here without a reason: Oversay needs no JIT, unsigned-memory or
+    library-validation exception, and no network or file-access entitlements.
+    tauri.conf.json (bundle.macOS.entitlements) applies this file to everything it signs.
+  -->
+  <key>com.apple.security.device.audio-input</key>
+  <true/>
+</dict>
+</plist>

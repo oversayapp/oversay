@@ -1,0 +1,5 @@
+{
+  "alphabet": "abcdefghijklmnopqrstuvwxyz0123456789",
+  "length": 8,
+  "prefixes": { "project": "p_", "talk": "t_", "segment": "s_", "session": "r_", "deck": "d_", "workspace": "w_" }
+}

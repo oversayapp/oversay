@@ -1,0 +1,241 @@
+/* Design tokens. Dark mode via prefers-color-scheme. */
+:root {
+  --bg: #ffffff;
+  --rail: #eceff5;
+  --side: #f6f8fb;
+  --card: #ffffff;
+  --line: #e2e7ef;
+  --line-strong: #cdd4e0;
+  --text: #1a2130;
+  --muted: #5f6b7e;
+  --faint: #8a95a8;
+  --accent: #2b6be4;
+  --accent-hover: #1f58c4;
+  --accent-soft: #e7effd;
+  --accent-text: #1b4fb8;
+  --on-accent: #ffffff;
+  --warn: #9a4a05;
+  --warn-bg: #fff1dc;
+  --danger: #b42318;
+  --danger-bg: #fdeceb;
+  --ok: #13703f;
+  --ok-bg: #e4f5ec;
+  /* Favourites' star (011/02). */
+  --star: #e3a008;
+  /* Quick notes and quick talks. */
+  --c-note: #b5651d;
+  --c-note-bg: #fbefe3;
+  --c-talk: #1f8f83;
+  --c-talk-bg: #e2f4f1;
+  /* One colour per segment kind; always shown with the kind's name too, never colour alone. */
+  --k-intro: #4a78e8;
+  --k-topic: #1f8f83;
+  --k-demo: #d97a1c;
+  --k-outro: #8062d0;
+  --k-break: #7d889b;
+  /* Template category colours (005/04); always shown next to the category's name. */
+  --cat-blue: #3b6fe0;
+  --cat-orange: #d2701a;
+  --cat-teal: #138a7d;
+  --cat-purple: #7656cf;
+  --cat-pink: #c4437c;
+  --cat-green: #3b873a;
+  --cat-amber: #b07d08;
+  --cat-red: #c9463a;
+  --cat-indigo: #5559d4;
+  --cat-slate: #657186;
+  --hover: rgba(30, 50, 100, 0.06);
+  --scrim: rgba(15, 22, 40, 0.38);
+  --shadow: 0 8px 28px rgba(20, 30, 60, 0.16);
+
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+  font-size: 14px;
+  line-height: 1.45;
+  color: var(--text);
+  background: var(--bg);
+  -webkit-font-smoothing: antialiased;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #14181f;
+    --rail: #0f1217;
+    --side: #181d26;
+    --card: #1a2029;
+    --line: #262d39;
+    --line-strong: #364054;
+    --text: #e8ecf3;
+    --muted: #a2adc0;
+    --faint: #7d889b;
+    --accent: #6b9bff;
+    --accent-hover: #8bb0ff;
+    --accent-soft: #1f2c47;
+    --accent-text: #a9c4ff;
+    --on-accent: #0d1626;
+    --warn: #f2b66d;
+    --warn-bg: #3a2a12;
+    --danger: #ff9a90;
+    --danger-bg: #3d1c1a;
+    --ok: #7fd8a6;
+    --ok-bg: #16301f;
+    --star: #f5c542;
+    --c-note: #f0a868;
+    --c-note-bg: #3a2816;
+    --c-talk: #4cc0b2;
+    --c-talk-bg: #15302d;
+    --k-intro: #7f9fff;
+    --k-topic: #4cc0b2;
+    --k-demo: #f0a050;
+    --k-outro: #aa94ee;
+    --k-break: #9aa4b6;
+    --cat-blue: #7fa2ff;
+    --cat-orange: #f4a25a;
+    --cat-teal: #4cc4b5;
+    --cat-purple: #b59cf5;
+    --cat-pink: #f48bb8;
+    --cat-green: #7fcf73;
+    --cat-amber: #e6c058;
+    --cat-red: #f08a7e;
+    --cat-indigo: #9a9df5;
+    --cat-slate: #9aa6ba;
+    --hover: rgba(255, 255, 255, 0.07);
+    --scrim: rgba(0, 0, 0, 0.55);
+    --shadow: 0 8px 28px rgba(0, 0, 0, 0.5);
+  }
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  height: 100%;
+  margin: 0;
+}
+
+body {
+  background: var(--bg);
+  overflow: hidden;
+  min-width: 720px;
+}
+
+button,
+input,
+select,
+textarea {
+  font: inherit;
+  color: inherit;
+}
+
+button {
+  cursor: pointer;
+}
+
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  border-radius: 6px;
+}
+
+/* Plain controls used across the screens; the rail and sidebar style their own buttons. */
+input:not([type='checkbox']),
+select,
+textarea {
+  border: 1px solid var(--line-strong);
+  background: var(--bg);
+  border-radius: 9px;
+  padding: 7px 10px;
+}
+
+input:not([type='checkbox']):hover,
+select:hover,
+textarea:hover {
+  border-color: var(--faint);
+}
+
+/* A few lines of free text (a project's description). */
+textarea {
+  line-height: 1.5;
+}
+
+::placeholder {
+  color: var(--faint);
+}
+
+button {
+  border: 1px solid var(--line-strong);
+  background: var(--card);
+  border-radius: 9px;
+  padding: 6px 13px;
+  font-weight: 550;
+}
+
+button:hover:not(:disabled) {
+  background: var(--hover);
+}
+
+button.primary {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--on-accent);
+}
+
+button.primary:hover:not(:disabled) {
+  background: var(--accent-hover);
+}
+
+/* Confirms a delete; always beside a Cancel. */
+button.danger {
+  color: var(--danger);
+  border-color: var(--danger);
+}
+
+button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* Small shared helpers. */
+.row {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  margin-bottom: 8px;
+}
+
+.muted {
+  color: var(--muted);
+}
+
+.error {
+  color: var(--danger);
+  white-space: pre-wrap;
+}
+
+.recent {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-width: 0;
+}
+
+code {
+  min-width: 0;
+  word-break: break-all;
+  font-size: 12px;
+}
+
+h1 {
+  font-size: 30px;
+  font-weight: 600;
+  margin: 0;
+  letter-spacing: -0.01em;
+}
+
+h2 {
+  font-size: 13px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--muted);
+}
