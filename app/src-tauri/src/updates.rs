@@ -110,7 +110,11 @@ pub struct Support {
 
 /// The update found by the last check, kept for Install.
 #[derive(Default)]
-pub struct Pending(Mutex<Option<Update>>);
+pub struct Pending {
+    update: Mutex<Option<Update>>,
+    /// The release page the last check was given, the only address `open_release_page` opens.
+    page: Mutex<Option<String>>,
+}
 
 /// Longest a check waits for the feed, so a hung server can't leave Check for updates spinning.
 const FEED_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(15);
@@ -151,6 +155,8 @@ fn newer_from_feed(app: &AppHandle) -> Result<Option<Release>, String> {
     let current = app.package_info().version.to_string();
     let agent: ureq::Agent = ureq::Agent::config_builder()
         .timeout_global(Some(FEED_TIMEOUT))
+        // A feed that redirects elsewhere is not followed: the page it names is opened on trust.
+        .max_redirects(0)
         .build()
         .into();
     for url in endpoints(app) {
@@ -184,7 +190,10 @@ pub async fn check_for_update(app: AppHandle) -> Result<Outcome, String> {
             .await
             .map_err(|e| e.to_string())?;
         return Ok(match found {
-            Ok(Some(release)) => Outcome::Available { release, kind },
+            Ok(Some(release)) => {
+                *app.state::<Pending>().page.lock().unwrap() = release.page.clone();
+                Outcome::Available { release, kind }
+            }
             Ok(None) => Outcome::UpToDate,
             Err(e) => {
                 log::debug!("updates.check_failed error={e}");
@@ -206,11 +215,11 @@ pub async fn check_for_update(app: AppHandle) -> Result<Outcome, String> {
                 page: None,
             };
             log::debug!("updates.available version={}", release.version);
-            *pending.0.lock().unwrap() = Some(update);
+            *pending.update.lock().unwrap() = Some(update);
             Outcome::Available { release, kind }
         }
         Ok(None) => {
-            *pending.0.lock().unwrap() = None;
+            *pending.update.lock().unwrap() = None;
             log::debug!("updates.up_to_date");
             Outcome::UpToDate
         }
@@ -231,7 +240,7 @@ pub async fn install_update(app: AppHandle) -> Result<(), String> {
     }
     let update = app
         .state::<Pending>()
-        .0
+        .update
         .lock()
         .unwrap()
         .clone()
@@ -254,13 +263,18 @@ pub async fn install_update(app: AppHandle) -> Result<(), String> {
     crate::platform::restart_now(&app)
 }
 
-/// Opens the release page a link-only build was pointed at; only the address the feed gave.
+/// Opens the release page the last check was given (a link-only build, whose feed names one).
+/// The address is never taken from the window: only what the check stored is opened.
 #[tauri::command]
-pub async fn open_release_page(app: AppHandle, url: String) -> Result<(), String> {
+pub async fn open_release_page(app: AppHandle) -> Result<(), String> {
     use tauri_plugin_opener::OpenerExt;
-    if !url.starts_with("https://") {
-        return Err("only an https address opens".to_string());
-    }
+    let url = app
+        .state::<Pending>()
+        .page
+        .lock()
+        .unwrap()
+        .clone()
+        .ok_or("the update feed names no release page")?;
     app.opener()
         .open_url(url, None::<&str>)
         .map_err(|e| e.to_string())

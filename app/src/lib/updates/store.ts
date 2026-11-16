@@ -63,7 +63,7 @@ export async function installUpdate(): Promise<void> {
 }
 
 /** A build that can't install itself sends the person to the release. */
-export async function openReleasePage(url: string): Promise<void> {
+export async function openReleasePage(): Promise<void> {
   logAction('update release page')
-  await invoke('open_release_page', { url })
+  await invoke('open_release_page')
 }

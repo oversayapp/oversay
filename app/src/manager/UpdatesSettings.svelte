@@ -38,8 +38,7 @@
     {:else}
       <p class="muted hint">This copy can’t update itself. Download the new version from the release page.</p>
       {#if f.page}
-        {@const page = f.page}
-        <button class="primary" onclick={() => attempt(() => openReleasePage(page))}>Open the release page</button>
+        <button class="primary" onclick={() => attempt(openReleasePage)}>Open the release page</button>
       {/if}
     {/if}
   </div>
