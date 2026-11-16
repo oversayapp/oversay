@@ -1,5 +1,6 @@
 <script lang="ts">
   import Icon from './Icon.svelte'
+  import { logAction } from '../lib/log'
   import { updateAvailable } from '../lib/updates/store'
   import { settings } from '../lib/settings/store'
   import { goAi, goDecks, goHome, goSessions, goSettings, goTemplates, goWorkspaces, nav as screen } from './route'
@@ -31,7 +32,7 @@
   <div class="spacer"></div>
   <!-- Only while an update has been found: it opens Settings › Updates (epic #16). -->
   {#if $updateAvailable}
-    <button class="update" onclick={() => goSettings('updates')}>
+    <button class="update" onclick={() => { logAction('update item'); goSettings('updates') }}>
       <Icon name="arrow" size={22} /><span>Update</span>
     </button>
   {/if}

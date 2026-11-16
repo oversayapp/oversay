@@ -112,6 +112,9 @@ pub struct Support {
 #[derive(Default)]
 pub struct Pending(Mutex<Option<Update>>);
 
+/// Longest a check waits for the feed, so a hung server can't leave Check for updates spinning.
+const FEED_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(15);
+
 fn enabled(app: &AppHandle) -> bool {
     app.config().plugins.0.contains_key("updater")
 }
@@ -146,8 +149,13 @@ fn endpoints(app: &AppHandle) -> Vec<String> {
 /// The feed read directly, for a build the updater can't install into.
 fn newer_from_feed(app: &AppHandle) -> Result<Option<Release>, String> {
     let current = app.package_info().version.to_string();
+    let agent: ureq::Agent = ureq::Agent::config_builder()
+        .timeout_global(Some(FEED_TIMEOUT))
+        .build()
+        .into();
     for url in endpoints(app) {
-        let fetched = ureq::get(&url)
+        let fetched = agent
+            .get(&url)
             .call()
             .and_then(|mut r| r.body_mut().read_to_string());
         match fetched {
@@ -161,7 +169,7 @@ fn newer_from_feed(app: &AppHandle) -> Result<Option<Release>, String> {
 #[tauri::command]
 pub async fn check_for_update(app: AppHandle) -> Result<Outcome, String> {
     if let Some(why) = refusal(enabled(&app), crate::session::holds_keys(&app)) {
-        log::debug!("updates.check_refused why={why:?} check=auto-update/V4");
+        log::debug!("updates.check_refused why={why:?}");
         return if enabled(&app) {
             Ok(Outcome::Busy)
         } else {
@@ -184,7 +192,7 @@ pub async fn check_for_update(app: AppHandle) -> Result<Outcome, String> {
             }
         });
     }
-    let checked = match app.updater() {
+    let checked = match app.updater_builder().timeout(FEED_TIMEOUT).build() {
         Ok(updater) => updater.check().await,
         Err(e) => Err(e),
     };
@@ -218,7 +226,7 @@ pub async fn check_for_update(app: AppHandle) -> Result<Outcome, String> {
 #[tauri::command]
 pub async fn install_update(app: AppHandle) -> Result<(), String> {
     if let Some(why) = refusal(enabled(&app), crate::session::holds_keys(&app)) {
-        log::debug!("updates.install_refused why={why:?} check=auto-update/V4");
+        log::debug!("updates.install_refused why={why:?}");
         return Err(why.to_string());
     }
     let update = app
@@ -226,16 +234,23 @@ pub async fn install_update(app: AppHandle) -> Result<(), String> {
         .0
         .lock()
         .unwrap()
-        .take()
+        .clone()
         .ok_or("there is no update to install: check first")?;
+    // Kept, not taken, so a failed install can be tried again without checking first.
     log::debug!("updates.install_started version={}", update.version);
-    update
-        .download_and_install(|_, _| {}, || {})
-        .await
-        .map_err(|e| {
-            log::debug!("updates.install_failed error={e}");
-            format!("the update wasn't installed: {e}")
-        })?;
+    let fail = |e: tauri_plugin_updater::Error| {
+        log::debug!("updates.install_failed error={e}");
+        format!("the update wasn't installed: {e}")
+    };
+    let bytes = update.download(|_, _| {}, || {}).await.map_err(fail)?;
+    // A session may have been opened while the download ran: it is never interrupted.
+    if let Some(why) = refusal(true, crate::session::holds_keys(&app)) {
+        log::debug!("updates.install_deferred why={why:?}");
+        return Err(format!(
+            "{why}: nothing was installed. Try again once it ends."
+        ));
+    }
+    update.install(bytes).map_err(fail)?;
     crate::platform::restart_now(&app)
 }
 
@@ -289,6 +304,28 @@ mod tests {
         assert_eq!(newer_release(feed, "0.2.0").unwrap().unwrap().page, None);
         assert!(newer_release("nope", "0.2.0").is_err());
         assert!(newer_release("{}", "0.2.0").is_err());
+    }
+
+    // The same literal is typed as `Outcome` in src/lib/updates/policy.test.ts.
+    #[test]
+    fn an_outcome_is_sent_in_the_shape_the_frontend_reads() {
+        let o = Outcome::Available {
+            release: Release {
+                version: "0.3.0".into(),
+                notes: "Faster".into(),
+                date: None,
+                page: None,
+            },
+            kind: InstallKind::LinkOnly,
+        };
+        assert_eq!(
+            serde_json::to_string(&o).unwrap(),
+            r#"{"state":"available","release":{"version":"0.3.0","notes":"Faster","date":null,"page":null},"kind":"linkOnly"}"#
+        );
+        assert_eq!(
+            serde_json::to_string(&Outcome::UpToDate).unwrap(),
+            r#"{"state":"upToDate"}"#
+        );
     }
 
     #[test]

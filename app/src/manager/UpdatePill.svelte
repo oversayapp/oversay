@@ -1,12 +1,13 @@
 <script lang="ts">
   // The header's "update available" pill (epic #16): small, never a dialog, and only while an
   // update has been found. It leads to Settings › Updates, where the update is managed.
+  import { logAction } from '../lib/log'
   import { updateAvailable, updates } from '../lib/updates/store'
   import { goSettings } from './route'
 </script>
 
 {#if $updateAvailable}
-  <button class="pill" onclick={() => goSettings('updates')} title="Update available">
+  <button class="pill" onclick={() => { logAction('update pill'); goSettings('updates') }} title="Update available">
     Update available{#if $updates.found}{' · ' + $updates.found.version}{/if}
   </button>
 {/if}

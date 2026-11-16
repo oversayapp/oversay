@@ -6,6 +6,14 @@ const now = new Date('2026-12-01T12:00:00Z')
 const hoursAgo = (h: number) => new Date(now.getTime() - h * 3600e3).toISOString()
 const available: Outcome = { state: 'available', kind: 'installer', release: { version: '0.3.0', notes: 'Faster', date: null, page: null } }
 
+describe('the wire shape', () => {
+  it('reads what Rust sends (updates.rs has the same literal)', () => {
+    const sent = JSON.parse('{"state":"available","release":{"version":"0.3.0","notes":"Faster","date":null,"page":null},"kind":"linkOnly"}') as Outcome
+    expect(applyOutcome(idleView, sent, false).found).toEqual({ version: '0.3.0', notes: 'Faster', date: null, page: null, kind: 'linkOnly' })
+    expect(applyOutcome(idleView, JSON.parse('{"state":"upToDate"}') as Outcome, true).message).toMatch(/up to date/i)
+  })
+})
+
 describe('update settings', () => {
   it('check automatically, once a day, until changed', () => {
     expect(updateSettings(DEFAULT_SETTINGS)).toEqual({ auto: true, everyHours: 24 })
