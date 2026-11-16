@@ -17,5 +17,5 @@ About lists the components Oversay ships with and their licences (013/03). The d
 
 - `npm test`, `check`, `build` and `dev` need `cargo` (CI has it; locally it comes from mise) and, the first time, network access to fetch the Windows-target crates the licence list needs.
 - The list says what each package declares. It does not carry the licence texts, and a declared SPDX expression is not a legal review.
-- Linux is not in the list until a Linux build exists (epic 134 notes it as later). Adding a target is one line in the script.
+- Linux is not in the list until a Linux build exists (epic 015 (#16) notes it as later). Adding a target is one line in the script.
 - The hosts are written twice (the capability file and the URL builders in `lib/about/notices.ts`); the test is what keeps them in step. A new link target needs both.

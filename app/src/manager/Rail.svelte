@@ -8,7 +8,7 @@
   <button aria-current={$screen.view === 'home' ? 'page' : undefined} onclick={goHome}>
     <Icon name="home" size={22} /><span>Home</span>
   </button>
-  <!-- Decks replace Notes and Talks (epic #214, ADR 0036, #225): their files are moved in. -->
+  <!-- Decks replace Notes and Talks (epic 023 (#24), ADR 0036, task 225): their files are moved in. -->
   <button aria-current={$screen.view === 'decks' ? 'page' : undefined} onclick={goDecks}>
     <Icon name="deck" size={22} /><span>Decks</span>
   </button>
@@ -19,11 +19,11 @@
   <button aria-current={$screen.view === 'templates' ? 'page' : undefined} onclick={goTemplates}>
     <Icon name="template" size={22} /><span>Templates</span>
   </button>
-  <!-- Every deck's runs, by day (ADR 0041, #290). -->
+  <!-- Every deck's runs, by day (ADR 0041, task 290). -->
   <button aria-current={$screen.view === 'sessions' ? 'page' : undefined} onclick={goSessions}>
     <Icon name="session" size={22} /><span>Sessions</span>
   </button>
-  <!-- The AI page (#156): New until it is first opened. -->
+  <!-- The AI page (task 156): New until it is first opened. -->
   <button aria-current={$screen.view === 'ai' ? 'page' : undefined} onclick={goAi}>
     <Icon name="ai" size={22} /><span>AI</span>{#if !$settings.aiPageSeen}<span class="new">New</span>{/if}
   </button>

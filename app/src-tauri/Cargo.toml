@@ -43,9 +43,9 @@ tauri-plugin-deep-link = "2"
 zip = { version = "9", default-features = false, features = ["deflate"] }
 # Reads Markdown for Notes' Paste as note: WebKit's own clipboard read asks with a pop-up.
 tauri-plugin-clipboard-manager = "2"
-# `Oversay --check` applies the project schema written out from schema.ts (#205, check.rs).
+# `Oversay --check` applies the project schema written out from schema.ts (task 205, check.rs).
 jsonschema = { version = "0.59", default-features = false }
-# `Oversay --check <note>.md` reads a note with the patterns lint.ts uses (#210, note_lint.rs).
+# `Oversay --check <note>.md` reads a note with the patterns lint.ts uses (task 210, note_lint.rs).
 regex = "1"
 # Deck ids drawn evenly from the system's random source, as ids.ts does (ADR 0037, ids.rs).
 getrandom = "0.3"

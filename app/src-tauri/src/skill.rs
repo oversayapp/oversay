@@ -320,7 +320,7 @@ pub fn reveal_skill(app: AppHandle, target: Target) -> Result<(), String> {
         .map_err(|e| format!("Could not show {}: {e}", file.display()))
 }
 
-// ---- saving the skill to upload (#154, #204)
+// ---- saving the skill to upload (task 154, task 204)
 
 /// What Save… writes. Same names as `ZIP_KINDS` in src/lib/skill/targets.ts; both sides test them.
 #[derive(Clone, Copy, Debug, PartialEq, Deserialize)]

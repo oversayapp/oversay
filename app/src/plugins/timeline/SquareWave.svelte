@@ -91,7 +91,7 @@
   {/if}
   {#if startCover}
     <!-- Ready, in Waveform: Start in the same place as Paused, since starting is the big moment
-         (John, #193). Clicking it doesn't take focus from the slides, like every overlay button. -->
+         (John, task 193). Clicking it doesn't take focus from the slides, like every overlay button. -->
     <button class="paused-cover start-cover" onclick={ctx.commands.next} title="Start the talk">
       <Icon name="play" size={20} />Start
     </button>
@@ -107,7 +107,7 @@
       <!-- Waveform has no talk bar to end with it, so how the talk ended sits here. -->
       {#if waveform && standing}<span class="standing {standing.status}">{standingText}</span>{/if}
     {:else if clock.current && readout}
-      <!-- "Topic" before the name says what the name is (John, #193). -->
+      <!-- "Topic" before the name says what the name is (John, task 193). -->
       <span class="seg" title={clock.current.name}><span class="seg-word">Topic</span> {clock.current.name}</span>
       <!-- The segment's time, centred, in a pill of its colour that fills as the segment goes (John, 007/01). -->
       <span

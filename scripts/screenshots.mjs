@@ -368,7 +368,7 @@ const SCREENS = [
   // a link asks before it puts a note on screen.
   ['link-ask', `(async () => { window.__link('oversay://notes/Weekly%20standup/show'); await new Promise((r) => setTimeout(r, 300)) })()`],
   ['link-asked-open', `(async () => { [...document.querySelectorAll('[role=alertdialog] button')].find((b) => b.textContent.includes('Just open it')).click(); await new Promise((r) => setTimeout(r, 300)) })()`],
-  // #156, #208: the AI page with no AI app here; then found, one row opened; Install for Claude
+  // task 156, task 208: the AI page with no AI app here; then found, one row opened; Install for Claude
   // Code, then a note arrives; the Claude app's plugin saved; Home's card once installed.
   ['ai-none', `(async () => { window.__noAi(); [...document.querySelectorAll('nav.rail button')].find((b) => b.textContent.includes('AI')).click(); await new Promise((r) => setTimeout(r, 300)) })()`],
   ['ai', `(async () => { const wait = () => new Promise((r) => setTimeout(r, 200)); window.__noAi(false); [...document.querySelectorAll('nav.rail button')].find((b) => b.textContent.includes('Home')).click(); await wait(); [...document.querySelectorAll('nav.rail button')].find((b) => b.textContent.includes('AI')).click(); await wait() })()`],
@@ -384,7 +384,7 @@ const SCREENS = [
   ['drop-added', `(async () => { window.__drag('drop', ['/Users/demo/Downloads/Design review.md']); await new Promise((r) => setTimeout(r, 400)) })()`],
   ['drop-clash', `(async () => { window.__drag('drop', ['/Users/demo/Downloads/Design review.md']); await new Promise((r) => setTimeout(r, 400)) })()`],
   ['paste-deck', `(async () => { window.__clipboard('# Investor call\\n\\n## Numbers [10m]\\n- Q3 revenue up 18%\\n- Burn down to 9 months\\n\\n## Ask\\n- Bridge round timing\\n'); [...document.querySelectorAll('main button')].find((b) => b.textContent.includes('Paste as deck')).click(); await new Promise((r) => setTimeout(r, 400)) })()`],
-  // #210, #224: copies updated when Oversay started; a deck from an older skill arrives, with lines
+  // task 210, task 224: copies updated when Oversay started; a deck from an older skill arrives, with lines
   // Oversay shows differently from how the AI wrote them.
   ['ai-self-updated', `(async () => { const wait = () => new Promise((r) => setTimeout(r, 200)); window.__skillsUpdated(['claude-code', 'codex']); [...document.querySelectorAll('nav.rail button')].find((b) => b.textContent.includes('Home')).click(); await wait(); [...document.querySelectorAll('nav.rail button')].find((b) => b.textContent.includes('AI')).click(); await wait() })()`],
   ['deck-old-skill', `(async () => { const wait = () => new Promise((r) => setTimeout(r, 250)); window.__skillsUpdated([]); window.__outside('decks', 'Design crit', '---\\nwhen: Thursday\\ntimeline: sparkline\\nmade-with: Oversay skill 0.0.9\\n---\\n\\n## Flows [10 mins]\\n- Checkout\\n### Open questions\\n- Who signs off\\n'); await wait(); [...document.querySelectorAll('nav.rail button')].find((b) => b.textContent.includes('Decks')).click(); await wait(); [...document.querySelectorAll('main button.what')].find((b) => b.textContent.includes('Design crit')).click(); await wait() })()`],

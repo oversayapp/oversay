@@ -5,7 +5,7 @@ date: 2026-10-21
 
 # Oversay installs its own skill, and nothing is hosted
 
-#154 planned a public source for `npx skills add` and a public mirror. John ruled out anything public on 16 Oct (ADR 0030). So the skill reaches people the way the app does: inside the app.
+task 154 planned a public source for `npx skills add` and a public mirror. John ruled out anything public on 16 Oct (ADR 0030). So the skill reaches people the way the app does: inside the app.
 
 ## Decision
 

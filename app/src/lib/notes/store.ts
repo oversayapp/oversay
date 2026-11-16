@@ -203,7 +203,7 @@ export async function renameOpenNote(name: string): Promise<string> {
   return to
 }
 
-// ---- changed outside Oversay (#202, ADR 0034)
+// ---- changed outside Oversay (task 202, ADR 0034)
 
 /** Keeps the version written outside as a file of its own beside this one, "<name> (outside)". */
 async function keepOutside(kind: EditedKind, path: string, text: string): Promise<void> {

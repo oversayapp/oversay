@@ -142,7 +142,7 @@
 <div class="app">
   <Rail />
   <div class="col">
-  <!-- One search for the whole app, above every page (#253). -->
+  <!-- One search for the whole app, above every page (task 253). -->
   <GlobalSearch />
   <main>
     {#if $notice}<p class="error notice" role="alert">{$notice}</p>{/if}

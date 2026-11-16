@@ -561,7 +561,7 @@ pub async fn trash_quick_file(app: AppHandle, kind: String, path: String) -> Res
         .map_err(|e| format!("Could not move {path} to the Trash: {e}"))
 }
 
-// ---- decks that arrive without Oversay (#268, ADR 0037)
+// ---- decks that arrive without Oversay (task 268, ADR 0037)
 
 /// The day a file was made (or last changed, where the system doesn't say), as `YYYY-MM-DD`.
 fn made_on(file: &Path) -> String {

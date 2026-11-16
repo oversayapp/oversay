@@ -1,4 +1,4 @@
-//! `Oversay --check <note>.md` (#210): checks a quick note the Oversay skill wrote, as the skill
+//! `Oversay --check <note>.md` (task 210): checks a quick note the Oversay skill wrote, as the skill
 //! writes it, against the note format: where Oversay would show something other than what the
 //! writer meant. The app's own definition is src/lib/notes/format.ts and lint.ts (ADR 0007); this
 //! reads a note the same way, with the keys, kinds and messages `make skills` writes from that code

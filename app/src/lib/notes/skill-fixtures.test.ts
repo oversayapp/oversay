@@ -128,7 +128,7 @@ describe.each(cases)('the skill asked: %s', (name) => {
     const file = made()
     const text = readFileSync(join(output, file), 'utf8')
     for (const m of spec.mentions ?? []) expect(text.toLowerCase(), m).toContain(m.toLowerCase())
-    // What `Oversay --check` would list (#210): nothing, or the skill didn't fix what it found.
+    // What `Oversay --check` would list (task 210): nothing, or the skill didn't fix what it found.
     expect(lintNote(text, true).map((p) => `line ${p.line}: ${p.message}`)).toEqual([])
     const doc = parseNoteDoc(text)
     if (spec.deck) {

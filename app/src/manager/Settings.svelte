@@ -238,7 +238,7 @@
     <h3 id="buttons-label">Buttons</h3>
     {@render choice('buttons', 'buttons-label', BUTTON_OPTIONS, $overlaySettings.buttons, (v) => setOverlaySetting('buttons', v))}
     <p class="muted hint">Previous, Pause and Next on the overlay. An open overlay changes straight away.</p>
-    <!-- How solid every overlay's panels are (#145); the overlays follow as the slider moves. -->
+    <!-- How solid every overlay's panels are (task 145); the overlays follow as the slider moves. -->
     <h3 id="opacity-label">Overlay opacity</h3>
     <div class="opacity-row">
       <input

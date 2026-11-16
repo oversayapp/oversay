@@ -61,7 +61,7 @@
       </button>
     {:else}
       <!-- Labelled, so before the talk starts it is plain what to press (John, 012/07). In Waveform it
-           is a bare play glyph in the same place, the way Pause is once the talk runs (John, #193). -->
+           is a bare play glyph in the same place, the way Pause is once the talk runs (John, task 193). -->
       <button class:go={!waveform} class:start={!waveform} onclick={ctx.commands.next} title="Start the talk" aria-label="Start">
         <Icon name="play" size={small ? 13 : 15} />{#if !waveform}<span>Start</span>{/if}
       </button>

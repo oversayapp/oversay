@@ -1,5 +1,5 @@
 <script lang="ts">
-  // One search bar for the whole app, filled and rounded as Zoom's (#253, John, 24 Oct). It is not
+  // One search bar for the whole app, filled and rounded as Zoom's (task 253, John, 24 Oct). It is not
   // tied to the page you are on: it lists what matches across the app, grouped, and choosing one
   // goes to its page. Filters stay on their own pages (the Decks page's Filter button).
   import { logAction } from '../lib/log'

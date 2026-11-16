@@ -72,7 +72,7 @@ export interface OverlaySettings {
   buttons: ButtonVisibility
   /** Where the edge strip sits: against the screen's edge or above the Dock. */
   stripEdge: StripEdge
-  /** How solid the overlay panels are, in percent (#145): only their fill fades, never the text. */
+  /** How solid the overlay panels are, in percent (task 145): only their fill fades, never the text. */
   opacity: number
   /** Made solid (now from the control panel); `opacity` is kept for going back to see-through. */
   solid: boolean
