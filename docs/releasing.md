@@ -83,6 +83,16 @@ The updater is tested against a feed on John's own machine or network, never a h
    `node scripts/latest-json.mjs --dir <folder> --version 0.2.1 --base https://<address>/`
 4. Start the older install and let it find the newer one.
 
+Pass `--page https://<where the release can be read>` to `latest-json.mjs` too: it becomes `release_page`, the link the portable `.exe` shows in place of an install button. Without it, that build says an update exists and shows no link.
+
+## What the app does with an update
+
+- **Start-up:** with automatic checking on (Settings › Updates; provisional default on), the app asks the feed as it starts, at most once every 24 hours (`updates.everyHours` in `settings.json`). A start-up check that finds nothing, or can't reach the feed, shows nothing.
+- **Found:** an Update item appears in the rail and a pill in the header; both open Settings › Updates, which shows the version and notes and the **Update and restart** button (macOS app, Windows NSIS and `.msi`). The portable `.exe` shows **Open the release page** instead.
+- **Check for updates** works with automatic checking off, and says plainly when it is up to date or the feed can't be reached.
+- **During a session** (a session open, started or not) Rust refuses to check or install: no request, nothing changes on screen, no restart.
+- **A build with no feed** has no Updates section and never asks (the updater plugin isn't registered).
+
 The updater accepts only `https://` addresses with a certificate the test machine trusts. A local certificate authority such as mkcert, installed on each test machine, or Tailscale's `tailscale serve`, gives one without publishing anything.
 
 ## The update key

@@ -77,6 +77,11 @@ test('latest.json lists the Mac archive under both architectures and each Window
   assert.equal(j.pub_date, '2026-10-21T12:00:00Z')
 })
 
+test('latest.json carries the release page for builds that cannot install, only when given', () => {
+  assert.equal(latestJson(args({ page: 'https://example.test/r/v0.2.0' })).release_page, 'https://example.test/r/v0.2.0')
+  assert.equal('release_page' in latestJson(args()), false)
+})
+
 test('latest.json never lists plain windows-x86_64, so the portable exe finds nothing to install', () => {
   assert.equal(latestJson(args()).platforms['windows-x86_64'], undefined)
 })

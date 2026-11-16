@@ -86,7 +86,7 @@ Read from the updater plugin's source (`plugins-workspace`, branch `v2`) and Tau
 - **Windows portable `.exe`.**
   - The bundler marks the executable inside each installer with its kind and puts the unmarked one back after bundling. The `target/release/oversay.exe` CI publishes as the portable build so reports no bundle type (`tauri::utils::platform::bundle_type()` is `None`).
   - That is how the update check tells it can't install: no bundle type on Windows means link only, as for anything else it doesn't recognise.
-  - The update check reads the version from `latest.json` itself, since no `windows-x86_64` package is listed. Its link to a release page waits for the feed, like the rest.
+  - The update check reads the version from `latest.json` itself, since no `windows-x86_64` package is listed. Its link to a release page is the feed's optional `release_page` field (`scripts/latest-json.mjs --page`); it waits for the feed, like the rest.
 - **Unsigned builds.**
   - Whether an updated, unsigned app opens without Gatekeeper or SmartScreen asking again is **unverified**. The app downloads the package itself, so it should carry no quarantine attribute or Mark of the Web, which is what those checks look for.
   - On macOS, an app that was never moved out of Downloads runs from a translocated read-only path and probably can't replace itself.
