@@ -1,5 +1,6 @@
 <script lang="ts">
   import Icon from './Icon.svelte'
+  import { updateAvailable } from '../lib/updates/store'
   import { settings } from '../lib/settings/store'
   import { goAi, goDecks, goHome, goSessions, goSettings, goTemplates, goWorkspaces, nav as screen } from './route'
 </script>
@@ -28,6 +29,12 @@
     <Icon name="ai" size={22} /><span>AI</span>{#if !$settings.aiPageSeen}<span class="new">New</span>{/if}
   </button>
   <div class="spacer"></div>
+  <!-- Only while an update has been found: it opens Settings › Updates (epic #16). -->
+  {#if $updateAvailable}
+    <button class="update" onclick={() => goSettings('updates')}>
+      <Icon name="arrow" size={22} /><span>Update</span>
+    </button>
+  {/if}
   <button aria-current={$screen.view === 'settings' ? 'page' : undefined} onclick={() => goSettings()}>
     <Icon name="gear" size={22} /><span>Settings</span>
   </button>
@@ -70,6 +77,10 @@
     background: var(--card);
     color: var(--accent-text);
     box-shadow: 0 1px 3px rgba(20, 30, 60, 0.12);
+  }
+
+  .update {
+    color: var(--accent-text);
   }
 
   .new {

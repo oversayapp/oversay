@@ -22,11 +22,6 @@
   <span class="ver num">{info ? `Version ${info.version}` : ''}</span>
 </div>
 
-<!-- Where the update controls go. Nothing is built here; shown only in development. -->
-<div class="slot" data-slot="update-controls">
-  {#if import.meta.env.DEV}Update controls will sit here.{/if}
-</div>
-
 <table>
   <tbody>
     <tr><th scope="row">Build</th><td class="num">{info?.build ?? ''}</td></tr>
@@ -73,18 +68,7 @@
     color: var(--muted);
   }
 
-  .slot:empty {
-    display: none;
-  }
 
-  .slot {
-    margin: 12px 0 4px;
-    border: 1.5px dashed var(--line-strong);
-    border-radius: 10px;
-    padding: 10px 14px;
-    color: var(--faint);
-    font-size: 13px;
-  }
 
   table {
     width: 100%;

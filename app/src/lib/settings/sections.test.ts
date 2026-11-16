@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { SETTINGS_SECTIONS, atScrollEnd, currentSection } from './sections'
+import { SETTINGS_SECTIONS, atScrollEnd, currentSection, visibleSections } from './sections'
 
 describe('which Settings section is current', () => {
   // Section tops relative to the top of the scrolling area, in page order.
@@ -46,5 +46,10 @@ describe('the sections list', () => {
     const ids = SETTINGS_SECTIONS.map((s) => s.id)
     expect(new Set(ids).size).toBe(ids.length)
     expect(SETTINGS_SECTIONS.every((s) => s.label.length > 0)).toBe(true)
+  })
+
+  it('has Updates only in a build that checks for updates', () => {
+    expect(visibleSections(false).map((s) => s.id)).not.toContain('updates')
+    expect(visibleSections(true).map((s) => s.id)).toContain('updates')
   })
 })

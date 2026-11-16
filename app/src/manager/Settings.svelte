@@ -18,13 +18,15 @@
   import ShortcutsSettings from './ShortcutsSettings.svelte'
   import RecordingsSettings from './RecordingsSettings.svelte'
   import AboutSection from './AboutSection.svelte'
+  import UpdatesSettings from './UpdatesSettings.svelte'
+  import { supported } from '../lib/updates/store'
   import ThirdPartyLicences from './ThirdPartyLicences.svelte'
   import { deletedStarters, type StarterCounts } from '../lib/templates/library'
   import { count } from '../lib/words'
   import { library, restoreStarters } from '../lib/templates/library-store'
   import { onMount, tick, untrack } from 'svelte'
   import { nav as screen } from './route'
-  import { SETTINGS_SECTIONS, atScrollEnd, currentSection, type SettingsSectionId } from '../lib/settings/sections'
+  import { visibleSections, atScrollEnd, currentSection, type SettingsSectionId } from '../lib/settings/sections'
   import { logAction } from '../lib/log'
   import { installExampleDecks, missingExampleDecks } from '../lib/decks/examples'
 
@@ -61,7 +63,8 @@
   const NARROW = 760
   let root: HTMLElement
   let toc = $state<HTMLElement>()
-  let current = $state<SettingsSectionId>(SETTINGS_SECTIONS[0].id)
+  const sections = $derived(visibleSections($supported))
+  let current = $state<SettingsSectionId>('appearance')
   let menuOpen = $state(false)
   let devOpen = $state(false)
   // About's third-party licences are a page of their own, in place of the sections (013/03).
@@ -89,13 +92,13 @@
   const offset = () => (isNarrow() && toc ? toc.offsetHeight + 8 : 16)
   const topOf = (id: string) =>
     document.getElementById(id)!.getBoundingClientRect().top - scroller().getBoundingClientRect().top
-  const label = (id: SettingsSectionId) => SETTINGS_SECTIONS.find((s) => s.id === id)!.label
+  const label = (id: SettingsSectionId) => sections.find((s) => s.id === id)?.label ?? ''
 
   function onScroll() {
     if (!root || showLicences || Date.now() < lockUntil) return
     const sc = scroller()
     const end = atScrollEnd(sc.scrollTop, sc.clientHeight, sc.scrollHeight)
-    current = SETTINGS_SECTIONS[currentSection(SETTINGS_SECTIONS.map((s) => topOf(s.id)), offset() + 8, end)].id
+    current = sections[currentSection(sections.map((s) => topOf(s.id)), offset() + 8, end)].id
   }
 
   async function jump(id: SettingsSectionId, instant = false) {
@@ -179,13 +182,13 @@
     </button>
     {#if menuOpen}
       <div class="menu" id="settings-menu">
-        {#each SETTINGS_SECTIONS as s (s.id)}
+        {#each sections as s (s.id)}
           <button aria-current={current === s.id ? 'true' : undefined} onclick={() => choose(s.id)}>{s.label}</button>
         {/each}
       </div>
     {/if}
     <ul>
-      {#each SETTINGS_SECTIONS as s (s.id)}
+      {#each sections as s (s.id)}
         <li><button aria-current={current === s.id ? 'true' : undefined} onclick={() => choose(s.id)}>{s.label}</button></li>
       {/each}
     </ul>
@@ -335,6 +338,13 @@
       {/if}
     </p>
   </section>
+
+  {#if $supported}
+    <section id="updates">
+      <h2 tabindex="-1">Updates</h2>
+      <UpdatesSettings />
+    </section>
+  {/if}
 
   <section id="developer-tools">
     <details bind:open={devOpen}>
