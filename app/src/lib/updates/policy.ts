@@ -22,9 +22,9 @@ export interface Support {
   kind: InstallKind
 }
 
-/** Provisional defaults, pending the maintainer's answer (epic #16): at start-up, at most once a day, on. */
+/** The maintainer's answer (epic #16): check at every start, automatic checking on. `everyHours` can set a least time between checks; 0 is every start. */
 export const DEFAULT_AUTO_CHECK = true
-export const DEFAULT_CHECK_HOURS = 24
+export const DEFAULT_CHECK_HOURS = 0
 
 export interface UpdateSettings {
   auto: boolean
@@ -35,14 +35,15 @@ export function updateSettings(s: Settings): UpdateSettings {
   const u = (typeof s.updates === 'object' && s.updates !== null ? s.updates : {}) as Record<string, unknown>
   return {
     auto: typeof u.auto === 'boolean' ? u.auto : DEFAULT_AUTO_CHECK,
-    everyHours: typeof u.everyHours === 'number' && u.everyHours > 0 ? u.everyHours : DEFAULT_CHECK_HOURS,
+    everyHours: typeof u.everyHours === 'number' && u.everyHours >= 0 ? u.everyHours : DEFAULT_CHECK_HOURS,
   }
 }
 
-/** Whether Oversay checks as it starts: automatic checking on, a feed in this build, and the last check older than the interval. */
+/** Whether Oversay checks as it starts: automatic checking on, a feed in this build, and, when an interval is set, the last check older than it. */
 export function startupCheckDue(s: Settings, now: Date, buildChecks: boolean): boolean {
   const { auto, everyHours } = updateSettings(s)
   if (!auto || !buildChecks) return false
+  if (everyHours === 0) return true
   const last = typeof s.lastUpdateCheck === 'string' ? Date.parse(s.lastUpdateCheck) : NaN
   if (Number.isNaN(last)) return true
   const age = now.getTime() - last

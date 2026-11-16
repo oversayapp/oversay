@@ -43,10 +43,13 @@ describe('checking at start-up', () => {
     expect(get(settings).lastUpdateCheck).toBeTruthy()
   })
 
-  it('does not ask again within the interval', async () => {
+  it('asks at every start by default, and waits out an interval when one is set', async () => {
     await checkAtStartup()
     await checkAtStartup()
-    expect(requests()).toBe(1)
+    expect(requests()).toBe(2)
+    await setUpdateSettings({ everyHours: 24 })
+    await checkAtStartup()
+    expect(requests()).toBe(2)
   })
 
   it('makes no request with automatic checking off', async () => {

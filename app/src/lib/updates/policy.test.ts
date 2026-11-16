@@ -15,23 +15,28 @@ describe('the wire shape', () => {
 })
 
 describe('update settings', () => {
-  it('check automatically, once a day, until changed', () => {
-    expect(updateSettings(DEFAULT_SETTINGS)).toEqual({ auto: true, everyHours: 24 })
+  it('check automatically at every start until changed', () => {
+    expect(updateSettings(DEFAULT_SETTINGS)).toEqual({ auto: true, everyHours: 0 })
     expect(updateSettings({ ...DEFAULT_SETTINGS, updates: { auto: false, everyHours: 6 } })).toEqual({ auto: false, everyHours: 6 })
   })
   it('ignore values that are not usable', () => {
-    expect(updateSettings({ ...DEFAULT_SETTINGS, updates: { auto: 'no', everyHours: -3 } as never })).toEqual({ auto: true, everyHours: 24 })
+    expect(updateSettings({ ...DEFAULT_SETTINGS, updates: { auto: 'no', everyHours: -3 } as never })).toEqual({ auto: true, everyHours: 0 })
   })
 })
 
 describe('the start-up check', () => {
   const on = true
-  it('runs when never checked, or when the last check is older than the interval', () => {
+  const daily = { ...DEFAULT_SETTINGS, updates: { everyHours: 24 } }
+  it('runs at every start by default, however recently it last checked', () => {
     expect(startupCheckDue(DEFAULT_SETTINGS, now, on)).toBe(true)
-    expect(startupCheckDue({ ...DEFAULT_SETTINGS, lastUpdateCheck: hoursAgo(25) }, now, on)).toBe(true)
+    expect(startupCheckDue({ ...DEFAULT_SETTINGS, lastUpdateCheck: hoursAgo(0.1) }, now, on)).toBe(true)
   })
-  it('waits when checked within the interval', () => {
-    expect(startupCheckDue({ ...DEFAULT_SETTINGS, lastUpdateCheck: hoursAgo(3) }, now, on)).toBe(false)
+  it('with an interval set, runs when never checked or the last check is older', () => {
+    expect(startupCheckDue(daily, now, on)).toBe(true)
+    expect(startupCheckDue({ ...daily, lastUpdateCheck: hoursAgo(25) }, now, on)).toBe(true)
+  })
+  it('with an interval set, waits when checked within it', () => {
+    expect(startupCheckDue({ ...daily, lastUpdateCheck: hoursAgo(3) }, now, on)).toBe(false)
   })
   it('never runs with automatic checking off, or in a build with no feed', () => {
     expect(startupCheckDue({ ...DEFAULT_SETTINGS, updates: { auto: false } }, now, on)).toBe(false)

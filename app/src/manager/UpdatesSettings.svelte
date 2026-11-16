@@ -16,7 +16,7 @@
 >
 <p class="muted hint">
   {auto
-    ? 'On: Oversay looks for a newer version as it starts, at most once a day. It never checks while a session is open.'
+    ? 'On: Oversay looks for a newer version every time it starts. It never checks while a session is open.'
     : 'Off: Oversay makes no request until you press Check for updates.'}
   Checking asks the update server for one small file, which sees the address it comes from; nothing else about you or your decks is sent.
 </p>
