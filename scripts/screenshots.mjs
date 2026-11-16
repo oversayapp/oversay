@@ -273,6 +273,9 @@ const fakeBridge = `(() => {
       if (cmd === 'create_quick_file') { let name = args.name, i = 1; while (quick[args.kind][name]) name = args.name + ' ' + ++i; quick[args.kind][name] = { at: Date.now(), text: args.contents }; return qdir(args.kind) + name + qext[args.kind]; }
       if (cmd === 'rename_quick_file') { const from = qname(args.kind, args.path); quick[args.kind][args.name] = quick[args.kind][from]; delete quick[args.kind][from]; return qdir(args.kind) + args.name + qext[args.kind]; }
       if (cmd === 'trash_quick_file') { delete quick[args.kind][qname(args.kind, args.path)]; return null; }
+      // Updates: a build with a feed; the newer release turns up once a step sets window.__updateFound.
+      if (cmd === 'update_support') return { enabled: true, kind: 'installer' };
+      if (cmd === 'check_for_update') return window.__updateFound ? { state: 'available', kind: 'installer', release: { version: '0.3.0', date: '2026-12-01T10:00:00Z', page: null, notes: 'Overlay opacity: a slider in Settings\\nThe Edge strip keeps to the bottom edge\\nFixed: bold inside italic in talking points' } } : { state: 'upToDate' };
       if (cmd === 'platform_info') return { os: 'macos', arch: 'aarch64' };
       if (cmd === 'paths_exist') return args.paths.map(() => true);
       // Workspaces (ADR 0040), from the list above.
@@ -430,6 +433,9 @@ const SCREENS = [
   ['settings-menu', `(async () => { document.querySelector('main').scrollTop = 0; await new Promise((r) => setTimeout(r, 150)); document.querySelector('.toc .menubtn').click() })()`],
   ['settings-menu-closed', `document.querySelector('.toc .menubtn').click()`],
   ['settings-shortcut', `[...document.querySelectorAll('main button')].find((b) => b.textContent.trim() === 'Change').click()`],
+  // Updates: nothing newer, said plainly after Check for updates; then a newer release, with the rail's item and the header's pill.
+  ['settings-updates', `(async () => { document.querySelector('main').scrollTop = 0; await new Promise((r) => setTimeout(r, 100)); [...document.querySelectorAll('.toc ul button')].find((b) => b.textContent.trim() === 'Updates').click(); await new Promise((r) => setTimeout(r, 700)); [...document.querySelectorAll('#updates button')].find((b) => b.textContent.includes('Check for updates')).click(); await new Promise((r) => setTimeout(r, 300)) })()`],
+  ['settings-updates-found', `(async () => { window.__updateFound = true; [...document.querySelectorAll('#updates button')].find((b) => b.textContent.includes('Check for updates')).click(); await new Promise((r) => setTimeout(r, 500)) })()`],
 ]
 
 const children = []

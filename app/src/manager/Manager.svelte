@@ -40,6 +40,7 @@
   import Settings from './Settings.svelte'
   import TemplatesPage from './TemplatesPage.svelte'
   import AiPage from './AiPage.svelte'
+  import { checkAtStartup, loadUpdateSupport } from '../lib/updates/store'
 
   /** Moves quick notes and quick talks into Decks, and says what moved. */
   async function intoDecks() {
@@ -56,6 +57,11 @@
     // Settings first: they say whether the example decks were already added.
     attempt(async () => {
       await loadSettings()
+      // Whether this build has a feed, then the start-up check if it is due (epic #16); not waited for.
+      void attempt(async () => {
+        await loadUpdateSupport()
+        await checkAtStartup()
+      })
       // Decks have pins, not favourites: a deck starred before is pinned instead.
       await pinStarredDecks()
       // Not worth stopping the start for: Settings can add them later.

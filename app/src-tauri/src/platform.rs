@@ -190,6 +190,16 @@ pub fn exit_now(app: &AppHandle) -> ! {
     std::process::exit(0)
 }
 
+/// Starts Oversay again and ends this copy, after an update replaced it. Like `exit_now` it
+/// skips the windows' clean-up, which crashes a Mac (see there).
+pub fn restart_now(app: &AppHandle) -> ! {
+    use tauri::Manager;
+    use tauri_plugin_window_state::{AppHandleExt, StateFlags};
+    let _ = app.save_window_state(StateFlags::POSITION | StateFlags::SIZE | StateFlags::MAXIMIZED);
+    log::info!("restarting after an update");
+    tauri::process::restart(&app.env())
+}
+
 /// Sets the text beside the session's icon: in the menu bar on a Mac, and as the tooltip
 /// elsewhere (the Windows tray has no room for text). The tooltip is set on every platform.
 pub fn set_tray_text(tray: &tauri::tray::TrayIcon, text: &str) {

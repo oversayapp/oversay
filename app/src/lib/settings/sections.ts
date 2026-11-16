@@ -10,6 +10,7 @@ export const SETTINGS_SECTIONS = [
   { id: 'shortcuts', label: 'Shortcuts' },
   { id: 'templates', label: 'Templates' },
   { id: 'example-decks', label: 'Example deck' },
+  { id: 'updates', label: 'Updates' },
   { id: 'developer-tools', label: 'Developer tools' },
   { id: 'about', label: 'About' },
 ] as const
@@ -35,4 +36,9 @@ export function currentSection(tops: readonly number[], offset: number, atEnd: b
     if (top <= offset) current = i
   })
   return current
+}
+
+/** The sections to show: Updates only in a build that has a feed (ADR 0030). */
+export function visibleSections(buildChecksForUpdates: boolean) {
+  return SETTINGS_SECTIONS.filter((s) => s.id !== 'updates' || buildChecksForUpdates)
 }
