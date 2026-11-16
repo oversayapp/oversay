@@ -93,6 +93,8 @@ Pass `--page https://<where the release can be read>` to `latest-json.mjs` too: 
 - **During a session** (a session open, started or not) Rust refuses to check or install: no request, nothing changes on screen, no restart.
 - **A build with no feed** has no Updates section and never asks (the updater plugin isn't registered).
 
+**On a Mac, `scripts/update-test.sh` does steps 1 to 4 locally** with no CI and no repository secret: `brew install mkcert` and `mkcert -install` once, then `setup` (a throwaway key and a certificate in `out/update-test/`, never committed), `build 0.0.1`, `build 0.0.2`, `serve 0.0.2`. Install `out/update-test/builds/0.0.1/Oversay.app` into `/Applications` and start it while the feed is served. The version is a build-time override, so no tracked file changes. Windows still goes through CI or a Windows machine.
+
 The updater accepts only `https://` addresses with a certificate the test machine trusts. A local certificate authority such as mkcert, installed on each test machine, or Tailscale's `tailscale serve`, gives one without publishing anything.
 
 ## The update key
