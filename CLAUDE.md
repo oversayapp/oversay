@@ -9,7 +9,7 @@ Tauri v2 + Svelte 5 app in `app/`. Product spec: `docs/spec.md`.
 - **Git hooks:** run `make hooks` once per clone. Each commit is then checked for secrets (gitleaks, `.gitleaks.toml`) and its files linted (ESLint, `app/eslint.config.js`; rustfmt and clippy). `git commit --no-verify` is for emergencies only; never skip a refusal to get a commit through.
 - **Work tracking:** epics are GitHub issues in this repo (label `epic`) with a Validation list John ticks; bugs are issues labelled `bug`. Tasks are not filed (ADR 0043): the agent slices an epic into its own plan, in its session or in `out/plans/` (never committed), and the PR lists the slices it built with `Part of #EPIC`. Old ids such as `007/02` in commit subjects and ADRs are no longer mapped. An agent never closes an epic or ticks its Validation list: that is John's. Work on a branch per epic; `main` changes only through reviewed PRs.
 - **Platform window code** (macOS panels, capture hiding, display detection) lives in `app/src-tauri/src/platform.rs`; read its comments before changing how overlay windows are created, shown or closed. Hands-on platform results: `docs/platform/fullscreen-results.md`.
-- **Decisions:** `docs/adr/`. **Designs:** the private `oversayapp/design` repository; a design is linked from its issue, never from code (`CODING_STANDARDS.md`).
+- **Decisions:** `.adr/`. **Designs:** the private `oversayapp/design` repository; a design is linked from its issue, never from code (`CODING_STANDARDS.md`).
 - **Review rules:** `CODING_STANDARDS.md`.
 
 <!-- project-standards:start -->

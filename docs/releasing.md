@@ -1,6 +1,6 @@
 # Releasing Oversay
 
-How versions are numbered, how a release is cut, and what each build does about updates. The decisions are in [ADR 0030](adr/0030-the-updater-is-built-now-and-its-feed-waits-until-oversay-goes-public.md): nothing is public yet, so releases are private and no build handed out checks for updates.
+How versions are numbered, how a release is cut, and what each build does about updates. The decisions are in [ADR 0030](../.adr/0030-the-updater-is-built-now-and-its-feed-waits-until-oversay-goes-public.md): nothing is public yet, so releases are private and no build handed out checks for updates.
 
 ## Versions
 

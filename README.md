@@ -31,7 +31,7 @@ make check     # type checks, lint, tests, Rust checks and dependency audit
 ## Documentation
 
 - [`docs/spec.md`](docs/spec.md): the product spec.
-- [`docs/adr/`](docs/adr/): the architecture decisions and why they were made.
+- [`.adr/`](.adr/): the architecture decisions and why they were made.
 - [`docs/releasing.md`](docs/releasing.md): versions, builds and releases.
 - [`docs/security/`](docs/security/): security reviews and scans.
 - [`CHANGELOG.md`](CHANGELOG.md): what changed.

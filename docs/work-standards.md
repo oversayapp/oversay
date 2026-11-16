@@ -169,7 +169,7 @@ whichever workflow or skill is running when it is made.
 
 ### Where they live
 
-- `docs/adr/NNNN-slug.md`. Follow the format of the existing ADRs (front matter `status` and `date`, then Context, Decision and the rest) in place of the template below.
+- `.adr/NNNN-slug.md` at the repo root. Follow the format of the existing ADRs (front matter `status` and `date`, then Context, Decision and the rest) in place of the template below.
 - In a repo split into contexts, an ADR that affects only one context lives in
   that context's folder, for example `src/billing/.adr/`.
 - Create the folder only when the first ADR is needed.
