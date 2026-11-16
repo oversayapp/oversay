@@ -4,7 +4,7 @@
 | --- | --- |
 | [`concept.md`](concept.md) | The original idea: what Oversay is for and why. Background, not requirements. |
 | [`spec.md`](spec.md) | The product spec: domain model, file format, screens, phases. Epics (GitHub issues) cite its sections. Where anything else disagrees with it, the spec wins. |
-| [`adr/`](adr/) | Architecture decision records: choices that are hard to reverse and why we made them. |
+| [`.adr/`](../.adr/) (repo root) | Architecture decision records: choices that are hard to reverse and why we made them. |
 | [`platform/`](platform/) | Hands-on platform results, such as overlays above full-screen apps and hiding from screen capture, per OS. |
 | [`proposals/`](proposals/) | Ideas raised but not decided, kept so the next planning pass starts from them. |
 

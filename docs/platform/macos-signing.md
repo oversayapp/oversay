@@ -7,7 +7,7 @@ A signed and notarized Oversay opens on a Mac with no Gatekeeper warning beyond 
 - The `.app` is signed with a **Developer ID Application** certificate, the **hardened runtime** on and a secure timestamp, then **notarized** by Apple and **stapled**, so it also verifies offline.
 - The `.dmg` is signed, notarized and stapled too. Tauri signs the DMG but doesn't notarize it, so the build workflow does that step itself.
 - It is a **universal** build (Apple silicon and Intel), minimum macOS 11.0.
-- The update package (`Oversay.app.tar.gz`) is made from the notarized app. Its signature is the separate **updater key** of [ADR 0030](../adr/0030-the-updater-is-built-now-and-its-feed-waits-until-oversay-goes-public.md), unrelated to Apple signing.
+- The update package (`Oversay.app.tar.gz`) is made from the notarized app. Its signature is the separate **updater key** of [ADR 0030](../../.adr/0030-the-updater-is-built-now-and-its-feed-waits-until-oversay-goes-public.md), unrelated to Apple signing.
 
 ## Entitlements
 

@@ -30,4 +30,4 @@ A comment says what the code does and why. Where a design or a decision came fro
 
 ## Hard-to-reverse decisions get an ADR
 
-Flag a change that makes a choice that is hard to reverse, surprising to a later reader, and the result of a real trade-off, without a new or updated ADR in `docs/adr/` (format: follow the existing ADRs).
+Flag a change that makes a choice that is hard to reverse, surprising to a later reader, and the result of a real trade-off, without a new or updated ADR in `.adr/` (format: follow the existing ADRs).

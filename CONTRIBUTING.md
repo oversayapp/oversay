@@ -20,7 +20,7 @@ Thanks for your interest in Oversay.
 
 ## Decisions
 
-Choices that are hard to reverse are recorded in [`docs/adr/`](docs/adr/). If your change contradicts one, say so in the issue.
+Choices that are hard to reverse are recorded in [`.adr/`](.adr/). If your change contradicts one, say so in the issue.
 
 ## Licence
 
