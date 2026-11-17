@@ -24,4 +24,10 @@
     color: var(--on-accent);
     white-space: nowrap;
   }
+
+  /* The global `button:hover` paints the neutral hover colour, which leaves the on-accent text
+     unreadable (white on pale grey, dark on dark), so the pill keeps its own hover colour. */
+  .pill:hover:not(:disabled) {
+    background: var(--accent-hover);
+  }
 </style>
