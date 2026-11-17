@@ -164,13 +164,23 @@ test('make runs inside the box only on a SteamOS host whose box exists', () => {
   assert.equal(name({ box: true, env: { CONTAINER_ID: 'oversay-dev' } }), '')
 })
 
-test("on the Deck's own terminal, make runs every target but setup inside the box", () => {
+test("on the Deck's own terminal, make runs the targets that build or run the app inside the box", () => {
   const deck = linux({ box: true })
-  assert.match(deck('make', '-n', 'dev', 'PORT=1430').out, /^distrobox enter oversay-dev -- make -C '.*' dev PORT=1430$/m)
-  assert.match(deck('make', '-n', 'doctor', 'check').out, /^distrobox enter oversay-dev -- make -C '.*' doctor check *$/m)
+  assert.match(deck('make', '-n', 'dev', 'PORT=1430').out, /^MAKEFLAGS= distrobox enter oversay-dev -- make -C '.*' dev PORT=1430$/m)
+  assert.match(deck('make', '-n', 'doctor').out, /^MAKEFLAGS= distrobox enter oversay-dev -- make -C '.*' doctor *$/m)
   assert.match(deck('make', '-n', 'setup').out, /^scripts\/setup\.sh *$/m)
   assert.match(deck('make', '-n').out, /^grep -E/m, 'a bare make still lists the targets')
+  // Targets that need gh or claude, not the build libraries, stay on the host.
+  assert.doesNotMatch(deck('make', '-n', 'fetch').out, /distrobox/)
+  assert.match(deck('make', '-n', 'fetch').out, /scripts\/fetch-builds\.sh/)
+  // The jobserver's file descriptors don't exist inside the box.
+  assert.match(deck('make', '-n', '-j2', 'check').out, /^MAKEFLAGS= distrobox enter/m)
   // In the box, or without one, make runs the targets itself.
   assert.doesNotMatch(linux({ box: false })('make', '-n', 'dev').out, /distrobox/)
   assert.doesNotMatch(linux({ box: true, env: { CONTAINER_ID: 'oversay-dev' } })('make', '-n', 'dev').out, /distrobox/)
+})
+
+test('on a Mac, a stray OVERSAY_BOX in the environment changes nothing', () => {
+  const r = spawnSync('make', ['-n', '-C', join(scripts, '..'), 'doctor'], { encoding: 'utf8', env: { ...process.env, OVERSAY_BOX: 'x', DEVBOX: 'x' } })
+  if (process.platform === 'darwin') assert.doesNotMatch(r.stdout, /distrobox/)
 })
