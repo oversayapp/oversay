@@ -349,6 +349,8 @@ jobs:
       TAG: ${{ github.ref_name }}
       # Where the files will be downloaded from, once there is a feed. Until then, this release.
       FILES_BASE: ${{ vars.OVERSAY_UPDATE_FILES || format('https://github.com/{0}/releases/download/{1}', github.repository, github.ref_name) }}
+      # The page the portable .exe links to, since it can't install an update itself.
+      RELEASE_PAGE: ${{ format('https://github.com/{0}/releases/tag/{1}', github.repository, github.ref_name) }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
@@ -372,7 +374,7 @@ jobs:
           cp artifacts/oversay-macos-update/* release/ 2>/dev/null || true
           cp artifacts/oversay-windows-portable/oversay.exe release/Oversay_portable_x64.exe
           if ls release/*.sig > /dev/null 2>&1; then
-            node scripts/latest-json.mjs --dir release --version "${TAG#v}" --base "$FILES_BASE" --notes-file "$RUNNER_TEMP/notes.md"
+            node scripts/latest-json.mjs --dir release --version "${TAG#v}" --base "$FILES_BASE" --page "$RELEASE_PAGE" --notes-file "$RUNNER_TEMP/notes.md"
           else
             echo "No signing key: installers only, no update packages or latest.json."
           fi

@@ -6,6 +6,9 @@ Notable changes to Oversay, newest first. The format follows [Keep a Changelog](
 
 ## [Unreleased]
 
+### Fixed
+- The portable Windows build's **Open the release page** button now has a page to open when an update is found: the update feed names the release.
+
 ## [0.4.0] · 2026-11-17
 
 The first public release. Installed builds before it (0.1.0 and the rolling builds of `main`) never learn of the update feed, so install 0.4.0 by hand once; later versions arrive through the app.

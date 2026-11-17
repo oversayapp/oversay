@@ -83,7 +83,7 @@ The updater is tested against a feed on John's own machine or network, never a h
    `node scripts/latest-json.mjs --dir <folder> --version 0.2.1 --base https://<address>/`
 4. Start the older install and let it find the newer one.
 
-Pass `--page https://<where the release can be read>` to `latest-json.mjs` too: it becomes `release_page`, the link the portable `.exe` shows in place of an install button. Without it, that build says an update exists and shows no link.
+Pass `--page https://<where the release can be read>` to `latest-json.mjs` too: it becomes `release_page`, the link the portable `.exe` shows in place of an install button. Without it, that build says an update exists and shows no link. The release job passes the tag's release page; v0.4.0's `latest.json` was made before it did, so it has none.
 
 ## What the app does with an update
 
