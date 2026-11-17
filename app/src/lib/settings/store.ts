@@ -394,6 +394,24 @@ export function setLinkPermission(permission: LinkPermission): Promise<void> {
   })
 }
 
+// ---- Updates (epic #16)
+
+/** Turns automatic update checks on or off, or changes how often they run (lib/updates/policy.ts). */
+export function setUpdateSettings(change: { auto?: boolean; everyHours?: number }): Promise<void> {
+  logAction('update settings', JSON.stringify(change))
+  return inTurn(async () => {
+    const current = get(settings)
+    await save({ ...current, updates: { ...current.updates, ...change } })
+  })
+}
+
+/** Remembers when updates were last asked for, so a start-up check waits out the interval. */
+export function noteUpdateCheck(at: Date): Promise<void> {
+  return inTurn(async () => {
+    await save({ ...get(settings), lastUpdateCheck: at.toISOString() })
+  })
+}
+
 // ---- Recordings (ADR 0041, task 317)
 
 /** Every deck records from Start, or only once the deck widget's record button is pressed (the default). */

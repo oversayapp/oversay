@@ -7,10 +7,12 @@
   import { deckSessions } from '../lib/sessions/store'
   import { difference, runTimes } from '../lib/sessions/runs'
   import { searchEverything, type SearchKind, type Searchable } from '../lib/search/everything'
-  import { SETTINGS_SECTIONS, type SettingsSectionId } from '../lib/settings/sections'
+  import { visibleSections, type SettingsSectionId } from '../lib/settings/sections'
   import { visibleTemplates } from '../lib/templates/library'
   import { library } from '../lib/templates/library-store'
   import Icon from './Icon.svelte'
+  import UpdatePill from './UpdatePill.svelte'
+  import { supported } from '../lib/updates/store'
   import { back } from './back'
   import type { IconName } from './icons'
   import { goAi, goDeck, goDecks, goHome, goSession, goSessions, goSettings, goTemplates, goWorkspace, goWorkspaces } from './route'
@@ -51,7 +53,7 @@
         return { kind: 'session' as const, id: `${d.path}#${s.startedAt}`, label: d.name, terms: [when], sub: [when, difference(t.planned, t.timed).text].filter(Boolean).join(' · ') }
       }),
     ...visibleTemplates($library).map((t) => ({ kind: 'template' as const, id: t.id, label: t.name, terms: [t.description], sub: t.description })),
-    ...SETTINGS_SECTIONS.map((s) => ({ kind: 'setting' as const, id: s.id, label: s.label, terms: ['Settings'], sub: 'Settings' })),
+    ...visibleSections($supported).map((s) => ({ kind: 'setting' as const, id: s.id, label: s.label, terms: ['Settings'], sub: 'Settings' })),
     ...Object.entries(PAGES).map(([id, p]) => ({ kind: 'page' as const, id, label: p.label, terms: [], sub: 'Page' })),
   ])
 
@@ -166,7 +168,7 @@
       </div>
     {/if}
   </div>
-  <span></span>
+  <UpdatePill />
   </div>
 </div>
 

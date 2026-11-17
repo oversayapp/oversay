@@ -9,7 +9,7 @@
 //
 // Usage:
 //   node scripts/latest-json.mjs --dir release --version 0.2.0 --base https://host/path \
-//     [--notes-file notes.md] [--out release/latest.json]
+//     [--notes-file notes.md] [--page https://host/releases/v0.2.0] [--out release/latest.json]
 // --base is where the files will be downloaded from; each URL is base + / + file name.
 
 import { readdirSync, readFileSync, writeFileSync } from 'node:fs'
@@ -24,7 +24,7 @@ const KINDS = [
 ]
 
 // files: names in the folder; sig: reads a .sig file's contents.
-export function latestJson({ files, sig, version, notes, base, date }) {
+export function latestJson({ files, sig, version, notes, base, date, page }) {
   const platforms = {}
   for (const f of files) {
     if (!files.includes(`${f}.sig`)) continue
@@ -39,6 +39,8 @@ export function latestJson({ files, sig, version, notes, base, date }) {
   return {
     version,
     notes,
+    // Where a build that can't install itself (the portable .exe) points the person; the app only opens an https address.
+    ...(page ? { release_page: page } : {}),
     pub_date: date.toISOString().replace(/\.\d{3}Z$/, 'Z'),
     platforms: Object.fromEntries(Object.entries(platforms).sort().map(([k, { signature, url }]) => [k, { signature, url }])),
   }
@@ -58,6 +60,7 @@ function main(argv) {
     version: opt.version,
     notes: opt['notes-file'] ? readFileSync(opt['notes-file'], 'utf8').trim() : '',
     base: opt.base,
+    page: opt.page,
     date: new Date(),
   })
   const out = opt.out ?? join(opt.dir, 'latest.json')

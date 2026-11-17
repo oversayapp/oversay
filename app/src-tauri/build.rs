@@ -4,6 +4,10 @@
 // capabilities in step.
 const COMMANDS: &[&str] = &[
     "platform_info",
+    "update_support",
+    "check_for_update",
+    "install_update",
+    "open_release_page",
     "open_overlay",
     "close_overlay",
     "set_hidden_from_capture",

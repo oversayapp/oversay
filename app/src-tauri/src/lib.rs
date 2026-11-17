@@ -20,6 +20,7 @@ mod skill;
 mod state;
 mod transcriber;
 mod tray;
+mod updates;
 mod workspaces;
 
 use tauri::{Manager, RunEvent, WindowEvent};
@@ -38,6 +39,7 @@ pub fn run() {
         .manage(overlay::Layouts::default())
         .manage(session::Engine::default())
         .manage(recorder::Recorder::default())
+        .manage(updates::Pending::default())
         // oversay:// links (ADR 0032); after the single instance, which hands it a second launch's link.
         .plugin(tauri_plugin_deep_link::init())
         .plugin(tauri_plugin_dialog::init())
@@ -123,6 +125,10 @@ pub fn run() {
         })
         .invoke_handler(tauri::generate_handler![
             about::platform_info,
+            updates::update_support,
+            updates::check_for_update,
+            updates::install_update,
+            updates::open_release_page,
             overlay::open_overlay,
             overlay::close_overlay,
             overlay::set_hidden_from_capture,

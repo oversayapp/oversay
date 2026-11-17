@@ -58,6 +58,8 @@ hound = "3.5.1"
 # (ureq) and checked by its SHA-256 (sha2). Building whisper.cpp needs cmake.
 whisper-rs = "0.16.0"
 ureq = "3.5.0"
+# Compares the feed's version with this one for a build that cannot install it (updates.rs).
+semver = "1"
 sha2 = "0.11.1"
 
 # Dependencies carry no debuginfo in dev builds: it was most of target/ (objc2-app-kit

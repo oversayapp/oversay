@@ -8,6 +8,10 @@
   "permissions": [
     "core:default",
     "allow-platform-info",
+    "allow-update-support",
+    "allow-check-for-update",
+    "allow-install-update",
+    "allow-open-release-page",
     "allow-open-overlay",
     "allow-close-overlay",
     "allow-set-hidden-from-capture",

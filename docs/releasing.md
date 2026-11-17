@@ -83,6 +83,18 @@ The updater is tested against a feed on John's own machine or network, never a h
    `node scripts/latest-json.mjs --dir <folder> --version 0.2.1 --base https://<address>/`
 4. Start the older install and let it find the newer one.
 
+Pass `--page https://<where the release can be read>` to `latest-json.mjs` too: it becomes `release_page`, the link the portable `.exe` shows in place of an install button. Without it, that build says an update exists and shows no link.
+
+## What the app does with an update
+
+- **Start-up:** with automatic checking on (Settings › Updates; default on), the app asks the feed every time it starts (the maintainer's answer, 2026-11-16). `updates.everyHours` in `settings.json` can set a least time between checks; 0, the default, is every start. A start-up check that finds nothing, or can't reach the feed, shows nothing.
+- **Found:** an Update item appears in the rail and a pill in the header; both open Settings › Updates, which shows the version and notes and the **Update and restart** button (macOS app, Windows NSIS and `.msi`). The portable `.exe` shows **Open the release page** instead.
+- **Check for updates** works with automatic checking off, and says plainly when it is up to date or the feed can't be reached.
+- **During a session** (a session open, started or not) Rust refuses to check or install: no request, nothing changes on screen, no restart.
+- **A build with no feed** has no Updates section and never asks (the updater plugin isn't registered).
+
+**On a Mac, `scripts/update-test.sh` does steps 1 to 4 locally** with no CI and no repository secret: `brew install mkcert` and `mkcert -install` once, then `setup` (a throwaway key and a certificate in `out/update-test/`, never committed), `build 0.0.1`, `build 0.0.2`, `serve 0.0.2`. Install `out/update-test/builds/0.0.1/Oversay.app` into `/Applications` and start it while the feed is served. The version is a build-time override, so no tracked file changes. Windows still goes through CI or a Windows machine.
+
 The updater accepts only `https://` addresses with a certificate the test machine trusts. A local certificate authority such as mkcert, installed on each test machine, or Tailscale's `tailscale serve`, gives one without publishing anything.
 
 ## The update key
