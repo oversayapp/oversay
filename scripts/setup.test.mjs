@@ -3,10 +3,10 @@
 // ldconfig are small stubs on PATH that log what they were asked to do, so the Steam Deck's
 // route (a distrobox, no sudo) is checked from any machine.
 
-import { test } from 'node:test'
+import { test, after } from 'node:test'
 import assert from 'node:assert/strict'
 import { spawnSync } from 'node:child_process'
-import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, existsSync, chmodSync } from 'node:fs'
+import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, existsSync, chmodSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join, dirname } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -30,9 +30,13 @@ echo "podman $*" >> "$STUB_LOG"`,
 echo "	libclang-18.so.18 (libc6,x86-64) => /usr/lib/x86_64-linux-gnu/libclang-18.so.18"`,
 }
 
+const made = []
+after(() => made.forEach((d) => rmSync(d, { recursive: true, force: true })))
+
 // A stand-in Linux. os: the os-release ID; mise: whether mise is installed.
 function linux({ os = 'steamos', mise = true, box = false, missingPkgs = '', pcMissing = '', apt = false, badCurl = false, env = {} } = {}) {
   const dir = mkdtempSync(join(tmpdir(), 'oversay-setup-'))
+  made.push(dir)
   const bin = join(dir, 'bin')
   mkdirSync(bin)
   const stubs = { ...STUBS }
@@ -76,11 +80,10 @@ test('on SteamOS, make setup puts the build libraries in the oversay-dev box and
   assert.equal(r.code, 0, r.out)
   const steps = mutating(r.calls)
   assert.match(steps[0], /^distrobox create --yes --no-entry --name oversay-dev --image quay\.io\/toolbx\/ubuntu-toolbox:24\.04$/)
-  assert.equal(steps[1], 'distrobox enter oversay-dev -- true')
-  assert.match(steps[2], /^distrobox enter oversay-dev -- .*\/scripts\/linux\.sh missing-packages$/)
-  assert.match(steps[3], /^podman exec --user root oversay-dev sh -c .* sh libasound2-dev libxdo-dev$/)
-  assert.match(steps[4], /^distrobox enter oversay-dev -- .*\/scripts\/setup\.sh$/)
-  assert.equal(steps.length, 5)
+  assert.match(steps[1], /^distrobox enter oversay-dev -- .*\/scripts\/linux\.sh missing-packages$/)
+  assert.match(steps[2], /^podman exec --user root oversay-dev sh -c .* sh libasound2-dev libxdo-dev$/)
+  assert.match(steps[3], /^distrobox enter oversay-dev -- .*\/scripts\/setup\.sh$/)
+  assert.equal(steps.length, 4)
   assert.ok(!r.calls.some((c) => /^(sudo|pacman)/.test(c)), 'never sudo or pacman on the host')
 })
 
@@ -182,7 +185,7 @@ test("on the Deck's own terminal, make runs the targets that build or run the ap
   assert.doesNotMatch(linux({ box: true, env: { CONTAINER_ID: 'oversay-dev' } })('make', '-n', 'dev').out, /distrobox/)
 })
 
-test('on a Mac, a stray OVERSAY_BOX in the environment changes nothing', () => {
+test('on a Mac, a stray OVERSAY_BOX in the environment changes nothing', { skip: process.platform !== 'darwin' && 'macOS only' }, () => {
   const r = spawnSync('make', ['-n', '-C', join(scripts, '..'), 'doctor'], { encoding: 'utf8', env: { ...process.env, OVERSAY_BOX: 'x', DEVBOX: 'x' } })
-  if (process.platform === 'darwin') assert.doesNotMatch(r.stdout, /distrobox/)
+  assert.doesNotMatch(r.stdout, /distrobox/)
 })

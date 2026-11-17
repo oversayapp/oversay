@@ -48,7 +48,6 @@ if [ "$os" = "Linux" ]; then
 	if linux_devbox_route && linux_devbox_exists; then
 		exec distrobox enter "$DEVBOX" -- "$PWD/scripts/doctor.sh"
 	fi
-	[ -x "$HOME/.local/bin/mise" ] && ! have mise && PATH="$HOME/.local/bin:$PATH"
 	mise_hint="run: make setup (installs it in ~/.local/bin)"
 fi
 

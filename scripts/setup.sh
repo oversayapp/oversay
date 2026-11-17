@@ -12,7 +12,7 @@ dry=0
 case "${1:-}" in
 	"") ;;
 	--dry-run) dry=1 ;;
-	-h | --help) sed -n '2,7p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
+	-h | --help) awk 'NR > 1 && !/^#/ { exit } NR > 1 { sub(/^# ?/, ""); print }' "$0"; exit 0 ;;
 	*) echo "Unknown option: $1 (try --dry-run)" >&2; exit 2 ;;
 esac
 
@@ -87,7 +87,6 @@ setup_devbox() {
 			exit 0
 		fi
 		echo "    first start of the box (a few minutes)"
-		distrobox enter "$DEVBOX" -- true
 	fi
 	local pkgs
 	pkgs=$(distrobox enter "$DEVBOX" -- "$PWD/scripts/linux.sh" missing-packages | tr -d '\r' | tail -n 1) ||
@@ -151,8 +150,6 @@ if [ "$os" = "Darwin" ]; then
 		[ -x "$b/brew" ] && ! have brew && PATH="$b:$PATH"
 		[ -x "$b/mise" ] && ! have mise && PATH="$b:$PATH"
 	done
-else
-	[ -x "$HOME/.local/bin/mise" ] && ! have mise && PATH="$HOME/.local/bin:$PATH"
 fi
 if have mise; then
 	echo "    found $(mise --version | head -n 1)"
@@ -164,7 +161,6 @@ elif [ "$os" = "Darwin" ]; then
 	have mise || [ "$dry" -eq 1 ] || die "mise installed but is not on PATH."
 else
 	install_mise_linux
-	PATH="$HOME/.local/bin:$PATH"
 	installed+=("mise")
 	have mise || [ "$dry" -eq 1 ] || die "mise installed but is not on PATH."
 fi
@@ -175,7 +171,7 @@ shell_name=$(basename "${SHELL:-zsh}")
 # These are text to show the user, not paths or commands to run here.
 mise_word=mise
 # shellcheck disable=SC2088
-[ "$os" = "Linux" ] && [ "$(command -v mise || echo "$HOME/.local/bin/mise")" = "$HOME/.local/bin/mise" ] && mise_word='~/.local/bin/mise'
+[ "$os" = "Linux" ] && { ! have mise || [ "$(command -v mise)" = "$HOME/.local/bin/mise" ]; } && mise_word='~/.local/bin/mise'
 # shellcheck disable=SC2088
 case "$shell_name" in
 	zsh) rc='~/.zshrc'; line="eval \"\$($mise_word activate zsh)\"" ;;

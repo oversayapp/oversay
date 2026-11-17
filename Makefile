@@ -8,6 +8,7 @@ PORT ?= 1420
 # matching the shell that runs it.
 HERE := [/]$(patsubst /%,%,$(CURDIR))
 
+# A new target that needs gh or claude rather than the build libraries goes in HOST_ONLY below.
 .PHONY: help setup doctor dev dev-fg logs stop crash check pr-checks hooks skills skill-try shots fetch build verify-mac clean clean-rust
 
 help: ## List targets
@@ -24,8 +25,11 @@ FORWARD_GOALS :=
 ifeq ($(shell uname -s),Linux)
 # make setup installs mise in ~/.local/bin, which may not be on PATH.
 export PATH := $(HOME)/.local/bin:$(PATH)
+# Only asked when a goal could be forwarded; help, setup and a bare make never are.
 ifndef OVERSAY_HOST
+ifneq ($(filter-out help setup,$(MAKECMDGOALS)),)
 OVERSAY_BOX := $(shell scripts/linux.sh devbox-to-enter 2> /dev/null)
+endif
 endif
 endif
 

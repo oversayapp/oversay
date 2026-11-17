@@ -39,6 +39,9 @@ libclang      lib:libclang(-[0-9.]+)?\.so     libclang-dev
 
 linux_have() { command -v "$1" > /dev/null 2>&1; }
 
+# make setup installs mise in ~/.local/bin, which may not be on PATH.
+case ":$PATH:" in *":$HOME/.local/bin:"*) ;; *) PATH="$HOME/.local/bin:$PATH" ;; esac
+
 # Inside any container (distrobox sets CONTAINER_ID to the box's name; podman and docker leave a file).
 linux_in_container() { [ -n "${CONTAINER_ID:-}" ] || [ -e /run/.containerenv ] || [ -e /.dockerenv ]; }
 
@@ -89,7 +92,7 @@ linux_scan() {
 }
 
 # The Ubuntu packages, once each, from "name|found|package" lines on stdin.
-linux_packages_of() { awk -F'|' '{ print $3 }' | awk '!seen[$0]++' | tr '\n' ' ' | sed 's/ $//'; }
+linux_packages_of() { awk -F'|' '!seen[$3]++ { printf "%s%s", sep, $3; sep = " " }'; }
 
 linux_all_packages() { echo "$LINUX_DEPS" | awk 'NF { print $1 "||" $3 }' | linux_packages_of; }
 
@@ -127,6 +130,6 @@ if [ "${BASH_SOURCE[0]}" = "$0" ]; then
 		devbox-to-enter) if linux_devbox_route && linux_devbox_exists; then echo "$DEVBOX"; fi ;;
 		check-libs) linux_check_libs ;;
 		missing-packages) linux_missing_packages; echo ;;
-		*) sed -n '2,10p' "$0" | sed 's/^# \{0,1\}//'; exit 2 ;;
+		*) awk 'NR > 1 && !/^#/ { exit } NR > 1 { sub(/^# ?/, ""); print }' "$0"; exit 2 ;;
 	esac
 fi
