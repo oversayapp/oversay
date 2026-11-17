@@ -86,17 +86,32 @@ pub(crate) fn folder_name(name: &str) -> String {
     tidy
 }
 
+/// Writes `contents` to `path` so it is never left half-written: into a new file beside it, then
+/// renamed over it. The new file must not exist already (`create_new` never opens, or follows, what
+/// is there) and its name is unique to this save, so nothing put in the folder beforehand is written to.
 pub(crate) fn write_atomically(path: &Path, contents: &str) -> std::io::Result<()> {
+    use std::io::Write;
     let mut tmp: PathBuf = path.to_path_buf();
     let name = path
         .file_name()
         .map(|n| n.to_string_lossy().into_owned())
         .unwrap_or_default();
-    tmp.set_file_name(format!(".{name}.tmp"));
-    fs::write(&tmp, contents)?;
-    fs::rename(&tmp, path).inspect_err(|_| {
+    tmp.set_file_name(format!(".{name}.{}.tmp", crate::ids::new_id("t")));
+    let mut file = fs::OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .open(&tmp)?;
+    // From here the file is ours: it is removed if anything fails, and closed before the rename.
+    let written = (|| {
+        file.write_all(contents.as_bytes())?;
+        file.sync_all()?;
+        drop(file);
+        fs::rename(&tmp, path)
+    })();
+    if written.is_err() {
         let _ = fs::remove_file(&tmp);
-    })
+    }
+    written
 }
 
 #[cfg(test)]
@@ -122,6 +137,26 @@ mod tests {
             .map(|e| e.unwrap().file_name())
             .collect();
         assert_eq!(names.len(), 1);
+        fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn a_save_does_not_write_through_a_link_that_is_already_there() {
+        let dir = temp_dir("planted");
+        let other = dir.join("other.txt");
+        fs::write(&other, "untouched\n").unwrap();
+        let file = dir.join("a.oversay.json");
+        std::os::unix::fs::symlink(&other, dir.join(".a.oversay.json.tmp")).unwrap();
+        write_atomically(&file, "saved\n").unwrap();
+        assert_eq!(fs::read_to_string(&other).unwrap(), "untouched\n");
+        assert_eq!(fs::read_to_string(&file).unwrap(), "saved\n");
+        assert!(
+            !fs::symlink_metadata(&file)
+                .unwrap()
+                .file_type()
+                .is_symlink()
+        );
         fs::remove_dir_all(&dir).unwrap();
     }
 
