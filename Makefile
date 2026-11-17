@@ -16,6 +16,24 @@ help: ## List targets
 setup: ## One-command dev setup: mise, Rust, Node, cmake, gitleaks, npm ci, git hooks; DRY=1 shows the plan
 	@scripts/setup.sh $(if $(DRY),--dry-run)
 
+ifeq ($(shell uname -s),Linux)
+# make setup installs mise in ~/.local/bin, which may not be on PATH.
+export PATH := $(HOME)/.local/bin:$(PATH)
+# On SteamOS the build libraries live in the oversay-dev distrobox (scripts/linux.sh). From the
+# Deck's own terminal, every target but setup runs again inside it, once make setup has made it.
+DEVBOX := $(shell scripts/linux.sh devbox-to-enter 2> /dev/null)
+endif
+
+ifneq ($(DEVBOX),)
+BOX_GOALS := $(filter-out help setup,$(MAKECMDGOALS))
+endif
+ifneq ($(BOX_GOALS),)
+$(firstword $(BOX_GOALS)):
+	@distrobox enter $(DEVBOX) -- make -C '$(CURDIR)' $(BOX_GOALS) $(MAKEOVERRIDES)
+$(wordlist 2,$(words $(BOX_GOALS)),$(BOX_GOALS)):
+	@:
+else
+
 doctor: ## Read-only check that every tool development needs is installed; exits 1 if one is missing
 	@scripts/doctor.sh
 
@@ -103,3 +121,5 @@ clean-rust: ## Remove this checkout's Rust build output (app/src-tauri/target); 
 	@if pgrep -f '$(HERE)/app/node_modules/.bin/tauri' > /dev/null; then \
 	  echo "The dev app is running for this checkout. make stop first."; exit 1; fi
 	cd app/src-tauri && $(CARGO) clean
+
+endif

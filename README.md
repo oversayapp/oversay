@@ -28,6 +28,21 @@ make check     # type checks, lint, tests, Rust checks and dependency audit
 
 `make` lists every target.
 
+### On Linux and the Steam Deck
+
+`make setup` works on Linux too, without sudo. It downloads mise into `~/.local/bin` (a pinned release, checked against its SHA-256) and installs the rest as on a Mac. The Tauri build libraries (WebKitGTK, AppIndicator, librsvg, ALSA, libxdo, libclang) come from the system: if one is missing, `make setup` and `make doctor` name it and the `apt-get` command that installs it, and leave running it to you.
+
+On **SteamOS** (the Steam Deck in desktop mode) the root filesystem is read-only, so the build libraries go into a [distrobox](https://distrobox.it) named `oversay-dev` instead: an Ubuntu 24.04 container that shares your home folder and the desktop session, so the app's windows open on the Deck's desktop. Nothing outside your home folder changes. From Konsole:
+
+```bash
+git clone https://github.com/oversayapp/oversay.git && cd oversay
+make setup     # creates the oversay-dev box (several minutes the first time), then runs the rest inside it
+make doctor    # every tool and library, checked inside the box
+make dev       # starts Oversay; make logs, make stop as on a Mac
+```
+
+From the Deck's own terminal every target except `make setup` runs inside the box by itself. `distrobox enter oversay-dev` opens a shell in it. Another Linux can use the same box: `export OVERSAY_DEVBOX=1` (in your shell startup file too), then `make setup`. To start over, `distrobox rm oversay-dev`, then `make setup`.
+
 ## Documentation
 
 - [`docs/spec.md`](docs/spec.md): the product spec.
