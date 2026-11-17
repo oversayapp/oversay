@@ -5,7 +5,7 @@ How versions are numbered, how a release is cut, and what each build does about 
 ## Versions
 
 - The version is set in one place, `app/package.json`. `tauri.conf.json` reads it; `make check` fails when `Cargo.toml` differs.
-- Change it only with the script, which sets `package.json`, `package-lock.json`, `Cargo.toml` and `Cargo.lock` together:
+- Change it only with the script, which sets `package.json`, `package-lock.json`, `Cargo.toml` and `Cargo.lock` together and then runs `make skills`, because the Oversay skill's files embed the version:
 
   ```bash
   node scripts/version.mjs 0.2.0

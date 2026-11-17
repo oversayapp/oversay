@@ -4,11 +4,12 @@
 //
 // Usage:
 //   node scripts/version.mjs 0.2.0      set the version in package.json, package-lock.json,
-//                                       Cargo.toml and Cargo.lock
+//                                       Cargo.toml and Cargo.lock, then run make skills
 //   node scripts/version.mjs --check    fail when Cargo.toml differs from package.json (make check)
 //   node scripts/version.mjs --tag v0.2.0
 //                                       fail unless the tag is v + package.json's version (release job)
 
+import { execFileSync } from 'node:child_process'
 import { readFileSync, writeFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -45,6 +46,12 @@ export function setCargoLockVersion(lock, v) {
   const next = lock.replace(/(\[\[package\]\]\nname = "oversay"\nversion = ")[^"]*(")/, `$1${v}$2`)
   if (next === lock && !lock.includes(`name = "oversay"\nversion = "${v}"`)) throw new Error(`${CARGO_LOCK}: no oversay package`)
   return next
+}
+
+// The Oversay skill's files embed the version, and make check fails while they are stale, so a
+// bump rewrites them too. `run` is a parameter so the test needs no build.
+export function regenerateSkills(run = (cmd, args) => execFileSync(cmd, args, { cwd: root, stdio: 'inherit' })) {
+  run('make', ['skills'])
 }
 
 export function checkTag(tag, version) {
@@ -85,6 +92,7 @@ function main([arg, value]) {
     write(CARGO, setCargoVersion(read(CARGO), arg))
     write(CARGO_LOCK, setCargoLockVersion(read(CARGO_LOCK), arg))
     console.log(`version: set to ${arg} in ${PACKAGE}, ${LOCK}, ${CARGO} and ${CARGO_LOCK}`)
+    regenerateSkills()
   } else {
     fail('usage: node scripts/version.mjs X.Y.Z | --check | --tag vX.Y.Z')
   }
