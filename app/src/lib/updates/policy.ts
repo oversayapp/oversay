@@ -22,7 +22,7 @@ export interface Support {
   kind: InstallKind
 }
 
-/** The maintainer's answer (epic 015 (#16)): check at every start, automatic checking on. `everyHours` can set a least time between checks; 0 is every start. */
+/** Decided, final (the maintainer, 2026-11-17; epic 015 (#16)): check at every start, automatic checking on. `everyHours` can set a least time between checks; 0 is every start. */
 export const DEFAULT_AUTO_CHECK = true
 export const DEFAULT_CHECK_HOURS = 0
 
