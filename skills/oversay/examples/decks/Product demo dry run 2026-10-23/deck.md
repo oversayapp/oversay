@@ -1,6 +1,6 @@
 ---
 title: Product demo dry run
-made-with: Oversay skill 0.1.0
+made-with: Oversay skill 0.4.0
 ---
 
 ## Welcome [2m, intro]

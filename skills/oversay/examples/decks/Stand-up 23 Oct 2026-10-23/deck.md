@@ -2,7 +2,7 @@
 title: Stand-up 23 Oct
 audience: Platform team
 tags: stand-up
-made-with: Oversay skill 0.1.0
+made-with: Oversay skill 0.4.0
 ---
 
 # Stand-up 23 Oct
