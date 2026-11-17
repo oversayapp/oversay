@@ -125,7 +125,7 @@
       <div class="now">
         <span class="kicon" class:note><Icon name={note ? 'note' : 'talk'} size={17} /></span>
         <div class="what">
-          <b>{live.talk?.name ?? 'Session'}</b>
+          <b title={live.talk?.name ?? 'Session'}>{live.talk?.name ?? 'Session'}</b>
           <span class="muted">
             {#if note}Topic {live.index + 1} of {live.plan.length} · {clock.current?.name ?? ''}
             {:else if live.status === 'ready'}Ready · press Start{:else}{clock.current?.name ?? ''} · {live.index + 1} of {live.plan.length}{/if}

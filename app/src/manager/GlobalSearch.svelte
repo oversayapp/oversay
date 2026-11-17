@@ -157,8 +157,8 @@
             >
               <span class="ic"><Icon name={ICON[item.kind]} size={16} /></span>
               <span class="what">
-                <span class="t">{item.label}</span>
-                {#if subOf(item)}<span class="s">{subOf(item)}</span>{/if}
+                <span class="t" title={item.label}>{item.label}</span>
+                {#if subOf(item)}<span class="s" title={subOf(item)}>{subOf(item)}</span>{/if}
               </span>
             </button>
           {/each}

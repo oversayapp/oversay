@@ -58,8 +58,9 @@
     flex: 1;
   }
 
+  /* Wide enough for the longest label, Workspaces, inside the 72px rail. */
   button {
-    width: 58px;
+    width: 64px;
     border: 0;
     background: none;
     border-radius: 12px;

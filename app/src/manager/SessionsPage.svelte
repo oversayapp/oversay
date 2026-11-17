@@ -112,7 +112,7 @@
               <div class="opts">
                 {#each workspaceChoices as w (w.id)}
                   {@const on = filters.workspaces.includes(w.id)}
-                  <button class="fchip" class:on aria-pressed={on} onclick={() => (filters = { ...filters, workspaces: toggle(filters.workspaces, w.id) })}>{w.name}</button>
+                  <button class="fchip" class:on aria-pressed={on} title={w.name} onclick={() => (filters = { ...filters, workspaces: toggle(filters.workspaces, w.id) })}><span>{w.name}</span></button>
                 {/each}
               </div>
             {/if}
@@ -120,7 +120,7 @@
             <div class="opts">
               {#each deckChoices as d (d.key)}
                 {@const on = filters.decks.includes(d.key)}
-                <button class="fchip" class:on aria-pressed={on} onclick={() => (filters = { ...filters, decks: toggle(filters.decks, d.key) })}>{d.name}</button>
+                <button class="fchip" class:on aria-pressed={on} title={d.name} onclick={() => (filters = { ...filters, decks: toggle(filters.decks, d.key) })}><span>{d.name}</span></button>
               {/each}
             </div>
             <h4>When it ran</h4>
@@ -188,10 +188,10 @@
               <span class="at num">{clock(r.startedMs)}<small>{day(r.startedMs)}</small></span>
               <span class="what">
                 <span class="line">
-                  <span class="t">{r.deck.name}</span>
+                  <span class="t" title={r.deck.name}>{r.deck.name}</span>
                   {#each r.deck.workspaces as id (id)}<span class="chip">{workspaceName(id)}</span>{/each}
                 </span>
-                <span class="p">{about(r)}</span>
+                <span class="p" title={about(r)}>{about(r)}</span>
                 {#if m.note || m.transcript || m.recording || m.review}
                   <span class="marks">
                     {#if m.note}<span class="mark">✎ Note</span>{/if}
@@ -333,7 +333,11 @@
     border-top: 1px solid var(--line);
   }
 
+  /* A long name shortens inside the panel, the whole of it in the chip's title. */
   .fchip {
+    max-width: 100%;
+    min-width: 0;
+    white-space: nowrap;
     padding: 3px 11px;
     border-radius: 99px;
     border: 1px solid var(--line-strong);
@@ -341,6 +345,12 @@
     color: var(--muted);
     font-size: 13px;
     font-weight: 600;
+  }
+
+  .fchip span {
+    display: block;
+    overflow: hidden;
+    text-overflow: ellipsis;
   }
 
   .fchip.on {

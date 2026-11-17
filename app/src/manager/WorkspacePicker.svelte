@@ -35,8 +35,8 @@
       {@const inIt = w.decks.includes(deckId)}
       <button role="menuitemcheckbox" aria-checked={inIt} onclick={() => toggle(w.id, inIt)}>
         <span class="box" class:on={inIt}>{#if inIt}<Icon name="check" size={12} />{/if}</span>
-        <span class="name">{w.name}</span>
-        {#if w.tags.length}<span class="tags">{w.tags.join(', ')}</span>{/if}
+        <span class="name" title={w.name}>{w.name}</span>
+        {#if w.tags.length}<span class="tags" title={w.tags.join(', ')}>{w.tags.join(', ')}</span>{/if}
       </button>
     {/each}
   {/if}
@@ -94,7 +94,9 @@
     border-color: var(--accent);
   }
 
+  /* A long name and long tags share the row: both shorten, the tags to half of it at most. */
   .name {
+    flex: 0 1 auto;
     min-width: 0;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -102,11 +104,16 @@
   }
 
   .tags {
+    flex: 0 1 auto;
+    min-width: 0;
+    max-width: 50%;
     margin-left: auto;
     padding-left: 8px;
     font-size: 12px;
     color: var(--faint);
     white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
   }
 
   .muted {
