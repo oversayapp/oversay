@@ -5,7 +5,7 @@ date: 2026-10-21
 
 # Oversay watches its Quick notes and Quick talks folders
 
-Once an AI writes notes while Oversay runs, two rules stop being enough: lists read only when a page opens, and "a note edited elsewhere is read again when next opened, last write wins" (ADR 0026). #153 chose "no background watcher" for projects, which are saved explicitly. Notes save as you type, so the next autosave of an open note would silently overwrite what the AI just added.
+Once an AI writes notes while Oversay runs, two rules stop being enough: lists read only when a page opens, and "a note edited elsewhere is read again when next opened, last write wins" (ADR 0026). task 153 chose "no background watcher" for projects, which are saved explicitly. Notes save as you type, so the next autosave of an open note would silently overwrite what the AI just added.
 
 ## Decision
 
@@ -20,7 +20,7 @@ Once an AI writes notes while Oversay runs, two rules stop being enough: lists r
 - **Every autosave checks first.** Before writing, the note's file is read: if it isn't what Oversay last read or wrote, the same rule applies. So a save that runs before the watcher's event arrives can't overwrite the outside change.
 - **Our own writes are told apart by contents.** Oversay keeps the text it last read or wrote. A change event whose file holds that text, or exactly what is typed, is ours and is ignored. Modified times were considered, but a save can land within one tick of the clock.
 - **New is kept in settings** (`quickSeen`): the files each folder held at the last listing, and those that appeared since and haven't been opened. The first listing only learns what is there, so existing notes are never New. Files Oversay makes or renames itself are known straight away.
-- **Projects are unchanged**: #153's check when the window regains focus still applies to them, in their later epic.
+- **Projects are unchanged**: task 153's check when the window regains focus still applies to them, in their later epic.
 
 ## Considered options
 

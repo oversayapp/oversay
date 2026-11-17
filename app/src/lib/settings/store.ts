@@ -270,7 +270,7 @@ export function markOpened(kind: QuickItemKind, path: string, id?: string): Prom
   }).catch(() => {})
 }
 
-// ---- New: files that appeared outside Oversay (#202, ADR 0034)
+// ---- New: files that appeared outside Oversay (task 202, ADR 0034)
 
 export const quickSeen = derived(settings, (s) => parseQuickSeen(s.quickSeen))
 
@@ -412,7 +412,7 @@ export function noteUpdateCheck(at: Date): Promise<void> {
   })
 }
 
-// ---- Recordings (ADR 0041, #317)
+// ---- Recordings (ADR 0041, task 317)
 
 /** Every deck records from Start, or only once the deck widget's record button is pressed (the default). */
 export function setAutoRecord(on: boolean): Promise<void> {
@@ -430,7 +430,7 @@ export function setKeepRecordings(keep: boolean): Promise<void> {
   })
 }
 
-// ---- the AI page and Home's card (#156)
+// ---- the AI page and Home's card (task 156)
 
 /** Remembers that the AI page was opened. Not worth an error if it can't be written. */
 export function markAiPageSeen(): Promise<void> {

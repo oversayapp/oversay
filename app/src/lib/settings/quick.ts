@@ -186,7 +186,7 @@ export function pinnedFirst<T extends { path: string }>(items: readonly T[], pin
   return { items: [...pinned, ...items.filter((i) => !order.has(i.path))], pinned: pinned.length }
 }
 
-// ---- New: files that appeared outside Oversay and haven't been opened (#202, ADR 0034)
+// ---- New: files that appeared outside Oversay and haven't been opened (task 202, ADR 0034)
 
 export const SEEN_KINDS = ['notes', 'talks', 'decks'] as const
 export type SeenKind = (typeof SEEN_KINDS)[number]

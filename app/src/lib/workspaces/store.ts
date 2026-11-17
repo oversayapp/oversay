@@ -100,7 +100,7 @@ export async function forgetDeck(deckId: string): Promise<void> {
   }
 }
 
-// ---- project lines (#278)
+// ---- project lines (task 278)
 
 /**
  * Once: every deck with a `project:` line is added to a workspace of that name, tagged

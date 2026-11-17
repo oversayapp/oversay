@@ -5,7 +5,7 @@ date: 2026-11-07
 
 # One deck widget with a Card view and an Agenda view
 
-A running deck is shown today by two overlay widgets: the flashcard widget (upper left, the current card's points) and a timeline widget chosen by the deck's `timeline:` front matter (Blocks, Waveform or Edge strip). They have their own windows, places and buttons, and a deck shows the timeline only if it asks for one. John wants one widget whose two views show the same run, switched while presenting, with buttons big enough to hit during a meeting (task #307; the deck widget mockup).
+A running deck is shown today by two overlay widgets: the flashcard widget (upper left, the current card's points) and a timeline widget chosen by the deck's `timeline:` front matter (Blocks, Waveform or Edge strip). They have their own windows, places and buttons, and a deck shows the timeline only if it asks for one. John wants one widget whose two views show the same run, switched while presenting, with buttons big enough to hit during a meeting (task 307; the deck widget mockup).
 
 ## Decision
 

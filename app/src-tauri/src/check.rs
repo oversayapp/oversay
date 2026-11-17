@@ -1,4 +1,4 @@
-//! `Oversay --check <file>` (#205, ADR 0031): the Oversay skill checks a quick talk, a quick note
+//! `Oversay --check <file>` (task 205, ADR 0031): the Oversay skill checks a quick talk, a quick note
 //! (`.md`, note_lint.rs) or a workspace's `workspace.json` (ADR 0040) it wrote before saying it is done, with the app the person already has (no Node or Python needed). It runs
 //! before any window opens, prints what it found and exits: 0 when the file opens in Oversay.
 //!
