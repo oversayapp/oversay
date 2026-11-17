@@ -68,7 +68,8 @@ case $cmd in
     for t in zenity kdialog kreadconfig6 kwriteconfig6 dbus-send spectacle; do
       if have "$t"; then echo "found:         $t"; else echo "missing:       $t"; fi
     done
-    if [[ -f $rules_file ]] && grep -q "^\[$rule_group\]" "$rules_file"; then
+    # By key, not by group header: KConfig may keep an emptied group after rule-undo.
+    if have kreadconfig6 && [[ -n $(kreadconfig6 --file kwinrulesrc --group "$rule_group" --key excludefromcapture) ]]; then
       echo "Rule:          present in $rules_file"
     else
       echo "Rule:          not present"
