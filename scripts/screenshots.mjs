@@ -531,6 +531,13 @@ const OVERFLOW_ALLOWED = [
 ]
 const overflowCheck = readFileSync(join(root, 'scripts', 'overflow.js'), 'utf8')
 const overflows = []
+const written = []
+// Writes a picture to out/shots/ and checks the page it shows for overflow.
+const save = async (file, data) => {
+  writeFileSync(file, Buffer.from(data, 'base64'))
+  written.push(file)
+  await checkOverflow(file.slice(out.length + 1, -4))
+}
 const checkOverflow = async (picture) => {
   const reply = await send('Runtime.evaluate', { expression: `(${overflowCheck})(${JSON.stringify(OVERFLOW_ALLOWED)})`, returnByValue: true })
   if (reply.result?.exceptionDetails) throw new Error(`overflow check failed on ${picture}: ${reply.result.exceptionDetails.exception?.description}`)
@@ -551,7 +558,6 @@ for (let waited = 0; waited < 30000; waited += 250) {
 }
 await sleep(500)
 
-const written = []
 for (const [name, step] of SCREENS) {
   await send('Emulation.setDeviceMetricsOverride', { width: WIDTHS[0], height: HEIGHT, deviceScaleFactor: 2, mobile: false })
   await run(step)
@@ -564,9 +570,7 @@ for (const [name, step] of SCREENS) {
       await sleep(250)
       const { result } = await send('Page.captureScreenshot', { format: 'png' })
       const file = join(out, `${name}-${width}-${scheme}.png`)
-      writeFileSync(file, Buffer.from(result.data, 'base64'))
-      written.push(file)
-      await checkOverflow(file.slice(out.length + 1, -4))
+      await save(file, result.data)
     }
   }
 }
@@ -609,9 +613,7 @@ for (const id of OVERLAYS) {
         await sleep(150)
         const { result } = await send('Page.captureScreenshot', { format: 'png' })
         const file = join(out, `overlay-${id}${style === 'waveform' ? '' : '-' + style}-${state}${indicator === 'bar' ? '' : '-' + indicator}${notch === 'top' ? '-notch-top' : ''}${asked ? '-' + asked + '-panel' : ''}-${slide}.png`)
-        writeFileSync(file, Buffer.from(result.data, 'base64'))
-        written.push(file)
-        await checkOverflow(file.slice(out.length + 1, -4))
+        await save(file, result.data)
       }
     }
   }
@@ -629,9 +631,7 @@ for (const id of OVERLAYS) {
       await sleep(150)
       const { result } = await send('Page.captureScreenshot', { format: 'png' })
       const file = join(out, `overlay-timeline-${name}-${slide}.png`)
-      writeFileSync(file, Buffer.from(result.data, 'base64'))
-      written.push(file)
-      await checkOverflow(file.slice(out.length + 1, -4))
+      await save(file, result.data)
     }
   }
 }
@@ -651,9 +651,7 @@ for (const id of OVERLAYS) {
     await sleep(150)
     const { result } = await send('Page.captureScreenshot', { format: 'png' })
     const file = join(out, `overlay-timeline-look-back-${slide}.png`)
-    writeFileSync(file, Buffer.from(result.data, 'base64'))
-    written.push(file)
-    await checkOverflow(file.slice(out.length + 1, -4))
+    await save(file, result.data)
   }
   await send('Input.dispatchMouseEvent', { type: 'mouseReleased', x: box.x, y: box.y, button: 'left', buttons: 0, clickCount: 1 })
   const tp = await evaluate(`import('/src/plugins/registry.ts').then(({ getPlugin }) => getPlugin('talking-points').window)`)
@@ -665,9 +663,7 @@ for (const id of OVERLAYS) {
     await sleep(150)
     const { result } = await send('Page.captureScreenshot', { format: 'png' })
     const file = join(out, `overlay-talking-points-look-back-${slide}.png`)
-    writeFileSync(file, Buffer.from(result.data, 'base64'))
-    written.push(file)
-    await checkOverflow(file.slice(out.length + 1, -4))
+    await save(file, result.data)
   }
 }
 
@@ -687,9 +683,7 @@ for (const id of OVERLAYS) {
       await sleep(150)
       const { result } = await send('Page.captureScreenshot', { format: 'png' })
       const file = join(out, `overlay-${id}-${state}-${slide}.png`)
-      writeFileSync(file, Buffer.from(result.data, 'base64'))
-      written.push(file)
-      await checkOverflow(file.slice(out.length + 1, -4))
+      await save(file, result.data)
     }
   }  // The look: the dark and light panels, large text, every part with this one open;
   // and with the waveform (the default) light, and see-through at its lowest, 50%.
@@ -701,9 +695,7 @@ for (const id of OVERLAYS) {
       await sleep(150)
       const { result } = await send('Page.captureScreenshot', { format: 'png' })
       const file = join(out, `overlay-${id}-look-${name}-${slide}.png`)
-      writeFileSync(file, Buffer.from(result.data, 'base64'))
-      written.push(file)
-      await checkOverflow(file.slice(out.length + 1, -4))
+      await save(file, result.data)
     }
   }
 }
@@ -737,9 +729,7 @@ for (const id of OVERLAYS) {
       await sleep(150)
       const { result } = await send('Page.captureScreenshot', { format: 'png' })
       const file = join(out, `overlay-${id}-${name}-${slide}.png`)
-      writeFileSync(file, Buffer.from(result.data, 'base64'))
-      written.push(file)
-      await checkOverflow(file.slice(out.length + 1, -4))
+      await save(file, result.data)
     }
   }
 }
@@ -772,6 +762,7 @@ for (const id of OVERLAYS) {
     // smallest the window can be made (its minWidth), on both views, recording.
     ['card-pointed-long', 'card', 'state=deck-running&long=1&rec=recording', true],
     ['card-pointed-long-narrow', 'card', 'state=deck-running&long=1&rec=recording', true, true],
+    ['card-pointed-long-narrow-light', 'card', 'state=deck-running&long=1&panel=light', true, true],
     ['card-pointed-ready-long', 'card', 'state=deck-ready&long=1', true],
     ['agenda-pointed-long', 'agenda', 'state=deck-running&long=1&rec=recording', true],
     ['agenda-pointed-long-narrow', 'agenda', 'state=deck-running&long=1&rec=recording', true, true],
@@ -790,9 +781,7 @@ for (const id of OVERLAYS) {
       await run(`document.documentElement.style.setProperty('background', '${colour}', 'important')`)
       await sleep(150)
       const { result } = await send('Page.captureScreenshot', { format: 'png' })
-      writeFileSync(file, Buffer.from(result.data, 'base64'))
-      written.push(file)
-      await checkOverflow(file.slice(out.length + 1, -4))
+      await save(file, result.data)
     }
   }
 }
@@ -808,9 +797,7 @@ for (const [id, style] of [['talking-points', null], ['timeline', 'waveform'], [
     await sleep(150)
     const { result } = await send('Page.captureScreenshot', { format: 'png' })
     const file = join(out, `overlay-${id}${style && style !== 'waveform' ? '-' + style : ''}-opacity40-${slide}.png`)
-    writeFileSync(file, Buffer.from(result.data, 'base64'))
-    written.push(file)
-    await checkOverflow(file.slice(out.length + 1, -4))
+    await save(file, result.data)
   }
 }
 
@@ -820,16 +807,14 @@ for (const [id, style] of [['talking-points', null], ['timeline', 'waveform'], [
 // The control panel: docked at the right edge, in each kind of run and with none.
 if (wanted('panel')) {
   await send('Emulation.setDeviceMetricsOverride', { width: 330, height: 860, deviceScaleFactor: 2, mobile: false })
-  for (const state of ['none', 'ready', 'running', 'paused', 'note', 'running&long=1']) {
+  for (const [state, params] of [['none', ''], ...['ready', 'running', 'paused', 'note'].map((s) => [s, '&state=' + s]), ['running-long', '&state=running&long=1']]) {
     for (const scheme of SCHEMES) {
       await send('Emulation.setEmulatedMedia', { features: [{ name: 'prefers-color-scheme', value: scheme }] })
-      await send('Page.navigate', { url: `http://localhost:${port}/?window=control-panel${state === 'none' ? '' : '&state=' + state}` })
+      await send('Page.navigate', { url: `http://localhost:${port}/?window=control-panel${params}` })
       await sleep(1200)
       const { result } = await send('Page.captureScreenshot', { format: 'png' })
-      const file = join(out, `panel-${state.replace('&long=1', '-long')}-${scheme}.png`)
-      writeFileSync(file, Buffer.from(result.data, 'base64'))
-      written.push(file)
-      await checkOverflow(file.slice(out.length + 1, -4))
+      const file = join(out, `panel-${state}-${scheme}.png`)
+      await save(file, result.data)
     }
   }
 }

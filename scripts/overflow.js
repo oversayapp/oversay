@@ -16,22 +16,24 @@
 (allow) => {
   const SLACK = 1
   const problems = []
-  const allowed = (el) => allow.some((s) => el.closest(s))
+  // An allow-list entry exempts the element it names, not what is inside it.
+  const allowed = (el) => allow.some((s) => el.matches(s))
+  const classes = (el) => [...el.classList].filter((c) => !c.startsWith('svelte-'))
+  const short = (el) => el.tagName.toLowerCase() + (classes(el).length ? '.' + classes(el)[0] : '')
   const name = (el) => {
-    let s = el.tagName.toLowerCase()
-    if (el.id) s += '#' + el.id
-    const cls = [...el.classList].filter((c) => !c.startsWith('svelte-'))
-    if (cls.length) s += '.' + cls.join('.')
+    const s = el.tagName.toLowerCase() + (el.id ? '#' + el.id : '') + classes(el).map((c) => '.' + c).join('')
     const parent = el.parentElement
-    return parent && parent !== document.body ? `${name.short(parent)} > ${s}` : s
+    return parent && parent !== document.body ? `${short(parent)} > ${s}` : s
   }
-  name.short = (el) => {
-    let s = el.tagName.toLowerCase()
-    const cls = [...el.classList].filter((c) => !c.startsWith('svelte-'))
-    if (cls.length) s += '.' + cls[0]
-    return s
+  const whole = (el) => (el.textContent ?? '').replace(/\s+/g, ' ').trim()
+  const text = (el) => whole(el).slice(0, 40)
+  // The tooltip for shortened text: the title on it, or on the nearest box that has one, when the
+  // title and the text hold one another (the text may add a minute or a "New" badge to the name).
+  // An unrelated title, a button's "Delete" around a name, doesn't count.
+  const tooltip = (el) => {
+    const title = el.closest('[title]')?.getAttribute('title')?.replace(/\s+/g, ' ').trim()
+    return !!title && (title.includes(whole(el)) || whole(el).includes(title))
   }
-  const text = (el) => (el.textContent ?? '').replace(/\s+/g, ' ').trim().slice(0, 40)
   const drawn = (el) => {
     const r = el.getBoundingClientRect()
     if (r.width === 0 || r.height === 0) return false
@@ -64,7 +66,7 @@
       if (scrolls) {
         if (!allowed(el)) problems.push(`${name(el)} scrolls sideways by ${over}px and is not on the allow-list ("${text(el)}")`)
       } else if (ellipsis) {
-        if (!el.closest('[title]') && !allowed(el)) problems.push(`${name(el)} is shortened with an ellipsis but has no title to show the rest ("${text(el)}")`)
+        if (!tooltip(el) && !allowed(el)) problems.push(`${name(el)} is shortened with an ellipsis but has no title with the whole text ("${text(el)}")`)
       } else if (cs.overflowX !== 'visible') {
         if (!allowed(el)) problems.push(`${name(el)}: content ${over}px wider than its box, cut off ("${text(el)}")`)
       } else {
@@ -73,7 +75,7 @@
         const right = el.getBoundingClientRect().right
         const out = [...el.querySelectorAll('*')].find((d) => !skip(d) && drawn(d) && !placed(d, el) && d.getBoundingClientRect().right > right + SLACK)
         if (out && !allowed(el) && !allowed(out)) {
-          problems.push(`${name(out)} runs ${Math.round(out.getBoundingClientRect().right - right)}px out of ${name.short(el)}, spilling out ("${text(out)}")`)
+          problems.push(`${name(out)} runs ${Math.round(out.getBoundingClientRect().right - right)}px out of ${short(el)}, spilling out ("${text(out)}")`)
         }
       }
     }
