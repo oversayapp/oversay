@@ -81,7 +81,7 @@ setup_devbox() {
 		run distrobox create --yes --no-entry --name "$DEVBOX" --image "$DEVBOX_IMAGE"
 		installed+=("$DEVBOX box")
 		if [ "$dry" -eq 1 ]; then
-			echo "    [dry-run] install in the box: $(echo "$LINUX_DEPS" | awk 'NF { print $3 }' | awk '!seen[$0]++' | tr '\n' ' ')"
+			echo "    [dry-run] install in the box: $(linux_all_packages)"
 			echo "    [dry-run] continue inside the box: tools from mise.toml, npm ci, git hooks, make doctor"
 			summary
 			exit 0

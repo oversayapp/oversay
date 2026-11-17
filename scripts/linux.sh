@@ -11,9 +11,10 @@
 
 DEVBOX=oversay-dev
 # Ubuntu 24.04 as on CI's ubuntu-latest, so the package names below are the ones CI installs.
-# The toolbx image carries what distrobox needs; pinned by digest, updated by hand.
+# The toolbx image carries what distrobox needs. Pinned to the release, not a digest: the
+# registry drops old digests once the tag moves, and apt keeps the packages current.
 # shellcheck disable=SC2034  # used by setup.sh, which sources this file
-DEVBOX_IMAGE=quay.io/toolbx/ubuntu-toolbox:24.04@sha256:9639e52d7df33ba2e1eed97d2469e9b5af47266ff3f5b0cf9fc6319899e4a76e
+DEVBOX_IMAGE=quay.io/toolbx/ubuntu-toolbox:24.04
 
 # What the build needs from the system: name | how to find it | Ubuntu package.
 #   cmd:X  a command on PATH;  pc:X  a pkg-config module;  lib:RE  a library in the linker cache.
@@ -53,16 +54,15 @@ linux_devbox_route() {
 	[ "${OVERSAY_DEVBOX:-}" = "1" ] || [ "$(linux_os_id)" = "steamos" ]
 }
 
-linux_devbox_exists() {
-	linux_have distrobox || return 1
-	local names
-	names=$(distrobox list --no-color 2> /dev/null | awk -F'|' 'NR > 1 { gsub(/ /, "", $2); print $2 }') || return 1
-	printf '%s\n' "$names" | grep -qx "$DEVBOX"
-}
-
 # The container tool distrobox uses; the box is a container of the same name.
 linux_container_tool() {
 	if linux_have podman; then echo podman; elif linux_have docker; then echo docker; else return 1; fi
+}
+
+# Asks the container tool directly: quicker than distrobox list, and make asks on every run.
+linux_devbox_exists() {
+	local tool
+	linux_have distrobox && tool=$(linux_container_tool) && "$tool" container inspect "$DEVBOX" > /dev/null 2>&1
 }
 
 linux_ldcache() {
@@ -88,9 +88,12 @@ linux_scan() {
 	done <<< "$LINUX_DEPS"
 }
 
-linux_missing_packages() {
-	linux_scan | awk -F'|' '$2 == "" { print $3 }' | awk '!seen[$0]++' | tr '\n' ' ' | sed 's/ $//'
-}
+# The Ubuntu packages, once each, from "name|found|package" lines on stdin.
+linux_packages_of() { awk -F'|' '{ print $3 }' | awk '!seen[$0]++' | tr '\n' ' ' | sed 's/ $//'; }
+
+linux_all_packages() { echo "$LINUX_DEPS" | awk 'NF { print $1 "||" $3 }' | linux_packages_of; }
+
+linux_missing_packages() { linux_scan | awk -F'|' '$2 == ""' | linux_packages_of; }
 
 # The command that installs a missing package, for this host.
 linux_fix_hint() { # package

@@ -17,12 +17,12 @@ const STUBS = {
   uname: `case "$1" in -m) echo x86_64 ;; *) echo Linux ;; esac`,
   distrobox: `echo "distrobox $*" >> "$STUB_LOG"
 case "$1" in
-  list) echo "ID | NAME | STATUS | IMAGE"; [ "$BOX_EXISTS" = 1 ] && echo "abc | oversay-dev | Up | ubuntu" ;;
   version) echo "distrobox: 1.8" ;;
   enter) case "$*" in *linux.sh\\ missing-packages) echo "$MISSING_PKGS" ;; esac ;;
 esac
 exit 0`,
-  podman: `echo "podman $*" >> "$STUB_LOG"`,
+  podman: `case "$*" in "container inspect oversay-dev") [ "$BOX_EXISTS" = 1 ]; exit ;; esac
+echo "podman $*" >> "$STUB_LOG"`,
   sudo: `echo "sudo $*" >> "$STUB_LOG"; exit 1`,
   pacman: `echo "pacman $*" >> "$STUB_LOG"; exit 1`,
   'pkg-config': `for m in $PC_MISSING; do [ "$2" = "$m" ] && exit 1; done; echo 2.0`,
@@ -75,7 +75,7 @@ test('on SteamOS, make setup puts the build libraries in the oversay-dev box and
   const r = linux({ missingPkgs: 'libasound2-dev libxdo-dev' })('setup.sh')
   assert.equal(r.code, 0, r.out)
   const steps = mutating(r.calls)
-  assert.match(steps[0], /^distrobox create --yes --no-entry --name oversay-dev --image quay\.io\/toolbx\/ubuntu-toolbox:24\.04@sha256:/)
+  assert.match(steps[0], /^distrobox create --yes --no-entry --name oversay-dev --image quay\.io\/toolbx\/ubuntu-toolbox:24\.04$/)
   assert.equal(steps[1], 'distrobox enter oversay-dev -- true')
   assert.match(steps[2], /^distrobox enter oversay-dev -- .*\/scripts\/linux\.sh missing-packages$/)
   assert.match(steps[3], /^podman exec --user root oversay-dev sh -c .* sh libasound2-dev libxdo-dev$/)
@@ -138,14 +138,16 @@ test('make doctor lists every library and exits 0 when all are there', () => {
 })
 
 test('in the box, make doctor names a missing library and the command that fixes it, and exits 1', () => {
-  const r = linux({ pcMissing: 'alsa' })('doctor.sh')
   // CONTAINER_ID is how distrobox marks its boxes.
-  const inBox = linux({ pcMissing: 'alsa', env: { CONTAINER_ID: 'oversay-dev' } })('doctor.sh')
-  assert.equal(inBox.code, 1)
-  assert.match(inBox.out, /Build libraries \(in the oversay-dev box\):/)
-  assert.match(inBox.out, /MISSING {2}alsa {9}run: make setup from the Deck's own terminal, not inside the box \(installs libasound2-dev in it\)/)
-  assert.match(inBox.out, /ok +webkit2gtk /)
-  // On the Deck before setup there is no box yet: doctor says so.
+  const r = linux({ pcMissing: 'alsa', env: { CONTAINER_ID: 'oversay-dev' } })('doctor.sh')
+  assert.equal(r.code, 1)
+  assert.match(r.out, /Build libraries \(in the oversay-dev box\):/)
+  assert.match(r.out, /MISSING {2}alsa {9}run: make setup from the Deck's own terminal, not inside the box \(installs libasound2-dev in it\)/)
+  assert.match(r.out, /ok +webkit2gtk /)
+})
+
+test('on the Deck before make setup, make doctor says the box is missing and exits 1', () => {
+  const r = linux()('doctor.sh')
   assert.equal(r.code, 1)
   assert.match(r.out, /MISSING {2}devbox {7}run: make setup \(creates the oversay-dev box\)/)
 })

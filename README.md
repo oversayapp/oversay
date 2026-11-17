@@ -41,7 +41,7 @@ make doctor    # every tool and library, checked inside the box
 make dev       # starts Oversay; make logs, make stop as on a Mac
 ```
 
-From the Deck's own terminal every target except `make setup` runs inside the box by itself. `distrobox enter oversay-dev` opens a shell in it. Another Linux can use the same box: `export OVERSAY_DEVBOX=1` (in your shell startup file too), then `make setup`. To start over, `distrobox rm oversay-dev`, then `make setup`.
+From the Deck's own terminal every target except `make setup` runs inside the box by itself. `distrobox enter oversay-dev` opens a shell in it; commit from there, because the git hooks run clippy, which needs the box's libraries. Another Linux can use the same box: `export OVERSAY_DEVBOX=1` (in your shell startup file too), then `make setup`. To start over, `distrobox rm oversay-dev`, then `make setup`.
 
 ## Documentation
 
