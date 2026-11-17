@@ -12,7 +12,7 @@ dry=0
 case "${1:-}" in
 	"") ;;
 	--dry-run) dry=1 ;;
-	-h | --help) sed -n '2,8p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
+	-h | --help) sed -n '2,7p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
 	*) echo "Unknown option: $1 (try --dry-run)" >&2; exit 2 ;;
 esac
 
