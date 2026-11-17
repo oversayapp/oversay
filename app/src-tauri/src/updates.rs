@@ -150,21 +150,34 @@ fn endpoints(app: &AppHandle) -> Vec<String> {
         .unwrap_or_default()
 }
 
+/// The agent that reads the feed for a build the updater can't install into.
+///
+/// The feed address is compiled in and may be a redirect (updates.oversay.app sends
+/// `/latest.json` to the release's file), so a few redirects are followed. A redirect to plain
+/// http is refused, so the feed is never read, nor the page it names taken, over an unprotected
+/// hop. `https_only` is off only in tests, which serve over local http.
+fn feed_agent(https_only: bool) -> ureq::Agent {
+    ureq::Agent::config_builder()
+        .timeout_global(Some(FEED_TIMEOUT))
+        .https_only(https_only)
+        .max_redirects(5)
+        .build()
+        .into()
+}
+
+fn fetch_feed(agent: &ureq::Agent, url: &str) -> Result<String, ureq::Error> {
+    agent
+        .get(url)
+        .call()
+        .and_then(|mut r| r.body_mut().read_to_string())
+}
+
 /// The feed read directly, for a build the updater can't install into.
 fn newer_from_feed(app: &AppHandle) -> Result<Option<Release>, String> {
     let current = app.package_info().version.to_string();
-    let agent: ureq::Agent = ureq::Agent::config_builder()
-        .timeout_global(Some(FEED_TIMEOUT))
-        // A feed that redirects elsewhere is not followed: the page it names is opened on trust.
-        .max_redirects(0)
-        .build()
-        .into();
+    let agent = feed_agent(true);
     for url in endpoints(app) {
-        let fetched = agent
-            .get(&url)
-            .call()
-            .and_then(|mut r| r.body_mut().read_to_string());
-        match fetched {
+        match fetch_feed(&agent, &url) {
             Ok(text) => return newer_release(&text, &current),
             Err(e) => log::debug!("updates.feed_unreachable error={e}"),
         }
@@ -347,5 +360,54 @@ mod tests {
         assert!(refusal(false, false).is_some());
         assert!(refusal(true, true).is_some());
         assert_eq!(refusal(true, false), None);
+    }
+
+    /// A tiny local HTTP server: answers every connection with `respond(own_url)`, up to `max`.
+    fn serve(max: usize, respond: impl Fn(&str) -> String + Send + 'static) -> String {
+        use std::io::{Read, Write};
+        let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        let url = format!("http://{}/latest.json", listener.local_addr().unwrap());
+        let own = url.clone();
+        std::thread::spawn(move || {
+            for stream in listener.incoming().take(max).flatten() {
+                let mut stream = stream;
+                let mut buf = [0u8; 1024];
+                let _ = stream.read(&mut buf);
+                let _ = stream.write_all(respond(&own).as_bytes());
+            }
+        });
+        url
+    }
+
+    fn redirect_to(url: &str) -> String {
+        format!(
+            "HTTP/1.1 302 Found\r\nLocation: {url}\r\nContent-Length: 0\r\nConnection: close\r\n\r\n"
+        )
+    }
+
+    #[test]
+    fn a_feed_served_by_a_redirect_is_followed() {
+        let real = serve(1, |_| {
+            format!(
+                "HTTP/1.1 200 OK\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{FEED}",
+                FEED.len()
+            )
+        });
+        let front = serve(1, move |_| redirect_to(&real));
+        assert_eq!(fetch_feed(&feed_agent(false), &front).unwrap(), FEED);
+    }
+
+    #[test]
+    fn a_feed_that_redirects_in_circles_is_given_up_on() {
+        let looping = serve(20, redirect_to);
+        assert!(fetch_feed(&feed_agent(false), &looping).is_err());
+    }
+
+    #[test]
+    fn a_feed_over_plain_http_is_refused() {
+        let plain = serve(1, |_| {
+            "HTTP/1.1 200 OK\r\nContent-Length: 2\r\n\r\n{}".to_string()
+        });
+        assert!(fetch_feed(&feed_agent(true), &plain).is_err());
     }
 }
