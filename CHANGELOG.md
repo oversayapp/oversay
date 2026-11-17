@@ -2,9 +2,24 @@
 
 Notable changes to Oversay, newest first. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and versions follow [Semantic Versioning](https://semver.org/).
 
-Oversay has not had a public release yet. Everything below is in **[Unreleased]**, which becomes **0.2.0**, the first public release. Within it, work is grouped by epic (linked to its issue), newest first, with the date it landed. Features that a later decision replaced are listed where they were added, and again where they went, so the story reads in order.
+**0.4.0** is the first public release ([ADR 0044](.adr/0044-the-update-feed-is-a-redirect-to-the-public-repositorys-latest-release.md)); it holds everything built before it. Within a release, work is grouped by epic (linked to its issue), newest first, with the date it landed. Features that a later decision replaced are listed where they were added, and again where they went, so the story reads in order.
 
 ## [Unreleased]
+
+## [0.4.0] · 2026-11-17
+
+The first public release. Installed builds before it (0.1.0 and the rolling builds of `main`) never learn of the update feed, so install 0.4.0 by hand once; later versions arrive through the app.
+
+### Auto-update: Oversay keeps itself up to date · 2026-11-16 ([epic 015 (#16)](https://github.com/oversayapp/oversay/issues/16))
+
+#### Added
+- Oversay checks for a newer version each time it starts (**Settings › Updates**, on by default) and shows nothing when there is none or the check can't be made.
+- When there is one, an **Update** item appears on the rail and a pill in the header; **Settings › Updates** shows the version and what changed, and **Update and restart** installs it (macOS, and both Windows installers). The portable Windows build links to the release page instead.
+- **Check for updates** works with automatic checking off and says plainly when Oversay is up to date or the update server can't be reached.
+- Updates are signed, and Oversay installs only a package signed with Oversay's own key. Nothing is checked or installed while a session is open.
+
+### Fixed · 2026-11-17
+- Saving no longer follows a link planted beside a deck or workspace file under the temporary file's name, which could have overwritten another file with the deck's text ([#42](https://github.com/oversayapp/oversay/pull/42); found by the security audit before this release, `docs/security/audit-2026-11-0.4.0.md`).
 
 ### Deck widget: one widget, a Card view and an Agenda view · 2026-11-07
 
@@ -205,6 +220,8 @@ Oversay has not had a public release yet. Everything below is in **[Unreleased]*
 
 Work on how Oversay is built, checked and tracked, newest first.
 
+- 2026-11-17: The first release, 0.4.0, is tagged. The repository is public and its releases are the update feed, at `https://updates.oversay.app/latest.json` (ADR 0044). The macOS build is signed and notarized.
+- 2026-11-17: A security audit before the release; its summary is in `docs/security/`.
 - 2026-11-09: The repository moved to the `oversayapp` organisation, with its issues and their numbers kept. Designs moved to their own repository.
 - 2026-11-08: Dependency audit passes again.
 - 2026-10-24: Security checks: every commit is checked for secrets and linted; dependencies are audited; one command runs the heavier checks before a pull request; every branch gets a security review.
@@ -217,4 +234,5 @@ Work on how Oversay is built, checked and tracked, newest first.
 - 2026-10-12: Work is tracked in GitHub Issues, with the history of the earlier tickets kept.
 - 2026-10-06: Builds for macOS and Windows in CI; checks on every pull request; actions logged without their content in development builds.
 
-[Unreleased]: https://github.com/oversayapp/oversay/commits/main
+[Unreleased]: https://github.com/oversayapp/oversay/compare/v0.4.0...main
+[0.4.0]: https://github.com/oversayapp/oversay/releases/tag/v0.4.0
