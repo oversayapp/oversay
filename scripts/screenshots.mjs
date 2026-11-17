@@ -9,13 +9,15 @@
 // its window size, in each session state (ready, running, overrun, demo, paused, the last 30
 // seconds, finished) over a light and a dark slide colour. Pictures go to out/shots/; any console
 // error is printed and fails the run. The dev server sends the app's dev Content Security Policy
-// (vite.config.ts), so anything it blocks fails the run too.
+// (vite.config.ts), so anything it blocks fails the run too. After each picture, text or a box
+// that runs past its container or the window (scripts/overflow.js) is listed in
+// out/shots/overflow.txt and fails the run; the fakes carry long names and text for it.
 //
 // Usage: node scripts/screenshots.mjs   (or `make shots`)
 // Env:   SHOTS_PORT (default 1430, clear of the dev ports), CHROME (path to Chrome)
 
-import { spawn } from 'node:child_process'
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { spawn, spawnSync } from 'node:child_process'
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -46,6 +48,14 @@ async function waitFor(url) {
   throw new Error(`nothing answered at ${url}`)
 }
 
+// Long names and text, so the overflow check (scripts/overflow.js) meets what people really type:
+// a long title, a long unbroken word (a link), and a long point.
+const LONG = {
+  name: 'Quarterly business review with the extended leadership team and every regional partner',
+  word: 'https://docs.example.com/planning/2026/quarterly-business-review/extended-leadership-team',
+  point: 'Walk through the regional numbers one at a time, and leave room for the partners to ask about the pipeline before the break',
+}
+
 // A sample project with every segment kind, open-ended segments and talking points.
 const project = {
   schemaVersion: 1,
@@ -64,15 +74,19 @@ const project = {
       ],
     },
     { id: 't_board', name: 'Board update 10 min', audience: 'Board', targetSeconds: 600, sessions: [], segments: [] },
+    { id: 't_long', name: LONG.name, audience: 'Leadership team, regional partners and the board observers', targetSeconds: 3600, sessions: [], segments: [
+      { id: 's_l1', name: LONG.name, kind: 'topic', plannedSeconds: 600, openEnded: false, points: [LONG.point, LONG.word], hints: [] } ] },
   ],
 }
 
 // Stands in for window.__TAURI_INTERNALS__ so the manager runs in a plain browser.
 const fakeBridge = `(() => {
+  const LONG = ${JSON.stringify(LONG)};
   const project = ${JSON.stringify(JSON.stringify(project))};
   const recent = JSON.stringify({ version: 1, recent: [
     { path: '/Users/demo/Documents/launch.oversay.json', name: 'Oversay launch', openedAt: new Date().toISOString(), talks: 2 },
     { path: '/Users/demo/Desktop/board-deck.oversay.json', name: 'Board deck', openedAt: '2026-01-15T10:00:00Z', talks: 1 },
+    { path: '/Users/demo/Documents/Clients/Northwind Traders/2026/' + LONG.name + '.oversay.json', name: LONG.name, openedAt: '2026-01-10T10:00:00Z', talks: 3 },
   ] });
   const templates = JSON.stringify({ version: 2,
     categories: [{ id: 'mine', name: 'My templates', color: 'indigo' }, { id: 'c_client', name: 'Client work', color: 'red' }],
@@ -85,6 +99,8 @@ const fakeBridge = `(() => {
         { name: 'Plan', kind: 'topic', plannedSeconds: 420, openEnded: false },
         { name: 'Questions', kind: 'outro', plannedSeconds: 180, openEnded: true },
       ] },
+    { id: 'u_demolong', name: LONG.name, description: 'Saved from “' + LONG.name + '”.', category: 'c_client', builtin: false,
+      segments: [ { name: LONG.name, kind: 'topic', plannedSeconds: 900, openEnded: false } ] },
     { id: 'u_demo1234', name: 'My keynote 30', description: 'Saved from “Product keynote”.', category: 'conferences', builtin: false,
       segments: [
         { name: 'Story opener', kind: 'intro', plannedSeconds: 180, openEnded: false },
@@ -121,6 +137,7 @@ const fakeBridge = `(() => {
     '1-1 with Sam': { at: Date.now() - 3 * 86400e3, text: '---\\nwith: Sam\\n---\\n\\n## How are things [intro]\\n- Workload\\n\\n## Growth\\n- Conference talk\\n' },
     // older decks, for the date groups, with a project and tags to filter by.
     'Atlas launch review': { at: Date.now() - 12 * 86400e3, text: '---\\nid: d_atlas001\\naudience: Leadership\\nproject: Atlas\\ntags: launch\\n---\\n\\n## Numbers [5m]\\n- Signups\\n\\n## Risks [5m]\\n- Load\\n' },
+    [LONG.name]: { at: Date.now() - 60 * 86400e3, text: '---\\nid: d_long0001\\naudience: Leadership team, regional partners and the board observers\\nproject: Northwind Traders regional expansion\\ntags: quarterly-business-review, leadership\\n---\\n\\n## ' + LONG.name + ' [10m]\\n- ' + LONG.point + '\\n- ' + LONG.word + '\\n' },
     'Board prep Q3': { at: Date.now() - 45 * 86400e3, text: '---\\naudience: Board\\nproject: Atlas\\ntags: board, quarterly\\n---\\n\\n## Revenue [10m]\\n- Q3\\n\\n## Hiring [5m]\\n- Two roles\\n' },
   } };
   // Workspaces (ADR 0040): tagged groups of decks, one listing a deck that has gone.
@@ -131,6 +148,7 @@ const fakeBridge = `(() => {
       { id: 'w_passkey1', name: 'Passkeys in practice', folder: 'Passkeys in practice', tags: ['research'], decks: [], when: '', where: '', notes: '', problem: null },
       { id: 'w_svelte01', name: 'Svelte 5 basics', folder: 'Svelte 5 basics', tags: ['tutorials'], decks: ['d_standup1'], when: '2026-10-06', where: 'Room 2.14', notes: '', problem: null },
       { id: 'w_atlas001', name: 'Atlas launch', folder: 'Atlas launch', tags: [], decks: [], when: '', where: '', notes: '', problem: null },
+      { id: 'w_long0001', name: LONG.name, folder: 'Quarterly business review', tags: ['conferences', 'quarterly-business-reviews'], decks: ['d_long0001'], when: '2026-11-30', where: 'Northwind Traders head office, Third floor boardroom', notes: LONG.point, problem: null },
   ];
   const qext = { notes: '.md', talks: '.oversay.json', decks: '.md' };
   const qdir = (kind) => ({ notes: NOTES_DIR, talks: '/Users/demo/Documents/Oversay/Quick talks/', decks: '/Users/demo/Documents/Oversay/Decks/' })[kind];
@@ -179,6 +197,11 @@ const fakeBridge = `(() => {
     { id: 's_deck4', name: 'Wrap-up', kind: 'outro', plannedSeconds: 120, openEnded: false, points: ['Who does what'], hints: [] } ] };
   if (query.get('state')) {
     const talk = query.get('overlay') === 'flashcard' ? deckTalk : JSON.parse(project).talks[0];
+    // ?long=1: the talk or deck, its cards and their points with long names and text.
+    if (query.get('long')) {
+      talk.name = LONG.name;
+      talk.segments.forEach((seg, i) => { seg.name = (i % 2 ? 'Regional partners: ' : 'Leadership team: ') + LONG.name; if (seg.points.length) seg.points = [LONG.point, LONG.word]; });
+    }
     // Talking Points' hard cases: the second segment with nine long points, or with nothing.
     const notes = { long: { points: Array.from({ length: 9 }, (_, i) => 'Point ' + (i + 1) + ': a long point that runs over more than one line so the list is taller than the panel'), hints: ['Keep it under seven minutes'] }, empty: { points: [], hints: [] }, md: { points: ['**Never** read the slide aloud', 'Show the editor:\\n- add a segment\\n- *drag* it into place', 'Run ' + String.fromCharCode(96) + 'make check' + String.fromCharCode(96) + ' before pushing', '<b>Raw HTML</b> stays text; [a link](https://example.com) shows its text'], hints: ['Slow down: *breathe*'] } }[query.get('state')];
     if (notes) Object.assign(talk.segments[1], notes);
@@ -409,6 +432,9 @@ const SCREENS = [
   ['session-delete', `(async () => { [...document.querySelectorAll('main [role=menuitem]')].find((b) => b.textContent.includes('Delete session')).click(); await new Promise((r) => setTimeout(r, 200)) })()`],
   ['session-recording', `(async () => { const wait = () => new Promise((r) => setTimeout(r, 300)); [...document.querySelectorAll('main button')].find((b) => b.textContent.trim() === 'Cancel')?.click(); document.querySelector('.topbar button.back').click(); await wait(); [...document.querySelectorAll('main .runs button.open')].find((b) => b.textContent.includes('Atlas')).click(); await wait(); await wait(); document.querySelector('main .ask')?.scrollIntoView() })()`],
   ['session-back', `(async () => { document.querySelector('.topbar button.back').click(); await new Promise((r) => setTimeout(r, 300)) })()`],
+  // Long names (overflow): the long deck in the deck editor, and the long workspace's page.
+  ['deck-long', `(async () => { const wait = () => new Promise((r) => setTimeout(r, 250)); [...document.querySelectorAll('nav.rail button')].find((b) => b.textContent.includes('Decks')).click(); await wait(); [...document.querySelectorAll('main button.what')].find((b) => b.textContent.includes('Quarterly business review')).click(); await wait() })()`],
+  ['workspace-long', `(async () => { const wait = () => new Promise((r) => setTimeout(r, 250)); [...document.querySelectorAll('nav.rail button')].find((b) => b.textContent.includes('Workspaces')).click(); await wait(); [...document.querySelectorAll('main button.what')].find((b) => b.textContent.includes('Quarterly business review')).click(); await wait() })()`],
   ['templates', `[...document.querySelectorAll('nav.rail button')].find((b) => b.textContent.includes('Templates')).click()`],
   ['templates-meetings', `[...document.querySelectorAll('button.chip')].find((b) => b.textContent.trim() === 'Meetings').click()`],
   ['templates-mine', `[...document.querySelectorAll('button.chip')].find((b) => b.textContent.trim() === 'My templates').click()`],
@@ -446,6 +472,9 @@ process.on('exit', stopAll)
 
 rmSync(out, { recursive: true, force: true })
 mkdirSync(out, { recursive: true })
+
+// The About page imports the licence list `npm run dev` writes first; a fresh checkout has none.
+if (spawnSync('node', [join(root, 'scripts', 'third-party.mjs')], { stdio: 'ignore' }).status !== 0) throw new Error('scripts/third-party.mjs failed')
 
 const vite = spawn('npx', ['vite', '--port', String(port), '--strictPort'], {
   cwd: join(root, 'app'),
@@ -492,6 +521,22 @@ const run = async (expression) => {
   if (failure) throw new Error(`step failed: ${expression}\n${failure.exception?.description ?? failure.text}${errors.length ? `\npage errors:\n${errors.join('\n')}` : ''}`)
 }
 
+// Overflow (scripts/overflow.js): after each picture, text or a box past its container or the
+// window is listed, and fails the run. OVERFLOW_ALLOWED: selectors of elements meant to scroll sideways.
+const OVERFLOW_ALLOWED = [
+  // The deck editor's On screen preview: a window onto a made-up screen, cropped to the widget on purpose.
+  'section.pv > .stage',
+  // Settings' section menu at narrow widths: a sticky bar that bleeds to the page's edges (negative margins).
+  '.layout > nav.toc',
+]
+const overflowCheck = readFileSync(join(root, 'scripts', 'overflow.js'), 'utf8')
+const overflows = []
+const checkOverflow = async (picture) => {
+  const reply = await send('Runtime.evaluate', { expression: `(${overflowCheck})(${JSON.stringify(OVERFLOW_ALLOWED)})`, returnByValue: true })
+  if (reply.result?.exceptionDetails) throw new Error(`overflow check failed on ${picture}: ${reply.result.exceptionDetails.exception?.description}`)
+  for (const problem of reply.result?.result?.value ?? []) overflows.push(`${picture}: ${problem}`)
+}
+
 await send('Runtime.enable')
 await send('Page.enable')
 await send('Log.enable')
@@ -521,6 +566,7 @@ for (const [name, step] of SCREENS) {
       const file = join(out, `${name}-${width}-${scheme}.png`)
       writeFileSync(file, Buffer.from(result.data, 'base64'))
       written.push(file)
+      await checkOverflow(file.slice(out.length + 1, -4))
     }
   }
 }
@@ -565,6 +611,7 @@ for (const id of OVERLAYS) {
         const file = join(out, `overlay-${id}${style === 'waveform' ? '' : '-' + style}-${state}${indicator === 'bar' ? '' : '-' + indicator}${notch === 'top' ? '-notch-top' : ''}${asked ? '-' + asked + '-panel' : ''}-${slide}.png`)
         writeFileSync(file, Buffer.from(result.data, 'base64'))
         written.push(file)
+        await checkOverflow(file.slice(out.length + 1, -4))
       }
     }
   }
@@ -574,7 +621,7 @@ for (const id of OVERLAYS) {
 {
   const size = await evaluate(`import('/src/plugins/registry.ts').then(({ getPlugin }) => getPlugin('timeline').windowFor({ timelineStyle: 'waveform' }))`)
   await send('Emulation.setDeviceMetricsOverride', { width: size.width, height: size.height, deviceScaleFactor: 2, mobile: false })
-  for (const [name, params] of [['buttons-hidden', 'state=running&buttons=hidden']]) {
+  for (const [name, params] of [['buttons-hidden', 'state=running&buttons=hidden'], ['long', 'state=running&long=1'], ['ready-long', 'state=ready&long=1']]) {
     await send('Page.navigate', { url: `http://localhost:${port}/?overlay=timeline&style=waveform&${params}` })
     await sleep(1200)
     for (const [slide, colour] of Object.entries(SLIDES)) {
@@ -584,6 +631,7 @@ for (const id of OVERLAYS) {
       const file = join(out, `overlay-timeline-${name}-${slide}.png`)
       writeFileSync(file, Buffer.from(result.data, 'base64'))
       written.push(file)
+      await checkOverflow(file.slice(out.length + 1, -4))
     }
   }
 }
@@ -605,6 +653,7 @@ for (const id of OVERLAYS) {
     const file = join(out, `overlay-timeline-look-back-${slide}.png`)
     writeFileSync(file, Buffer.from(result.data, 'base64'))
     written.push(file)
+    await checkOverflow(file.slice(out.length + 1, -4))
   }
   await send('Input.dispatchMouseEvent', { type: 'mouseReleased', x: box.x, y: box.y, button: 'left', buttons: 0, clickCount: 1 })
   const tp = await evaluate(`import('/src/plugins/registry.ts').then(({ getPlugin }) => getPlugin('talking-points').window)`)
@@ -618,6 +667,7 @@ for (const id of OVERLAYS) {
     const file = join(out, `overlay-talking-points-look-back-${slide}.png`)
     writeFileSync(file, Buffer.from(result.data, 'base64'))
     written.push(file)
+    await checkOverflow(file.slice(out.length + 1, -4))
   }
 }
 
@@ -639,10 +689,11 @@ for (const id of OVERLAYS) {
       const file = join(out, `overlay-${id}-${state}-${slide}.png`)
       writeFileSync(file, Buffer.from(result.data, 'base64'))
       written.push(file)
+      await checkOverflow(file.slice(out.length + 1, -4))
     }
   }  // The look: the dark and light panels, large text, every part with this one open;
   // and with the waveform (the default) light, and see-through at its lowest, 50%.
-  for (const [name, params] of [['dark', 'style=strip&panel=dark&solid=0'], ['light', 'style=strip&panel=light&solid=0'], ['large', 'size=l'], ['every', 'layout=all'], ['light-every', 'style=wave&panel=light&solid=0&layout=all&size=s'], ['waveform-light', 'panel=light'], ['see-through', 'solid=0&opacity=50']]) {
+  for (const [name, params] of [['dark', 'style=strip&panel=dark&solid=0'], ['light', 'style=strip&panel=light&solid=0'], ['large', 'size=l'], ['every', 'layout=all'], ['light-every', 'style=wave&panel=light&solid=0&layout=all&size=s'], ['waveform-light', 'panel=light'], ['see-through', 'solid=0&opacity=50'], ['long', 'long=1'], ['long-every', 'long=1&layout=all']]) {
     await send('Page.navigate', { url: `http://localhost:${port}/?overlay=${id}&state=running&${params}` })
     await sleep(1200)
     for (const [slide, colour] of Object.entries(SLIDES)) {
@@ -652,6 +703,7 @@ for (const id of OVERLAYS) {
       const file = join(out, `overlay-${id}-look-${name}-${slide}.png`)
       writeFileSync(file, Buffer.from(result.data, 'base64'))
       written.push(file)
+      await checkOverflow(file.slice(out.length + 1, -4))
     }
   }
 }
@@ -673,6 +725,9 @@ for (const id of OVERLAYS) {
     ['deck-ready-light', 'state=deck-ready&panel=light'],
     // a quiet card for a 1:1: no position, next card, time left or end time.
     ['deck-running-quiet', 'state=deck-running&hide=position,next,left,ends'],
+    // a long deck name, card titles and points.
+    ['deck-running-long', 'state=deck-running&long=1'],
+    ['deck-ready-long', 'state=deck-ready&long=1'],
   ]
   for (const [name, params] of cases) {
     await send('Page.navigate', { url: `http://localhost:${port}/?overlay=${id}&${params}` })
@@ -684,6 +739,7 @@ for (const id of OVERLAYS) {
       const file = join(out, `overlay-${id}-${name}-${slide}.png`)
       writeFileSync(file, Buffer.from(result.data, 'base64'))
       written.push(file)
+      await checkOverflow(file.slice(out.length + 1, -4))
     }
   }
 }
@@ -712,11 +768,18 @@ for (const id of OVERLAYS) {
     ['card-recording-light', 'card', 'state=deck-running&rec=recording&panel=light', true],
     ['agenda-recording', 'agenda', 'state=deck-running&rec=recording', true],
     ['agenda-recording-stopped-light', 'agenda', 'state=deck-running&rec=stopped&panel=light', false],
+    // The tab of buttons pulled out with a long deck name, at the window's size and at the
+    // smallest the window can be made (its minWidth), on both views, recording.
+    ['card-pointed-long', 'card', 'state=deck-running&long=1&rec=recording', true],
+    ['card-pointed-long-narrow', 'card', 'state=deck-running&long=1&rec=recording', true, true],
+    ['card-pointed-ready-long', 'card', 'state=deck-ready&long=1', true],
+    ['agenda-pointed-long', 'agenda', 'state=deck-running&long=1&rec=recording', true],
+    ['agenda-pointed-long-narrow', 'agenda', 'state=deck-running&long=1&rec=recording', true, true],
   ]
-  for (const [name, view, params, pointed] of cases) {
+  for (const [name, view, params, pointed, narrow] of cases) {
     const size = await evaluate(`import('/src/plugins/flashcard/index.ts').then(({ deckWidgetWindow }) => deckWidgetWindow('${view}'))`)
     if (!size?.width) throw new Error(`no window size for ${id} ${view}`)
-    await send('Emulation.setDeviceMetricsOverride', { width: size.width, height: size.height, deviceScaleFactor: 2, mobile: false })
+    await send('Emulation.setDeviceMetricsOverride', { width: narrow ? size.minWidth : size.width, height: size.height, deviceScaleFactor: 2, mobile: false })
     await send('Page.navigate', { url: `http://localhost:${port}/?overlay=${id}&view=${view}&${params}` })
     await sleep(1200)
     // As if the pointer were over it: the host's ✕ and the switch show.
@@ -729,6 +792,7 @@ for (const id of OVERLAYS) {
       const { result } = await send('Page.captureScreenshot', { format: 'png' })
       writeFileSync(file, Buffer.from(result.data, 'base64'))
       written.push(file)
+      await checkOverflow(file.slice(out.length + 1, -4))
     }
   }
 }
@@ -746,6 +810,7 @@ for (const [id, style] of [['talking-points', null], ['timeline', 'waveform'], [
     const file = join(out, `overlay-${id}${style && style !== 'waveform' ? '-' + style : ''}-opacity40-${slide}.png`)
     writeFileSync(file, Buffer.from(result.data, 'base64'))
     written.push(file)
+    await checkOverflow(file.slice(out.length + 1, -4))
   }
 }
 
@@ -755,15 +820,16 @@ for (const [id, style] of [['talking-points', null], ['timeline', 'waveform'], [
 // The control panel: docked at the right edge, in each kind of run and with none.
 if (wanted('panel')) {
   await send('Emulation.setDeviceMetricsOverride', { width: 330, height: 860, deviceScaleFactor: 2, mobile: false })
-  for (const state of ['none', 'ready', 'running', 'paused', 'note']) {
+  for (const state of ['none', 'ready', 'running', 'paused', 'note', 'running&long=1']) {
     for (const scheme of SCHEMES) {
       await send('Emulation.setEmulatedMedia', { features: [{ name: 'prefers-color-scheme', value: scheme }] })
       await send('Page.navigate', { url: `http://localhost:${port}/?window=control-panel${state === 'none' ? '' : '&state=' + state}` })
       await sleep(1200)
       const { result } = await send('Page.captureScreenshot', { format: 'png' })
-      const file = join(out, `panel-${state}-${scheme}.png`)
+      const file = join(out, `panel-${state.replace('&long=1', '-long')}-${scheme}.png`)
       writeFileSync(file, Buffer.from(result.data, 'base64'))
       written.push(file)
+      await checkOverflow(file.slice(out.length + 1, -4))
     }
   }
 }
@@ -777,7 +843,7 @@ try {
   rmSync(profile, { recursive: true, force: true, maxRetries: 5, retryDelay: 200 })
 } catch {}
 console.log(`${written.length} screenshots in ${out}`)
-if (errors.length) {
-  console.error(`console errors:\n${errors.map((e) => `  ${e}`).join('\n')}`)
-  process.exit(1)
-}
+writeFileSync(join(out, 'overflow.txt'), overflows.length ? overflows.join('\n') + '\n' : '')
+if (overflows.length) console.error(`overflow (${overflows.length}, also in out/shots/overflow.txt):\n${overflows.map((o) => `  ${o}`).join('\n')}`)
+if (errors.length) console.error(`console errors:\n${errors.map((e) => `  ${e}`).join('\n')}`)
+if (errors.length || overflows.length) process.exit(1)

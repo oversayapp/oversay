@@ -34,7 +34,7 @@
   {:else if found}
     {#each found as { deck, items } (deck.path)}
       <div class="dh">
-        <span class="dn">{deck.name}</span>
+        <span class="dn" title={deck.name}>{deck.name}</span>
         <button class="act" onclick={() => goDeck(deck.path)}>Open deck</button>
       </div>
       <ul>

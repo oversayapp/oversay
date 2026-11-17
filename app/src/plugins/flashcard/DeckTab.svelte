@@ -85,7 +85,12 @@
     margin-top: -4px;
   }
 
+  /* Never wider than the window: the deck's name gives way first (ellipsis, full name in its
+     title), so the tab's ends and the buttons always show, down to the window's minWidth. */
   .tb {
+    box-sizing: border-box;
+    max-width: 100%;
+    min-width: 0;
     display: flex;
     align-items: center;
     gap: 6px;
@@ -123,6 +128,8 @@
     border-right: 1px solid rgba(var(--ink), 0.3);
     white-space: nowrap;
     max-width: 180px;
+    min-width: 0;
+    flex: 0 1 auto;
     overflow: hidden;
     text-overflow: ellipsis;
   }
@@ -139,6 +146,7 @@
     background: transparent;
     color: rgb(var(--ink));
     cursor: pointer;
+    flex: none;
   }
 
   button.pn {

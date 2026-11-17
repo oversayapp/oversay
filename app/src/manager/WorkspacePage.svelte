@@ -216,7 +216,7 @@
         <ul>
           {#each addable.slice(0, 30) as d (d.id)}
             <li>
-              <span class="t">{d.name}</span>
+              <span class="t" title={d.name}>{d.name}</span>
               <button onclick={() => attempt(() => addDeckToWorkspace(id, d.id))}><Icon name="plus" size={14} /> Add</button>
             </li>
           {:else}
@@ -250,9 +250,10 @@
             >
             {#if e.deck}
               {@const d = e.deck}
+              {@const sub = [d.audience && `for ${d.audience}`, size(d)].filter(Boolean).join(' · ')}
               <button class="what" disabled={d.unreadable} onclick={() => goDeck(d.path)}>
-                <span class="t">{d.name}</span>
-                <span class="p">{[d.audience && `for ${d.audience}`, size(d)].filter(Boolean).join(' · ')}</span>
+                <span class="t" title={d.name}>{d.name}</span>
+                <span class="p" title={sub}>{sub}</span>
               </button>
               <button class="plan" tabindex="-1" aria-hidden="true" onclick={() => goDeck(d.path)}><MiniPlan bar={d.bar} /></button>
               <div class="acts">

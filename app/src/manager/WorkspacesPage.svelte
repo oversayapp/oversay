@@ -142,7 +142,7 @@
 
 {#snippet entry(p: Place, label: string, n: number, icon?: 'pin' | 'history')}
   <button class="nav" class:on={place === p} aria-current={place === p ? 'page' : undefined} onclick={() => go(p)}>
-    {#if icon}<Icon name={icon} size={15} />{/if}<span class="lab">{label}</span><span class="n">{n}</span>
+    {#if icon}<Icon name={icon} size={15} />{/if}<span class="lab" title={label}>{label}</span><span class="n">{n}</span>
   </button>
 {/snippet}
 
@@ -188,7 +188,7 @@
           </form>
         {:else}
           <button class="nav" class:on={tag?.toLowerCase() === t.toLowerCase()} aria-current={tag?.toLowerCase() === t.toLowerCase() ? 'page' : undefined} onclick={() => go(`tag:${t}`)}>
-            <span class="dot" style="--c:{colour}"></span><span class="lab">{t}</span><span class="n">{uses(t)}</span>
+            <span class="dot" style="--c:{colour}"></span><span class="lab" title={t}>{t}</span><span class="n">{uses(t)}</span>
           </button>
           <button
             class="tagmore"
@@ -351,11 +351,11 @@
                 >
               {/if}
               <button class="what" disabled={!w.id} onclick={() => goWorkspace(w.id)} onkeydown={(e) => moveBy(e, i)}>
-                <span class="t">{w.name}</span>
-                <span class="p">{about(w)}</span>
+                <span class="t" title={w.name}>{w.name}</span>
+                <span class="p" title={about(w)}>{about(w)}</span>
               </button>
               <span class="chips"
-                >{#each w.tags as t (t)}<span class="chip"><span class="dot" style="--c:{TAG_COLOUR_CSS[tagColour($workspaceNav, t)]}"></span>{t}</span>{/each}</span
+                >{#each w.tags as t (t)}<span class="chip" title={t}><span class="dot" style="--c:{TAG_COLOUR_CSS[tagColour($workspaceNav, t)]}"></span><span class="tn">{t}</span></span>{/each}</span
               >
               {#if w.id}
                 <div class="more">
@@ -537,6 +537,13 @@
     border: 1px solid var(--line-strong);
     border-radius: 12px;
     box-shadow: 0 10px 30px rgba(0, 0, 0, 0.18);
+  }
+
+  /* The tag's menu stays inside the sidebar, which scrolls and would cut it off. */
+  .tagrow .menu {
+    left: 0;
+    right: 0;
+    min-width: 0;
   }
 
   .menu.right {
@@ -772,7 +779,12 @@
     color: var(--muted);
   }
 
+  /* The tags take at most half the row, so a long tag can't squeeze the workspace's name; a tag
+     longer than that shortens, the whole of it in its title. */
   .chips {
+    flex: 0 1 auto;
+    min-width: 0;
+    max-width: 50%;
     display: flex;
     flex-wrap: wrap;
     justify-content: flex-end;
@@ -780,6 +792,9 @@
   }
 
   .chip {
+    max-width: 100%;
+    min-width: 0;
+    box-sizing: border-box;
     display: inline-flex;
     align-items: center;
     gap: 5px;
@@ -792,7 +807,15 @@
     line-height: 19px;
   }
 
+  .chip .tn {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
   .chip .dot {
+    flex: none;
     width: 7px;
     height: 7px;
     border-radius: 2px;

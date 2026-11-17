@@ -147,9 +147,9 @@
   >
   <!-- The card opens the deck: its name and what is under it. -->
   <button class="what" disabled={d.unreadable} onclick={() => goDeck(d.path)}>
-    <span class="t">{d.name}{#if $freshPaths.has(d.path)} <span class="new-tag">New</span>{/if}</span>
+    <span class="t" title={d.name}>{d.name}{#if $freshPaths.has(d.path)} <span class="new-tag">New</span>{/if}</span>
     <span class="sub">
-      <span class="p">{about(d)}</span>
+      <span class="p" title={about(d)}>{about(d)}</span>
       {#each d.tags as tag (tag)}<span class="chip">{tag}</span>{/each}
     </span>
   </button>
@@ -235,7 +235,7 @@
             <h4>Tags</h4>
             <div class="opts">
               {#each choices.tags as tag (tag)}
-                <button class="fchip" class:on={filters.tags.includes(tag)} aria-pressed={filters.tags.includes(tag)} onclick={() => toggleTag(tag)}>{tag}</button>
+                <button class="fchip" class:on={filters.tags.includes(tag)} aria-pressed={filters.tags.includes(tag)} title={tag} onclick={() => toggleTag(tag)}><span>{tag}</span></button>
               {/each}
             </div>
           {/if}
@@ -244,7 +244,7 @@
             <div class="opts">
               {#each choices.audiences as a (a)}
                 {@const on = filters.audience === a}
-                <button class="fchip" class:on aria-pressed={on} onclick={() => (filters = { ...filters, audience: on ? '' : a })}>{a}</button>
+                <button class="fchip" class:on aria-pressed={on} title={a} onclick={() => (filters = { ...filters, audience: on ? '' : a })}><span>{a}</span></button>
               {/each}
             </div>
           {/if}
@@ -253,7 +253,7 @@
             <div class="opts">
               {#each choices.workspaces as id (id)}
                 {@const on = filters.workspace === id}
-                <button class="fchip" class:on aria-pressed={on} onclick={() => (filters = { ...filters, workspace: on ? '' : id })}>{workspaceName(id)}</button>
+                <button class="fchip" class:on aria-pressed={on} title={workspaceName(id)} onclick={() => (filters = { ...filters, workspace: on ? '' : id })}><span>{workspaceName(id)}</span></button>
               {/each}
             </div>
           {/if}
@@ -446,7 +446,11 @@
     color: var(--faint);
   }
 
+  /* A long name shortens inside the panel, the whole of it in the chip's title. */
   .fchip {
+    max-width: 100%;
+    min-width: 0;
+    white-space: nowrap;
     padding: 3px 11px;
     border-radius: 99px;
     border: 1px solid var(--line-strong);
@@ -454,6 +458,12 @@
     color: var(--muted);
     font-size: 13px;
     font-weight: 600;
+  }
+
+  .fchip span {
+    display: block;
+    overflow: hidden;
+    text-overflow: ellipsis;
   }
 
   .fchip.on {
