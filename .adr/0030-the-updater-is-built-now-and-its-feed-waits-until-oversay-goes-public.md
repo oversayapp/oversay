@@ -1,5 +1,5 @@
 ---
-status: proposed
+status: proposed; its feed decision is superseded by 0044
 date: 2026-10-21
 ---
 

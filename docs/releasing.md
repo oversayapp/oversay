@@ -1,6 +1,6 @@
 # Releasing Oversay
 
-How versions are numbered, how a release is cut, and what each build does about updates. The decisions are in [ADR 0030](../.adr/0030-the-updater-is-built-now-and-its-feed-waits-until-oversay-goes-public.md): nothing is public yet, so releases are private and no build handed out checks for updates.
+How versions are numbered, how a release is cut, and what each build does about updates. The decisions are in [ADR 0030](../.adr/0030-the-updater-is-built-now-and-its-feed-waits-until-oversay-goes-public.md) (versions, tagged releases, no token in the app) and [ADR 0044](../.adr/0044-the-update-feed-is-a-redirect-to-the-public-repositorys-latest-release.md) (where the feed lives). Until the settings below are set, no build checks for updates, and releases stay private while this repository is.
 
 ## Versions
 
@@ -17,7 +17,7 @@ How versions are numbered, how a release is cut, and what each build does about 
 ## What CI builds
 
 - **Every push and PR:** the checks only (`make check`), on Linux. A newer push to the same branch cancels the older run.
-- **A version tag:** the checks, the Windows and macOS installers, and a private release (below). The macOS build is **signed and notarized** ([macOS signing](platform/macos-signing.md)).
+- **A version tag:** the checks, the Windows and macOS installers, and a release (below; private while this repository is). The macOS build is **signed and notarized** ([macOS signing](platform/macos-signing.md)).
 - **By hand:** Actions › Build › Run workflow, on any branch, builds the installers. On `main`, it also replaces the rolling `latest` pre-release, for John's own testing. Tick **sign** to sign and notarize the macOS build; unticked, it is unsigned. The `latest` pre-release's notes say whether its macOS build is signed.
 
 Merging to `main` no longer builds installers (22 Oct). On the free plan, a Windows minute counts twice and a macOS minute ten times against the monthly allowance. Building on every merge used up October's allowance.
@@ -43,7 +43,7 @@ Merging to `main` no longer builds installers (22 Oct). On the free plan, a Wind
 4. CI's Build workflow runs for the tag:
    - **checks** fails at once if the tag isn't `v` plus `package.json`'s version;
    - **windows** and **macos** build the installers;
-   - **tagged-release** makes a **private** release named after the tag, in this repository, with the files below.
+   - **tagged-release** makes a release named after the tag (private while this repository is, public once it is), in this repository, with the files below.
 5. Hand the installers out as before.
 
 What the release holds:
@@ -67,9 +67,9 @@ Nothing about updates is in `tauri.conf.json`. Each build writes the extra confi
 | `OVERSAY_UPDATE_FEED` | variable | The `https://` address of `latest.json`. With `OVERSAY_UPDATE_PUBKEY`, the build checks for updates there. |
 | `OVERSAY_UPDATE_PUBKEY` | variable | The public half of the update key, which every update package must be signed with. |
 | `TAURI_SIGNING_PRIVATE_KEY`, `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` | secrets | The build also makes signed update packages. |
-| `OVERSAY_UPDATE_FILES` | variable | Where `latest.json` says the packages are downloaded from. Unset, it names the private release, which the app can't read. |
+| `OVERSAY_UPDATE_FILES` | variable | Where `latest.json` says the packages are downloaded from. Unset, it names this repository's release, which the app can read once the repository is public (ADR 0044). |
 
-None of them is set until Oversay goes public. So today a build never checks for updates: the app doesn't even register the updater, so it makes no request. `make dev` and local builds don't either.
+None of them is set yet; setting them is the first step of the first release (ADR 0044). Until then a build never checks for updates: the app doesn't even register the updater, so it makes no request. `make dev` and local builds don't either.
 
 ## Test builds for the hands-on checks
 
@@ -99,4 +99,4 @@ The updater accepts only `https://` addresses with a certificate the test machin
 
 ## The update key
 
-The release key is made with the feed when Oversay goes public, never before: see ADR 0030 for how it is made and backed up. If it is lost, installed copies can never update again.
+The release key is made by John on his own Mac before the first release, with its password in the password manager and an offline copy: see ADR 0044. If it is lost, installed copies can never update again.
