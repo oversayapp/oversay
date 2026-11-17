@@ -51,7 +51,7 @@ export interface Settings {
   waveformMoved?: boolean
   /** The overlays have been made see-through at 75% once, for the deck widget (ADR 0042). */
   seeThroughMoved?: boolean
-  /** Updates (epic #16; lib/updates/policy.ts): `auto` checks as Oversay starts, `everyHours` is the least time between checks. */
+  /** Updates (epic 015 (#16); lib/updates/policy.ts): `auto` checks as Oversay starts, `everyHours` is the least time between checks. */
   updates?: { auto?: boolean; everyHours?: number }
   /** When Oversay last asked for updates, as an ISO time. */
   lastUpdateCheck?: string

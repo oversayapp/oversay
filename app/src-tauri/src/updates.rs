@@ -1,4 +1,4 @@
-//! Finding and installing updates (epic #16, ADR 0030).
+//! Finding and installing updates (epic 015 (#16), ADR 0030).
 //!
 //! Only a build given a feed and key has the updater plugin registered (lib.rs); in any other
 //! build `update_support` says so and nothing here makes a request. Checking and installing are

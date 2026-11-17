@@ -1,5 +1,5 @@
 <script lang="ts">
-  // Settings › Updates (epic #16): what Oversay found, the one-click install, and whether it
+  // Settings › Updates (epic 015 (#16)): what Oversay found, the one-click install, and whether it
   // checks by itself. Shown only in a build that has a feed (ADR 0030).
   import { settings, setUpdateSettings } from '../lib/settings/store'
   import { updateSettings } from '../lib/updates/policy'
