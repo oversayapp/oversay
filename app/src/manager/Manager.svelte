@@ -57,7 +57,7 @@
     // Settings first: they say whether the example decks were already added.
     attempt(async () => {
       await loadSettings()
-      // Whether this build has a feed, then the start-up check if it is due (epic #16); not waited for.
+      // Whether this build has a feed, then the start-up check if it is due (epic 015 (#16)); not waited for.
       void attempt(async () => {
         await loadUpdateSupport()
         await checkAtStartup()

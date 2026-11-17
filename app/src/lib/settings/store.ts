@@ -394,7 +394,7 @@ export function setLinkPermission(permission: LinkPermission): Promise<void> {
   })
 }
 
-// ---- Updates (epic #16)
+// ---- Updates (epic 015 (#16))
 
 /** Turns automatic update checks on or off, or changes how often they run (lib/updates/policy.ts). */
 export function setUpdateSettings(change: { auto?: boolean; everyHours?: number }): Promise<void> {

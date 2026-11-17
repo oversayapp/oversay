@@ -1,4 +1,4 @@
-// The update state the manager shows (epic #16): whether this build checks at all, the release
+// The update state the manager shows (epic 015 (#16)): whether this build checks at all, the release
 // found, and the actions. Rust refuses to check or install while a session is open
 // (src-tauri/src/updates.rs); nothing here retries.
 

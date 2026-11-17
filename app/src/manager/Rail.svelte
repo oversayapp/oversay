@@ -30,7 +30,7 @@
     <Icon name="ai" size={22} /><span>AI</span>{#if !$settings.aiPageSeen}<span class="new">New</span>{/if}
   </button>
   <div class="spacer"></div>
-  <!-- Only while an update has been found: it opens Settings › Updates (epic #16). -->
+  <!-- Only while an update has been found: it opens Settings › Updates (epic 015 (#16)). -->
   {#if $updateAvailable}
     <button class="update" onclick={() => { logAction('update item'); goSettings('updates') }}>
       <Icon name="arrow" size={22} /><span>Update</span>

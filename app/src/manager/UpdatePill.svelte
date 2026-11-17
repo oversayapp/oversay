@@ -1,5 +1,5 @@
 <script lang="ts">
-  // The header's "update available" pill (epic #16): small, never a dialog, and only while an
+  // The header's "update available" pill (epic 015 (#16)): small, never a dialog, and only while an
   // update has been found. It leads to Settings › Updates, where the update is managed.
   import { logAction } from '../lib/log'
   import { updateAvailable, updates } from '../lib/updates/store'

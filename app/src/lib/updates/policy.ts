@@ -1,4 +1,4 @@
-// When Oversay checks for updates, and what a check leaves on screen (epic #16, ADR 0030).
+// When Oversay checks for updates, and what a check leaves on screen (epic 015 (#16), ADR 0030).
 // Rust decides whether a check may happen (src-tauri/src/updates.rs); this decides when to ask.
 
 import type { Settings } from '../settings/settings'
@@ -22,7 +22,7 @@ export interface Support {
   kind: InstallKind
 }
 
-/** The maintainer's answer (epic #16): check at every start, automatic checking on. `everyHours` can set a least time between checks; 0 is every start. */
+/** The maintainer's answer (epic 015 (#16)): check at every start, automatic checking on. `everyHours` can set a least time between checks; 0 is every start. */
 export const DEFAULT_AUTO_CHECK = true
 export const DEFAULT_CHECK_HOURS = 0
 
