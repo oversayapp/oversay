@@ -125,7 +125,7 @@ test('a version bump regenerates the skill files, which embed the version', () =
   assert.deepEqual(calls, [['make', 'skills']])
 })
 
-test('a release\'s zips must carry the app\'s version (ADR 0048)', () => {
+test('a release\'s zips must carry the app\'s version (ADR 0049)', () => {
   const skill = (v) => `---\nname: oversay\nmetadata:\n  version: ${v}\n---\n`
   assert.deepEqual(zipProblems('0.5.0', '{"version":"0.5.0"}', skill('0.5.0')), [])
   assert.match(zipProblems('0.5.0', '{"version":"0.4.0"}', skill('0.5.0'))[0], /plugin\.json has 0\.4\.0/)

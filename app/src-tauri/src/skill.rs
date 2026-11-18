@@ -368,7 +368,7 @@ fn zip_files(
             // two manifests differ only in what this adds: the version.
             let mut manifest: serde_json::Value =
                 serde_json::from_str(include_str!("../../../skills/plugin-manifest.json"))
-                    .unwrap_or_default();
+                    .expect("skills/plugin-manifest.json is JSON (a test reads it)");
             manifest["version"] = serde_json::Value::from(version);
             let mut files = vec![
                 (
@@ -401,7 +401,7 @@ fn write_zip(path: &Path, files: &[(String, Vec<u8>)]) -> Result<(), String> {
     Ok(())
 }
 
-/// The two files a tagged release carries (ADR 0048), named as the AI page's Save… buttons name them.
+/// The two files a tagged release carries (ADR 0049), named as the AI page's Save… buttons name them.
 const SKILL_ZIP: &str = "oversay-skill.zip";
 const PLUGIN_ZIP: &str = "oversay-plugin.zip";
 
@@ -677,6 +677,12 @@ mod tests {
             want.retain(|n| n != ".claude-plugin/icon.png");
             assert_eq!(read, want, "{file}");
         }
+        // What the release job checks again: the plugin zip says the version it was made for.
+        let mut plugin =
+            zip::ZipArchive::new(fs::File::open(out.join(PLUGIN_ZIP)).unwrap()).unwrap();
+        let manifest: serde_json::Value =
+            serde_json::from_reader(plugin.by_name(".claude-plugin/plugin.json").unwrap()).unwrap();
+        assert_eq!(manifest["version"], "0.4.0");
         assert!(package_to(&out.join("no-such-skill"), &out, "0.4.0").is_err());
         fs::remove_dir_all(out).unwrap();
     }

@@ -184,7 +184,7 @@
     })
   }
 
-  /** The Claude app takes a marketplace address, so there is no file to save (ADR 0048). */
+  /** The Claude app takes a marketplace address, so there is no file to save (ADR 0049). */
   function copyMarketplace() {
     const address = marketplaceAddress()
     copy(address)
@@ -304,14 +304,14 @@
           <p>Install copies the skill to <code>{t.dir}</code>. Start a new {label.name} session afterwards.</p>
         {/if}
         {#if id === 'claude-code'}
-          <p>Or have Claude Code install it from the plugin marketplace, which can update with each release: <button class="link" onclick={() => copyInstallPrompt('claude-code')}>{copied.startsWith('Install the Oversay') ? 'Copied' : 'Copy the install prompt'}</button>, and paste it into Claude Code.</p>
-          <p>If you also add the Claude plugin to your Claude account, keep one of the two in Claude Code (<code>/plugin</code>).</p>
+          <p>Or have Claude Code install it from the plugin marketplace, which can update with each release: <button class="link" onclick={() => copyInstallPrompt('claude-code')}>{copied === claudeCodeInstallPrompt() ? 'Copied' : 'Copy the install prompt'}</button>, and paste it into Claude Code.</p>
+          <p>If you also add the plugin to your Claude account or from the marketplace, you will have it twice in Claude Code: keep one (<code>/plugin</code>).</p>
         {/if}
         {#if sharing(info!.targets, id).length}
           <p>{sharing(info!.targets, id).map((o) => TARGET_LABELS[o].name).join(' and ')} reads the same copy, so installing for one installs for both.</p>
         {/if}
         {#if id === 'codex'}
-          <p>Or have Codex install it from the plugin marketplace: <button class="link" onclick={() => copyInstallPrompt('codex')}>{copied.startsWith('Install the Oversay') ? 'Copied' : 'Copy the install prompt'}</button>, and paste it into Codex. It is a second copy beside this one: keep one.</p>
+          <p>Or have Codex install it from the plugin marketplace: <button class="link" onclick={() => copyInstallPrompt('codex')}>{copied === codexInstallPrompt() ? 'Copied' : 'Copy the install prompt'}</button>, and paste it into Codex. It is a second copy beside this one: keep one.</p>
         {/if}
         {#if id === 'gemini-cli'}
           <p>Antigravity CLI reads <code>.agents/skills</code> in a project; whether it reads this copy in your home folder isn’t confirmed yet.</p>

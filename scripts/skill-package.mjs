@@ -1,4 +1,4 @@
-// What people install is made from skills/oversay, never edited (epic 038, ADR 0048). This builds
+// What people install is made from skills/oversay, never edited (epic 038, ADR 0049). This builds
 // the Claude and Codex plugin (plugins/oversay) and the marketplace (.claude-plugin/marketplace.json)
 // from the skill, skills/plugin-manifest.json and app/package.json's version, and finds any
 // copy, manifest or version that has drifted from them. version.mjs --check and make skills use it.
@@ -9,8 +9,8 @@ import { dirname, join } from 'node:path'
 export const SKILL_DIR = 'skills/oversay'
 export const MANIFEST_SOURCE = 'skills/plugin-manifest.json'
 export const PLUGIN_DIR = 'plugins/oversay'
-export const PLUGIN_JSON = `${PLUGIN_DIR}/.claude-plugin/plugin.json`
 export const MARKETPLACE = '.claude-plugin/marketplace.json'
+const SKILL_NAME = 'oversay'
 const LOCAL_FILE = 'oversay-local.json'
 
 const json = (v) => JSON.stringify(v, null, 2) + '\n'
@@ -50,7 +50,7 @@ function skillFiles(dir, prefix = '') {
 export function pluginFiles(root, version) {
   const pkg = JSON.parse(readFileSync(join(root, MANIFEST_SOURCE), 'utf8'))
   const files = new Map([['.claude-plugin/plugin.json', json(pluginManifest(pkg, version))]])
-  for (const [path, body] of skillFiles(join(root, SKILL_DIR))) files.set(`skills/oversay/${path}`, body)
+  for (const [path, body] of skillFiles(join(root, SKILL_DIR))) files.set(`skills/${SKILL_NAME}/${path}`, body)
   return files
 }
 
@@ -84,7 +84,7 @@ export function checkPackaging(root) {
     for (const [path, body] of want) {
       const file = `${PLUGIN_DIR}/${path}`
       if (!existsSync(join(root, file))) problems.push(`${file} is missing: run make skills`)
-      else if (!same(readFileSync(join(root, file)), body)) problems.push(`${file} differs from ${path === '.claude-plugin/plugin.json' ? `${MANIFEST_SOURCE} and app/package.json` : SKILL_DIR + path.slice('skills/oversay'.length)}: run make skills, and edit only ${SKILL_DIR}`)
+      else if (!same(readFileSync(join(root, file)), body)) problems.push(`${file} differs from ${path === '.claude-plugin/plugin.json' ? `${MANIFEST_SOURCE} and app/package.json` : `${SKILL_DIR}/${path.slice(`skills/${SKILL_NAME}/`.length)}`}: run make skills, and edit only ${SKILL_DIR}`)
     }
     for (const path of walk(join(root, PLUGIN_DIR))) {
       if (!want.has(path)) problems.push(`${PLUGIN_DIR}/${path} is not in ${SKILL_DIR}: run make skills`)

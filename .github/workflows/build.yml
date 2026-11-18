@@ -272,7 +272,7 @@ jobs:
         if: always() && env.SIGN == 'true'
         run: rm -f "$RUNNER_TEMP"/AuthKey_*.p8
 
-      # The skill's two zips (ADR 0048), made by the built app with the code behind the AI page's
+      # The skill's two zips (ADR 0049), made by the built app with the code behind the AI page's
       # Save… buttons, so a release can never carry different files from the app.
       - name: Package the skill zips
         run: |

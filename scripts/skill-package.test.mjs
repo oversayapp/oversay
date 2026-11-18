@@ -1,5 +1,5 @@
 // Tests for scripts/skill-package.mjs: the plugin and marketplace made from skills/oversay, and the
-// checks that catch a copy, a manifest or a version drifting from it (epic 038, ADR 0048).
+// checks that catch a copy, a manifest or a version drifting from it (epic 038, ADR 0049).
 
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
