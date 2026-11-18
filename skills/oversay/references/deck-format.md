@@ -5,15 +5,16 @@ points and what is kept but not shown); what the person calls a note is a deck w
 Oversay shows one card at a time on its flashcard widget. A card with a time counts down and gives
 way to the next by itself when the time is up; one without waits for Next. Each deck is a folder
 in Oversay's **Decks** folder, named for people (the deck's name and the day it was made), holding
-its `deck.md`; Oversay keeps the deck's runs beside it in `sessions.json`, and the person may keep
-files for it in `resources/`:
+its `deck.md`; Oversay keeps the deck's runs beside it in `sessions.json`. A deck has no resources of
+its own: the files and links the person keeps are in its workspace's `resources/` (workspace-format.md).
+A deck folder from an older Oversay may still hold a `resources/` folder, which the person's Oversay moves up:
 
 ```text
 Decks/
   Stand-up 23 Oct 2026-10-23/
     deck.md
     sessions.json     Oversay's; leave it alone
-    resources/        the person's; read only when asked
+    resources/        only in an older deck's folder; the person's, read only when asked
 ```
 
 `Decks/Stand-up 23 Oct 2026-10-23/deck.md`:
