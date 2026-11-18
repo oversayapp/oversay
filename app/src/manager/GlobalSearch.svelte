@@ -283,7 +283,8 @@
 
   .mid {
     display: flex;
-    align-items: center;
+    /* The field and the New button are one height. */
+    align-items: stretch;
     gap: 8px;
     min-width: 0;
   }
@@ -308,20 +309,21 @@
 
   .find {
     position: relative;
+    display: flex;
     flex: 1;
     min-width: 0;
-    /* Small and flat until it is clicked into: no border, a faint fill. */
+    /* A clear edge and a faint fill until it is clicked into (then the accent). */
     font-size: 13px;
     /* A fill lighter than the page in both themes, so it reads as a field and not a hole. */
     background: var(--hover);
-    border: 1px solid transparent;
+    border: 1px solid var(--line-strong);
     border-radius: 8px;
     transition: border-color 0.15s, background 0.15s;
   }
 
   .find:hover {
     background: color-mix(in srgb, var(--hover) 60%, var(--line));
-    border-color: var(--line);
+    border-color: var(--muted);
   }
 
   .find:focus-within {
@@ -331,6 +333,7 @@
 
   .search {
     position: relative;
+    flex: 1;
     display: flex;
     align-items: center;
     gap: 7px;
