@@ -311,10 +311,15 @@
     min-width: 0;
     /* Small and flat until it is clicked into: no border, a faint fill. */
     font-size: 13px;
-    background: var(--rail);
+    /* A fill lighter than the page in both themes, so it reads as a field and not a hole. */
+    background: var(--hover);
     border: 1px solid transparent;
     border-radius: 8px;
     transition: border-color 0.15s, background 0.15s;
+  }
+
+  .find:hover {
+    background: color-mix(in srgb, var(--hover) 60%, var(--line));
   }
 
   .find:focus-within {
