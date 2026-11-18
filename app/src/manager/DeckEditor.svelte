@@ -36,7 +36,7 @@
   import { justRan } from '../lib/decks/sessions'
   import PlanBar from './PlanBar.svelte'
   import DeckPreview from './DeckPreview.svelte'
-  import DeckResources from './DeckResources.svelte'
+  import AddResource from './AddResource.svelte'
   import { attempt } from './errors'
   import Icon from './Icon.svelte'
   import { goBackFromDeck, goDeck, goWorkspace, nav } from './route'
@@ -381,7 +381,7 @@
         {/if}
       </div>
       <aside class="side">
-        <DeckResources owner={{ deck: deck.path }} />
+        <AddResource deckId={deckIdNow} />
         <section class="pv" aria-label="Preview on screen">
           <div class="pvh">
             <b>On screen</b>

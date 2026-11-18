@@ -25,8 +25,8 @@ describe('a deck’s resources', () => {
   })
 
   it('says what a drop added', () => {
-    expect(addedMessage(['Oversay resource test.pdf'])).toBe('Added Oversay resource test.pdf to this deck’s resources.')
-    expect(addedMessage(['a.pdf', 'b.png', 'c.txt'])).toBe('Added 3 files to this deck’s resources.')
+    expect(addedMessage(['Oversay resource test.pdf'])).toBe('Added Oversay resource test.pdf to this workspace.')
+    expect(addedMessage(['a.pdf', 'b.png', 'c.txt'])).toBe('Added 3 files to this workspace.')
     expect(addedMessage([])).toBe('')
   })
 })

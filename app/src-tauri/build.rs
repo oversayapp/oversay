@@ -39,6 +39,8 @@ const COMMANDS: &[&str] = &[
     "list_resources",
     "add_resources",
     "add_resource_link",
+    "move_deck_resources",
+    "undo_resources_move",
     "open_resource",
     "open_resources_folder",
     "list_session_files",

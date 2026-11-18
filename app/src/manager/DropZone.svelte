@@ -5,13 +5,13 @@
   import { onMount } from 'svelte'
   import { getCurrentWebview } from '@tauri-apps/api/webview'
   import { fileName, planDrop } from '../lib/notes/drop'
-  import { dropBlocked, dropOver, dropOwner, handleDrop, onSessionPage } from './drop'
+  import { dropBlocked, dropOver, dropOwner, dropTargetName, handleDrop, onSessionPage } from './drop'
   import Icon from './Icon.svelte'
 
-  // On an open deck or workspace every file is a resource: those are listed instead.
+  // On a workspace's page (or a deck with a workspace to go to) every file is a resource: those are listed instead.
   let resources = $state<string[] | null>(null)
-  /** Whose resources a drop adds to, in words. */
-  let whose = $state('deck')
+  /** The workspace a drop adds to. */
+  let target = $state('this workspace')
   // On a session's page the file is its transcript (ADR 0041).
   let transcript = $state<string | null>(null)
 
@@ -21,7 +21,7 @@
         const owner = dropOwner()
         transcript = onSessionPage() ? (e.payload.paths[0] ?? null) : null
         resources = owner && !transcript ? e.payload.paths : null
-        whose = owner && 'workspace' in owner ? 'workspace' : 'deck'
+        target = owner ? dropTargetName(owner) : 'this workspace'
         dropOver.set(planDrop(e.payload.paths))
       }
       else if (e.payload.type === 'leave') dropOver.set(null)
@@ -36,7 +36,7 @@
     const plan = $dropOver
     if (!plan) return ''
     if (transcript) return readable ? 'Drop to add as this session’s transcript' : 'Oversay reads .vtt, .srt and .txt transcripts'
-    if (resources) return resources.length === 1 ? `Drop to add to this ${whose}’s resources` : `Drop to add ${resources.length} files to this ${whose}’s resources`
+    if (resources) return resources.length === 1 ? `Drop to add to ${target}` : `Drop to add ${resources.length} files to ${target}`
     if (blocked) return blocked
     if (plan.notes.length === 0) return 'Nothing here Oversay can add'
     return plan.notes.length === 1 ? 'Drop to add as a deck' : `Drop to add ${plan.notes.length} decks`
@@ -54,7 +54,7 @@
           <div><span class="grow">{fileName(transcript)}</span>{#if readable}<span class="ok">Transcript</span>{:else}<span class="no">Not a transcript</span>{/if}</div>
         </div>
       {:else if resources}
-        <p class="muted">A copy goes into the {whose}’s resources folder. The files stay where they are.</p>
+        <p class="muted">A copy goes into {target}’s resources folder. The files stay where they are.</p>
         <div class="files">
           {#each resources as path (path)}<div><span class="grow">{fileName(path)}</span><span class="ok">Resource</span></div>{/each}
         </div>
