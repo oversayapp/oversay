@@ -5,8 +5,12 @@
 import { invoke } from '@tauri-apps/api/core'
 import { get } from 'svelte/store'
 import { logAction } from '../log'
-import { markExampleDecksInstalled, markKnown, settings, settingsReadable } from '../settings/store'
-import { loadDecks } from './store'
+import { markExampleDecksInstalled, markKnown, setPin, settings, settingsReadable } from '../settings/store'
+import { loadWorkspaces } from '../workspaces/store'
+import { decks, loadDecks } from './store'
+
+/** The id the example interview deck carries (examples/Interview talking points.md): pinned on the first run, so Pinned has one. */
+export const EXAMPLE_PINNED_ID = 'd_exinterv'
 
 /** The example decks Decks doesn't have, by name. */
 export const missingExampleDecks = (): Promise<string[]> => invoke<string[]>('missing_example_decks')
@@ -17,6 +21,8 @@ export async function installExampleDecks(): Promise<string[]> {
   for (const path of made) await markKnown('decks', path)
   logAction('example decks added', String(made.length))
   await loadDecks()
+  // The example workspaces were made with them.
+  await loadWorkspaces()
   return made
 }
 
@@ -28,5 +34,7 @@ export async function installExampleDecksOnFirstRun(): Promise<void> {
   if (get(settings).exampleDecksInstalled) return
   if (!settingsReadable) return logAction('example decks not added', 'settings.json unreadable')
   await installExampleDecks()
+  const pinned = get(decks)?.find((d) => d.id === EXAMPLE_PINNED_ID)
+  if (pinned) await setPin('deck', pinned.path, true, pinned.id)
   await markExampleDecksInstalled()
 }

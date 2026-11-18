@@ -324,7 +324,7 @@
   <section id="example-decks">
     <h2 tabindex="-1">Example deck</h2>
     <div class="row">
-      <button disabled={missingDecks === null || missingDecks.length === 0} onclick={() => attempt(restoreExampleDecks)}>Restore example deck</button>
+      <button disabled={missingDecks === null || missingDecks.length === 0} onclick={() => attempt(restoreExampleDecks)}>Restore example decks</button>
     </div>
     <p class="muted hint" role="status">
       {#if missingDecks === null}
@@ -332,7 +332,7 @@
       {:else if decksRestored > 0}
         Put it back in Decks.
       {:else if missingDecks.length === 0}
-        “Welcome to Oversay” shows what Oversay can do, card by card; it's in Decks. If you delete it, you can restore it here.
+        Four examples show what Oversay is for: “Welcome to Oversay” (the tour), a conference talk about it, a student's seminar, and an interview. Two workspaces hold some of them. If you delete any, you can restore them here.
       {:else}
         Puts {missingDecks.map((n) => `“${n}”`).join(', ')} back in Decks. Your own decks aren't touched.
       {/if}
