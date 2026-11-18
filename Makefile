@@ -8,6 +8,7 @@ PORT ?= 1420
 # matching the shell that runs it.
 HERE := [/]$(patsubst /%,%,$(CURDIR))
 
+# A new target that needs gh or claude rather than the build libraries goes in HOST_ONLY below.
 .PHONY: help setup doctor dev dev-fg logs stop crash check pr-checks hooks skills skill-try shots fetch build verify-mac clean clean-rust
 
 help: ## List targets
@@ -15,6 +16,32 @@ help: ## List targets
 
 setup: ## One-command dev setup: mise, Rust, Node, cmake, gitleaks, npm ci, git hooks; DRY=1 shows the plan
 	@scripts/setup.sh $(if $(DRY),--dry-run)
+
+# On SteamOS the build libraries live in the oversay-dev distrobox (scripts/linux.sh). From the
+# Deck's own terminal (or with OVERSAY_DEVBOX=1), targets that build or run the app run again
+# inside it once make setup has made it; HOST_ONLY ones stay on the host, where gh and claude are.
+OVERSAY_BOX :=
+FORWARD_GOALS :=
+ifeq ($(shell uname -s),Linux)
+# make setup installs mise in ~/.local/bin, which may not be on PATH.
+export PATH := $(HOME)/.local/bin:$(PATH)
+# Only asked when a goal could be forwarded; help, setup and a bare make never are.
+ifndef OVERSAY_HOST
+ifneq ($(filter-out help setup,$(MAKECMDGOALS)),)
+OVERSAY_BOX := $(shell scripts/linux.sh devbox-to-enter 2> /dev/null)
+endif
+endif
+endif
+
+ifneq ($(OVERSAY_BOX),)
+HOST_ONLY := crash fetch build skill-try verify-mac clean
+FORWARD_GOALS := $(filter-out help setup,$(MAKECMDGOALS))
+endif
+ifneq ($(FORWARD_GOALS),)
+# MAKEFLAGS is cleared for the box: the jobserver's file descriptors don't exist in it.
+$(FORWARD_GOALS):
+	@$(if $(filter $(HOST_ONLY),$@),$(MAKE) OVERSAY_HOST=1 $@,MAKEFLAGS= distrobox enter $(OVERSAY_BOX) -- make -C '$(CURDIR)' $@ $(MAKEOVERRIDES))
+else
 
 doctor: ## Read-only check that every tool development needs is installed; exits 1 if one is missing
 	@scripts/doctor.sh
@@ -103,3 +130,5 @@ clean-rust: ## Remove this checkout's Rust build output (app/src-tauri/target); 
 	@if pgrep -f '$(HERE)/app/node_modules/.bin/tauri' > /dev/null; then \
 	  echo "The dev app is running for this checkout. make stop first."; exit 1; fi
 	cd app/src-tauri && $(CARGO) clean
+
+endif

@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
-# make doctor: read-only check of the tools development needs. Installs nothing and changes
-# nothing. Exits 1 when something is missing. `make setup` runs this last.
+# make doctor: read-only check of the tools development needs, and on Linux of the build
+# libraries. Installs nothing and changes nothing. Exits 1 when something is missing, naming the
+# command that fixes it. `make setup` runs this last. On SteamOS it runs inside the oversay-dev
+# box once that exists (scripts/linux.sh).
 set -u
 cd "$(dirname "$0")/.." || exit 1
 
@@ -38,15 +40,26 @@ check() { # name, hint, command...
 	report "$name" "$v" "$hint"
 }
 
+os=$(uname -s)
+mise_hint="run: make setup (installs it with Homebrew)"
+if [ "$os" = "Linux" ]; then
+	# shellcheck source=linux.sh
+	. scripts/linux.sh
+	if linux_devbox_route && linux_devbox_exists; then
+		exec distrobox enter "$DEVBOX" -- "$PWD/scripts/doctor.sh"
+	fi
+	mise_hint="run: make setup (installs it in ~/.local/bin)"
+fi
+
 echo "Oversay development tools:"
-if [ "$(uname -s)" = "Darwin" ]; then
+if [ "$os" = "Darwin" ]; then
 	if xcode-select -p > /dev/null 2>&1; then
 		report "xcode-clt" "$(xcode-select -p)" ""
 	else
 		report "xcode-clt" "" "run: xcode-select --install"
 	fi
 fi
-if have mise; then report mise "$(mise --version | head -n 1)" ""; else report mise "" "run: make setup (installs it with Homebrew)"; fi
+if have mise; then report mise "$(mise --version | head -n 1)" ""; else report mise "" "$mise_hint"; fi
 check rust "run: make setup" rustc --version
 check cargo "run: make setup" cargo --version
 check cmake "run: make setup" cmake --version
@@ -64,6 +77,19 @@ case "$hooks" in
 esac
 
 if [ -d app/node_modules ]; then report app-deps "app/node_modules present" ""; else report app-deps "" "run: cd app && npm ci (make setup does it)"; fi
+
+if [ "$os" = "Linux" ]; then
+	echo
+	if linux_devbox_route; then
+		# Only reached before the box exists: make setup creates it.
+		echo "Build libraries (they live in the $DEVBOX distrobox):"
+		if have distrobox; then report distrobox "$(distrobox version 2> /dev/null | head -n 1)" ""; else report distrobox "" "SteamOS 3.5 and later ship it; elsewhere install distrobox and podman"; fi
+		report devbox "" "run: make setup (creates the $DEVBOX box)"
+	else
+		echo "Build libraries${CONTAINER_ID:+ (in the $CONTAINER_ID box)}:"
+		linux_check_libs || missing=1
+	fi
+fi
 
 if [ "$missing" -ne 0 ]; then
 	echo

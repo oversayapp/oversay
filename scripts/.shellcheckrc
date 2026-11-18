@@ -1,0 +1,3 @@
+# setup.sh and doctor.sh source linux.sh: follow it, from this folder.
+external-sources=true
+source-path=SCRIPTDIR
