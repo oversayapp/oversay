@@ -5,7 +5,8 @@
 // Usage:
 //   node scripts/version.mjs 0.2.0      set the version in package.json, package-lock.json,
 //                                       Cargo.toml and Cargo.lock, then run make skills
-//   node scripts/version.mjs --check    fail when Cargo.toml differs from package.json (make check)
+//   node scripts/version.mjs --check    fail when Cargo.toml, the skill, or the plugin and marketplace made
+//                                       from it differ from package.json (make check)
 //   node scripts/version.mjs --tag v0.2.0
 //                                       fail unless the tag is v + package.json's version (release job)
 
@@ -13,6 +14,7 @@ import { execFileSync } from 'node:child_process'
 import { readFileSync, writeFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { checkPackaging } from './skill-package.mjs'
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..')
 const PACKAGE = 'app/package.json'
@@ -74,11 +76,15 @@ function main([arg, value]) {
     if (bad) fail(`${PACKAGE}: ${bad}`)
     const got = cargoVersion(read(CARGO))
     if (got !== want) fail(`${CARGO} has ${got}, ${PACKAGE} has ${want}: run node scripts/version.mjs ${want}`)
+    const drift = checkPackaging(root)
+    if (drift.length) fail(drift.join('\n'))
     console.log(`version: ok (${want})`)
   } else if (arg === '--tag') {
     const bad = checkTag(value ?? '', packageVersion())
     if (bad) fail(bad)
-    console.log(`version: ${value} matches package.json`)
+    const drift = checkPackaging(root)
+    if (drift.length) fail(drift.join('\n'))
+    console.log(`version: ${value} matches package.json, the skill and everything made from it`)
   } else if (arg && !arg.startsWith('-')) {
     const bad = validVersion(arg)
     if (bad) fail(bad)

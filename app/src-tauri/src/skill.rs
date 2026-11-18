@@ -364,12 +364,12 @@ fn zip_files(
     Ok(match kind {
         ZipKind::Skill => skill_files(skill, &format!("{SKILL_NAME}/"))?,
         ZipKind::ClaudePlugin => {
-            let manifest = serde_json::json!({
-                "name": SKILL_NAME,
-                "version": version,
-                "description": "Make, add to and find Oversay quick notes, and open or show them in Oversay.",
-                "author": { "name": "Oversay" },
-            });
+            // The same file scripts/skill-package.mjs makes the repository's plugin from, so the
+            // two manifests differ only in what this adds: the version.
+            let mut manifest: serde_json::Value =
+                serde_json::from_str(include_str!("../../../skills/plugin-manifest.json"))
+                    .unwrap_or_default();
+            manifest["version"] = serde_json::Value::from(version);
             let mut files = vec![
                 (
                     ".claude-plugin/plugin.json".to_string(),
@@ -579,6 +579,13 @@ mod tests {
                 .unwrap();
         assert_eq!(manifest["name"], "oversay");
         assert_eq!(manifest["version"], "0.2.0");
+        // Everything else is the shared manifest the repository's plugin is made from.
+        let shared: serde_json::Value = serde_json::from_str(
+            &fs::read_to_string(source().join("../plugin-manifest.json")).unwrap(),
+        )
+        .unwrap();
+        assert_eq!(manifest["description"], shared["description"]);
+        assert_eq!(manifest["author"], shared["author"]);
         // A real archive that reads back with the same files.
         let zip = dir.join("out.zip");
         write_zip(
