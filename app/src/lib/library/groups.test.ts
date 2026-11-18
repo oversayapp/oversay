@@ -8,7 +8,7 @@ const DAY = 86400000
 const iso = (daysAgo: number) => new Date(NOW - daysAgo * DAY).toISOString()
 
 const deck = (n: string, daysAgo = 30, extra: Partial<DeckEntry> = {}): DeckEntry => ({
-  path: `/d/${n}/deck.md`, id: `d_${n}`, name: n, modifiedMs: NOW - daysAgo * DAY, audience: '', project: '', tags: [], cards: 3, seconds: 0, timingOff: false, bar: [], ...extra,
+  path: `/d/${n}/deck.md`, id: `d_${n}`, name: n, modifiedMs: NOW - daysAgo * DAY, audience: '', project: '', tags: [], cards: 3, seconds: 0, timingOff: false, recordOnStart: 'global', bar: [], ...extra,
 })
 const space = (id: string, decks: string[] = []): Workspace => ({ id, name: id, folder: id, tags: [], decks, when: '', where: '', notes: '', problem: null })
 

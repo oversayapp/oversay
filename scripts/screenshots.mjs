@@ -260,6 +260,16 @@ const fakeBridge = `(() => {
       if (cmd === 'remove_skill') { skills[args.target === 'gemini-cli' ? 'codex' : args.target] = null; return null; }
       if (cmd === 'list_quick_files') return Object.entries(quick[args.kind]).map(([name, f]) => ({ path: qdir(args.kind) + name + qext[args.kind], name, modifiedMs: f.at }));
       if (cmd === 'read_quick_file') return quick[args.kind][qname(args.kind, args.path)].text;
+      // ?library=many: hundreds of runs, a deck in every fourth with 40 of them (Sessions' busy state, ADR 0048).
+      if (cmd === 'read_deck_sessions' && /^Deck number \\d+$/.test(qname('decks', args.path))) {
+        const i = Number(qname('decks', args.path).slice(12));
+        const runs = i % 4 === 1 ? 40 : 3;
+        return JSON.stringify({ version: 1, sessions: Array.from({ length: runs }, (_, k) => {
+          const at = Date.now() - ((runs - k) * (i % 4 === 1 ? 7 : 40) + (i % 5)) * 86400e3 - (i % 9) * 3600e3;
+          const over = ((k * 37 + i * 11) % 90) - 30;
+          return { startedAt: new Date(at).toISOString(), endedAt: new Date(at + 540e3).toISOString(), cards: [{ name: 'Card 1', kind: 'intro', plannedSeconds: 120, seconds: 120 }, { name: 'Card 2', kind: 'topic', plannedSeconds: 180, seconds: 180 + over }, { name: 'Card 3', kind: 'outro', plannedSeconds: 240, seconds: 240 }], ...(k % 5 === 2 ? { note: 'Card 2 needs a tighter opening.' } : {}) };
+        }) });
+      }
       // A deck's runs: the stand-up has two, the latest a little over.
       if (cmd === 'read_deck_sessions') return qname('decks', args.path) === 'Stand-up 23 Oct' ? JSON.stringify({ version: 1, sessions: [
         { startedAt: '2026-10-22T09:30:00.000Z', endedAt: '2026-10-22T09:43:10.000Z', cards: [{ name: 'Intro', kind: 'intro', plannedSeconds: 60, seconds: 55 }, { name: 'Atlas', kind: 'topic', plannedSeconds: 180, seconds: 170 }, { name: 'Beacon', kind: 'demo', plannedSeconds: 240, seconds: 260 }, { name: 'Comet', kind: 'topic', plannedSeconds: 300, seconds: 305 }] },
@@ -423,22 +433,32 @@ const SCREENS = [
   ['ai-self-updated', `(async () => { const wait = () => new Promise((r) => setTimeout(r, 200)); window.__skillsUpdated(['claude-code', 'codex']); [...document.querySelectorAll('nav.rail button')].find((b) => b.textContent.includes('Home')).click(); await wait(); [...document.querySelectorAll('nav.rail button')].find((b) => b.textContent.includes('AI')).click(); await wait() })()`],
   ['deck-old-skill', `(async () => { const wait = () => new Promise((r) => setTimeout(r, 250)); window.__skillsUpdated([]); window.__outside('decks', 'Design crit', '---\\nwhen: Thursday\\ntimeline: sparkline\\nmade-with: Oversay skill 0.0.9\\n---\\n\\n## Flows [10 mins]\\n- Checkout\\n### Open questions\\n- Who signs off\\n'); await wait(); [...document.querySelectorAll('nav.rail button')].find((b) => b.textContent.includes('Library')).click(); await wait(); [...document.querySelectorAll('main .library .side .nav')].find((b) => b.textContent.includes('All decks')).click(); await wait(); [...document.querySelectorAll('main button.what')].find((b) => b.textContent.includes('Design crit')).click(); await wait() })()`],
   ['deck-skill-check', `(async () => { const wait = () => new Promise((r) => setTimeout(r, 250)); [...document.querySelectorAll('main button')].find((b) => b.textContent.includes('What and where'))?.click(); await wait() })()`],
-  // Sessions (ADR 0041): every deck's runs by day; filtered to a deck; found by the search bar.
+  // Sessions (ADR 0041, 0048): one list of every run with tabs and chips; a deck's own head; a workspace; a saved view;
+  // a session and the way back; found by the search bar. Steps follow on from one another.
   ['sessions', `(async () => { [...document.querySelectorAll('nav.rail button')].find((b) => b.textContent.includes('Sessions')).click(); await new Promise((r) => setTimeout(r, 300)) })()`],
-  ['sessions-filter', `(async () => { const wait = () => new Promise((r) => setTimeout(r, 200)); document.querySelector('main .ftoggle').click(); await wait(); [...document.querySelectorAll('main .fpanel .fchip')].find((b) => b.textContent.trim() === 'Atlas launch review').click(); await wait() })()`],
-  ['sessions-filtered', `(async () => { document.querySelector('main .ftoggle').click(); await new Promise((r) => setTimeout(r, 200)) })()`],
-  ['sessions-search', `(async () => { const wait = () => new Promise((r) => setTimeout(r, 200)); [...document.querySelectorAll('main button')].find((b) => b.textContent.trim() === 'Clear').click(); await wait(); const i = document.querySelector('input[aria-label="Search Oversay"]'); i.focus(); i.dispatchEvent(new FocusEvent('focus')); i.value = 'atlas'; i.dispatchEvent(new Event('input', { bubbles: true })); await wait() })()`],
+  ['sessions-review', `(async () => { const wait = (ms = 200) => new Promise((r) => setTimeout(r, ms)); const click = (sel, text) => [...document.querySelectorAll(sel)].find((b) => b.textContent.trim().startsWith(text)).click(); click('main [role=tab]', 'Needs a review'); await wait() })()`],
+  ['sessions-deck-menu', `(async () => { const wait = (ms = 200) => new Promise((r) => setTimeout(r, ms)); const click = (sel, text) => [...document.querySelectorAll(sel)].find((b) => b.textContent.trim().startsWith(text)).click(); click('main [role=tab]', 'All'); await wait(); click('main .fbtn', 'Deck'); await wait() })()`],
+  ['sessions-deck', `(async () => { const wait = (ms = 200) => new Promise((r) => setTimeout(r, ms)); const click = (sel, text) => [...document.querySelectorAll(sel)].find((b) => b.textContent.trim().startsWith(text)).click(); click('main .pop label', 'Stand-up 23 Oct'); await wait(); document.body.click(); await wait() })()`],
+  ['sessions-deck-rec-on', `(async () => { const wait = (ms = 200) => new Promise((r) => setTimeout(r, ms)); const click = (sel, text) => [...document.querySelectorAll(sel)].find((b) => b.textContent.trim().startsWith(text)).click(); click('main [role=radio]', 'On'); await wait(400) })()`],
+  ['sessions-workspace', `(async () => { const wait = (ms = 200) => new Promise((r) => setTimeout(r, ms)); const click = (sel, text) => [...document.querySelectorAll(sel)].find((b) => b.textContent.trim().startsWith(text)).click(); click('main .link', 'Clear all'); await wait(); click('main .fbtn', 'Workspace'); await wait(); click('main .pop label', 'Svelte 5 basics'); await wait(); document.body.click(); await wait() })()`],
+  ['sessions-save-view', `(async () => { const wait = (ms = 200) => new Promise((r) => setTimeout(r, ms)); const click = (sel, text) => [...document.querySelectorAll(sel)].find((b) => b.textContent.trim().startsWith(text)).click(); click('main .add', '+ Save this view'); await wait(); click('main .naming button', 'Save view'); await wait(400) })()`],
+  ['sessions-group-deck', `(async () => { const wait = (ms = 200) => new Promise((r) => setTimeout(r, ms)); const click = (sel, text) => [...document.querySelectorAll(sel)].find((b) => b.textContent.trim().startsWith(text)).click(); click('main .link', 'Clear all'); await wait(); click('main .fbtn', 'Recent first'); await wait(); click('main .pop label', 'Deck'); await wait() })()`],
+  ['sessions-session', `(async () => { const wait = (ms = 200) => new Promise((r) => setTimeout(r, ms)); const click = (sel, text) => [...document.querySelectorAll(sel)].find((b) => b.textContent.trim().startsWith(text)).click(); document.querySelector('main ul.runs button').click(); await wait(400) })()`],
+  ['sessions-back', `(async () => { const wait = (ms = 200) => new Promise((r) => setTimeout(r, ms)); const click = (sel, text) => [...document.querySelectorAll(sel)].find((b) => b.textContent.trim().startsWith(text)).click(); document.querySelector('.back, button[aria-label^="Back"]')?.click(); await wait(400) })()`],
+  ['sessions-search', `(async () => { const wait = (ms = 200) => new Promise((r) => setTimeout(r, ms)); const click = (sel, text) => [...document.querySelectorAll(sel)].find((b) => b.textContent.trim().startsWith(text)).click(); const i = document.querySelector('input[aria-label="Search Oversay"]'); i.focus(); i.dispatchEvent(new FocusEvent('focus')); i.value = 'svelte'; i.dispatchEvent(new Event('input', { bubbles: true })); await wait() })()`],
   ['sessions-search-done', `(async () => { const i = document.querySelector('input[aria-label="Search Oversay"]'); i.value = ''; i.dispatchEvent(new Event('input', { bubbles: true })); i.blur(); i.dispatchEvent(new FocusEvent('blur')); await new Promise((r) => setTimeout(r, 150)) })()`],
-  ['session', `(async () => { document.querySelector('main .runs button.open').click(); await new Promise((r) => setTimeout(r, 300)) })()`],
+  // Back to the plain list, as a person starts, for the session pages that follow.
+  ['sessions-reset', `(async () => { const wait = () => new Promise((r) => setTimeout(r, 200)); const click = (sel, text) => [...document.querySelectorAll(sel)].find((b) => b.textContent.trim().startsWith(text)); click('main .link', 'Clear all')?.click(); await wait(); click('main .fbtn', 'Deck')?.click(); await wait(); click('main .pop label', 'Recent first')?.click(); await wait() })()`],
+  ['session', `(async () => { document.querySelector('main .runs button.row').click(); await new Promise((r) => setTimeout(r, 300)) })()`],
   ['session-drop-over', `(async () => { window.__drag('enter', ['/Users/demo/Downloads/Weekly stand-up.vtt']); await new Promise((r) => setTimeout(r, 200)) })()`],
   ['session-transcript-check', `(async () => { window.__drag('drop', ['/Users/demo/Downloads/Weekly stand-up.vtt']); await new Promise((r) => setTimeout(r, 400)); document.querySelector('main .ask').scrollIntoView() })()`],
   ['session-transcript', `(async () => { [...document.querySelectorAll('main button')].find((b) => b.textContent.trim() === 'Save transcript').click(); await new Promise((r) => setTimeout(r, 400)); document.querySelector('main .tcard')?.scrollIntoView() })()`],
   ['session-review-ask', `(async () => { [...document.querySelectorAll('main button')].find((b) => b.textContent.includes('Review with your AI')).click(); await new Promise((r) => setTimeout(r, 300)); document.querySelector('main .copied')?.scrollIntoView() })()`],
-  ['session-review', `(async () => { window.__review(); document.querySelector('.topbar button.back').click(); await new Promise((r) => setTimeout(r, 300)); document.querySelector('main .runs button.open').click(); await new Promise((r) => setTimeout(r, 500)); [...document.querySelectorAll('main h2')].find((h) => h.textContent.trim() === 'Review')?.scrollIntoView() })()`],
+  ['session-review', `(async () => { window.__review(); document.querySelector('.topbar button.back').click(); await new Promise((r) => setTimeout(r, 300)); document.querySelector('main .runs button.row').click(); await new Promise((r) => setTimeout(r, 500)); [...document.querySelectorAll('main h2')].find((h) => h.textContent.trim() === 'Review')?.scrollIntoView() })()`],
   ['session-menu', `(async () => { document.querySelector('main').scrollTop = 0; await new Promise((r) => setTimeout(r, 100)) })()`],
   ['session-menu-open', `(async () => { document.querySelector('main button[aria-label="More actions for this session"]').click(); await new Promise((r) => setTimeout(r, 200)) })()`],
   ['session-delete', `(async () => { [...document.querySelectorAll('main [role=menuitem]')].find((b) => b.textContent.includes('Delete session')).click(); await new Promise((r) => setTimeout(r, 200)) })()`],
-  ['session-recording', `(async () => { const wait = () => new Promise((r) => setTimeout(r, 300)); [...document.querySelectorAll('main button')].find((b) => b.textContent.trim() === 'Cancel')?.click(); document.querySelector('.topbar button.back').click(); await wait(); [...document.querySelectorAll('main .runs button.open')].find((b) => b.textContent.includes('Atlas')).click(); await wait(); await wait(); document.querySelector('main .ask')?.scrollIntoView() })()`],
+  ['session-recording', `(async () => { const wait = () => new Promise((r) => setTimeout(r, 300)); [...document.querySelectorAll('main button')].find((b) => b.textContent.trim() === 'Cancel')?.click(); document.querySelector('.topbar button.back').click(); await wait(); [...document.querySelectorAll('main .runs button.row')].find((b) => b.textContent.includes('Atlas')).click(); await wait(); await wait(); document.querySelector('main .ask')?.scrollIntoView() })()`],
   ['session-back', `(async () => { document.querySelector('.topbar button.back').click(); await new Promise((r) => setTimeout(r, 300)) })()`],
   ['templates', `[...document.querySelectorAll('nav.rail button')].find((b) => b.textContent.includes('Templates')).click()`],
   ['templates-meetings', `[...document.querySelectorAll('main .rowbtn')].find((b) => b.textContent.includes('Meetings')).click()`],
@@ -572,6 +592,19 @@ for (const variant of ['empty', 'one', 'many']) {
   await shoot(`home-${variant}`)
   await run(`(async () => { [...document.querySelectorAll('nav.rail button')].find((b) => b.textContent.includes('Library')).click(); await new Promise((r) => setTimeout(r, 400)) })()`)
   await shoot(`library-${variant}`)
+  // Sessions with nothing run, a few runs, and hundreds (ADR 0048): month grouping, Show more, one deck with 40 runs.
+  await run(`(async () => { [...document.querySelectorAll('nav.rail button')].find((b) => b.textContent.includes('Sessions')).click(); await new Promise((r) => setTimeout(r, 500)) })()`)
+  await shoot(`sessions-${variant}`)
+  if (variant === 'many') {
+    await run(`(async () => { const wait = () => new Promise((r) => setTimeout(r, 250)); const click = (sel, text) => [...document.querySelectorAll(sel)].find((b) => b.textContent.trim().startsWith(text)).click(); click('main .fbtn', 'Recent first'); await wait(); click('main .pop label', 'Month'); await wait(); document.body.click() })()`)
+    await shoot('sessions-many-month')
+    await run(`(async () => { const wait = () => new Promise((r) => setTimeout(r, 250)); document.querySelector('main button.more').click(); await wait() })()`)
+    await shoot('sessions-many-more')
+    await run(`(async () => { const wait = () => new Promise((r) => setTimeout(r, 250)); const click = (sel, text) => [...document.querySelectorAll(sel)].find((b) => b.textContent.trim().startsWith(text)).click(); click('main .fbtn', 'Deck'); await wait(); click('main .pop label', 'Deck number 1'); await wait(); document.body.click(); await wait() })()`)
+    await shoot('sessions-many-deck')
+    await run(`(async () => { const wait = () => new Promise((r) => setTimeout(r, 250)); const click = (sel, text) => [...document.querySelectorAll(sel)].find((b) => b.textContent.trim().startsWith(text)).click(); click('main .link', 'Clear all'); await wait(); click('main .fbtn', 'Deck'); await wait(); const i = document.querySelector('main .pop input'); i.value = 'number 6'; i.dispatchEvent(new Event('input', { bubbles: true })); await wait() })()`)
+    await shoot('sessions-many-deck-find')
+  }
 }
 
 if (wanted('overlay')) {

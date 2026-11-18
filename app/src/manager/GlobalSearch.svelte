@@ -55,7 +55,15 @@
       .map(({ d, s, ms }) => {
         const when = new Date(ms).toLocaleString('en-GB', { weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })
         const t = runTimes(s)
-        return { kind: 'session' as const, id: `${d.path}#${s.startedAt}`, label: d.name, terms: [when], sub: [when, difference(t.planned, t.timed).text].filter(Boolean).join(' · ') }
+        // Found by its deck, the deck's workspaces and its note (spec §11).
+        const names = workspacesWith($workspaces ?? [], d.id).map((w) => w.name)
+        return {
+          kind: 'session' as const,
+          id: `${d.path}#${s.startedAt}`,
+          label: d.name,
+          terms: [when, ...names, s.note?.trim() ?? ''].filter(Boolean),
+          sub: [when, difference(t.planned, t.timed).text].filter(Boolean).join(' · '),
+        }
       }),
     ...visibleTemplates($library).map((t) => ({ kind: 'template' as const, id: t.id, label: t.name, terms: [t.description], sub: t.description })),
     ...visibleSections($supported).map((s) => ({ kind: 'setting' as const, id: s.id, label: s.label, terms: ['Settings'], sub: 'Settings' })),
