@@ -538,6 +538,32 @@ fn update_in(root: &Path, id: &str, change: WorkspaceChange) -> Result<Workspace
     Ok(read_workspace(&dir))
 }
 
+/// Makes a workspace with this name, tag, description and decks, unless one has the name already;
+/// whether it was made. The example workspaces use it (example_decks.rs).
+pub(crate) fn make_unless_named(
+    root: &Path,
+    name: &str,
+    tag: &str,
+    notes: &str,
+    decks: &[&str],
+) -> Result<bool, String> {
+    let _one = one_at_a_time();
+    if list_in(root).iter().any(|w| w.name == name) {
+        return Ok(false);
+    }
+    create_in(
+        root,
+        WorkspaceChange {
+            name: Some(name.into()),
+            tags: Some(vec![tag.into()]),
+            decks: Some(decks.iter().map(|d| d.to_string()).collect()),
+            notes: Some(notes.into()),
+            ..Default::default()
+        },
+    )?;
+    Ok(true)
+}
+
 // ---- commands
 
 /// Every workspace, after giving any new or copied one its id.
