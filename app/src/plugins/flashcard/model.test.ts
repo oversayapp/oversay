@@ -50,6 +50,6 @@ describe('flashcard model', () => {
   })
 
   it('reads the deck options sent with the talk, defaults for the rest', () => {
-    expect(flashcardModel(session('ready')).options).toEqual({ timing: true, autoAdvance: true, colour: 'one', hide: [] })
+    expect(flashcardModel(session('ready')).options).toEqual({ timing: true, autoAdvance: true, colour: 'one', hide: [], recordOnStart: 'global' })
   })
 })

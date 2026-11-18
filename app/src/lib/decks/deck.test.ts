@@ -32,12 +32,12 @@ made-with: Oversay skill 0.1.0
 
 describe('deck options', () => {
   it('reads the front matter', () => {
-    expect(deckOptions(parseNoteDoc(STANDUP))).toEqual({ timing: true, autoAdvance: false, colour: 'one', hide: [] })
+    expect(deckOptions(parseNoteDoc(STANDUP))).toEqual({ timing: true, autoAdvance: false, colour: 'one', hide: [], recordOnStart: 'global' })
   })
 
   it('defaults to auto-advance on and colour by kind', () => {
     expect(deckOptions(parseNoteDoc('## Only [1m]\n- a\n'))).toEqual(DECK_DEFAULTS)
-    expect(DECK_DEFAULTS).toEqual({ timing: true, autoAdvance: true, colour: 'kinds', hide: [] })
+    expect(DECK_DEFAULTS).toEqual({ timing: true, autoAdvance: true, colour: 'kinds', hide: [], recordOnStart: 'global' })
   })
 
   it('ignores values it does not know, and reads them in any case', () => {
@@ -100,7 +100,7 @@ describe('setting deck options', () => {
     let doc = parseNoteDoc('# Stand-up\n\n## Intro [1m]\n- Hello\n')
     doc = setDeckOption(doc, 'autoAdvance', false)
     doc = setDeckOption(doc, 'colour', 'one')
-    expect(deckOptions(doc)).toEqual({ timing: true, autoAdvance: false, colour: 'one', hide: [] })
+    expect(deckOptions(doc)).toEqual({ timing: true, autoAdvance: false, colour: 'one', hide: [], recordOnStart: 'global' })
     expect(writeNoteDoc(doc)).toBe('---\nauto-advance: off\ncolour: one\n---\n# Stand-up\n\n## Intro [1m]\n- Hello\n')
   })
 
@@ -177,5 +177,25 @@ describe('a deck’s id and title (ADR 0037)', () => {
     expect(deckId(parseNoteDoc(copy))).not.toBe('d_k3x9a2bq')
     expect(deckTitle(parseNoteDoc(copy))).toBe('Old (outside)')
     expect(deckAudience(parseNoteDoc(copy))).toBe('Team')
+  })
+})
+
+describe('record on start (ADR 0047)', () => {
+  it('follows the global setting until the deck says on or off', () => {
+    expect(deckOptions(parseNoteDoc('## A\n')).recordOnStart).toBe('global')
+    expect(deckOptions(parseNoteDoc('---\nrecord-on-start: on\n---\n## A\n')).recordOnStart).toBe('on')
+    expect(deckOptions(parseNoteDoc('---\nrecord-on-start: OFF\n---\n## A\n')).recordOnStart).toBe('off')
+    expect(deckOptions(parseNoteDoc('---\nrecord-on-start: maybe\n---\n## A\n')).recordOnStart).toBe('global')
+  })
+
+  it('never reads the retired record key', () => {
+    expect(deckOptions(parseNoteDoc('---\nrecord: on\n---\n## A\n')).recordOnStart).toBe('global')
+  })
+
+  it('is written to deck.md, and going back to global removes the key and keeps every other line', () => {
+    let doc = setDeckOption(parseNoteDoc('---\nrecord: on\n---\n## A\n'), 'recordOnStart', 'off')
+    expect(writeNoteDoc(doc)).toBe('---\nrecord: on\nrecord-on-start: off\n---\n## A\n')
+    doc = setDeckOption(doc, 'recordOnStart', 'global')
+    expect(writeNoteDoc(doc)).toBe('---\nrecord: on\n---\n## A\n')
   })
 })

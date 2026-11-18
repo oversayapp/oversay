@@ -41,7 +41,7 @@ describe('deck lint messages', () => {
   it('name the deck keys, and the values an option takes', () => {
     const [key] = lintNote('---\nwhen: today\n---\n## A [1m]\n- b\n', true)
     expect(key.message).toBe(
-      'Oversay doesn’t use `when`. The keys are `id`, `title`, `audience`, `with`, `project`, `tags`, `timing`, `auto-advance`, `colour`, `hide`, `made-with`.',
+      'Oversay doesn’t use `when`. The keys are `id`, `title`, `audience`, `with`, `project`, `tags`, `timing`, `auto-advance`, `colour`, `hide`, `record-on-start`, `made-with`.',
     )
     const [value] = lintNote('---\ncolour: rainbow\n---\n## A [1m]\n- b\n', true)
     expect(value.message).toBe('`colour: rainbow` isn’t one Oversay reads, so it uses the default. Write one of `kinds`, `one`.')
@@ -49,6 +49,8 @@ describe('deck lint messages', () => {
     expect(lintNote('---\ntimeline: sparkline\n---\n## A [1m]\n- b\n', true)).toEqual([])
     expect(lintNote('---\ndeck-bar: middle\n---\n## A [1m]\n- b\n', true)).toEqual([])
     expect(lintNote('---\nrecord: on\n---\n## A [1m]\n- b\n', true)).toEqual([])
+    expect(lintNote('---\nrecord-on-start: on\n---\n## A [1m]\n- b\n', true)).toEqual([])
+    expect(lintNote('---\nrecord-on-start: maybe\n---\n## A [1m]\n- b\n', true).map((f) => f.code)).toEqual(['deck-value'])
   })
 })
 
