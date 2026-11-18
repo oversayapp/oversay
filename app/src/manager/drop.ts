@@ -106,7 +106,7 @@ export function handleDrop(paths: readonly string[]): void {
   })
 }
 
-/** Decks › Paste as deck: Markdown on the clipboard becomes a deck (it was Paste as note). */
+/** New deck from clipboard (it was Paste as deck): Markdown on the clipboard becomes a deck (it was Paste as note). */
 export function pasteAsNote(): void {
   attempt(async () => {
     const text = (await readText().catch(() => '')) ?? ''
