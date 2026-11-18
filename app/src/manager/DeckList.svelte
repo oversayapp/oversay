@@ -1,13 +1,14 @@
 <script lang="ts">
-  // Decks (ADR 0036): every deck in
-  // Documents › Oversay › Decks, newest first, with Show; a deck opens in the deck editor.
-  // As the Quick notes and Quick talks lists had: Recent, the last three opened, and
-  // pinned decks first, newest pin first. No favourites: pins are the one way to keep a deck to hand
-  // (John, 23 Oct). Each deck is a card like a favourite talk's, with its cards as a mini timeline.
+  // A list in the Library's main pane (epic 036 (#54)): a group of the left pane, as decks (ADR 0036) and
+  // workspaces (ADR 0040) together for Recent and Pinned, or decks alone, with Show; a deck opens in the
+  // deck editor, a workspace in the Library. Each deck is a card with its cards as a mini timeline.
+  // All decks has the filters, and groups a long list by when it changed.
   import { onMount } from 'svelte'
   import { whenLabel } from '../lib/project/recent-view'
   import { count } from '../lib/words'
-  import { decks, deleteDeck, loadDecks, newDeck, renameDeck, type DeckEntry } from '../lib/decks/store'
+  import { decks, deleteDeck, loadDecks, renameDeck, type DeckEntry } from '../lib/decks/store'
+  import type { LibraryRef } from '../lib/library/groups'
+  import { TAG_COLOUR_CSS, tagColour, withPin as withWorkspacePin } from '../lib/workspaces/navigation'
   import { showDeckOnScreen } from '../lib/decks/show'
   import ConfirmDelete from './ConfirmDelete.svelte'
   import AddedBanner from './AddedBanner.svelte'
@@ -18,15 +19,19 @@
   import MiniPlan from './MiniPlan.svelte'
   import WorkspacePicker from './WorkspacePicker.svelte'
   import { workspaces } from '../lib/workspaces/store'
+  import type { Workspace } from '../lib/workspaces/workspaces'
   import { findWorkspace, workspacesWith } from '../lib/workspaces/workspaces'
-  import { goAi, goDeck, nav } from './route'
+  import { goAi, goDeck, goWorkspace, nav } from './route'
   import { readQuickFile } from '../lib/notes/files'
   import { parseNoteDoc } from '../lib/notes/format'
   import { showBlockedBy } from '../lib/notes/show'
   import { session } from '../lib/session/store'
-  import { isPinned, pinnedFirst, recentOf } from '../lib/settings/quick'
+  import { isPinned } from '../lib/settings/quick'
   import { DATE_RANGES, NO_FILTERS, filterChoices, filterDecks, groupByDate, isFiltered, type DateRange, type DeckFilters } from '../lib/decks/list'
-  import { freshPaths, opened, pins, setPin } from '../lib/settings/store'
+  import { changeWorkspaceNav, freshPaths, pins, setPin, workspaceNav } from '../lib/settings/store'
+  import { logAction } from '../lib/log'
+
+  let { title, refs, sub = '', grouped = false, filterable = false }: { title: string; refs: LibraryRef[]; sub?: string; grouped?: boolean; filterable?: boolean } = $props()
 
   onMount(() => attempt(loadDecks))
 
@@ -52,14 +57,12 @@
   let filterOpen = $state(false)
 
   // Searching is the app's one search bar; this page only filters.
-  const shown = $derived(filterDecks(listed, filters, Date.now()))
-
-  // Recent: the last three opened (not while filtering). Then the pinned decks, newest
-  // pin first, and the rest grouped by when they last changed.
-  const recent = $derived(filtering ? [] : recentOf($opened, 'deck', $decks ?? []))
-  const all = $derived(pinnedFirst(shown, $pins, 'deck'))
-  const pinnedDecks = $derived(all.items.slice(0, all.pinned))
-  const groups = $derived(groupByDate(all.items.slice(all.pinned), Date.now()))
+  /** The decks of the list, narrowed by the filters (on All decks only), with the ids filters need. */
+  const inList = $derived(refs.flatMap((r) => (r.kind === 'deck' ? [r.deck] : [])))
+  const shown = $derived(filterDecks(listed.filter((d) => inList.some((x) => x.path === d.path)), filters, Date.now()))
+  /** What the list shows, in its order: filters hide workspaces, which they don't describe. */
+  const rows = $derived(filtering ? refs.filter((r) => r.kind === 'deck' && shown.some((d) => d.path === r.deck.path)) : refs)
+  const groups = $derived(grouped ? groupByDate(shown, Date.now()) : [])
 
   /** Who it is for and when it changed, under its name; its tags show beside as chips. */
   const about = (d: DeckEntry) => (d.unreadable ? 'Could not be read' : [d.audience && `for ${d.audience}`, whenLabel(new Date(d.modifiedMs).toISOString())].filter(Boolean).join(' · '))
@@ -78,10 +81,6 @@
 
   function show(d: DeckEntry) {
     attempt(async () => showDeckOnScreen(parseNoteDoc(await readQuickFile('decks', d.path)), d.name, d.path))
-  }
-
-  function create() {
-    attempt(async () => goDeck(await newDeck()))
   }
 
   /** ⌘⇧V (Ctrl+Shift+V) on the list: Markdown on the clipboard becomes a deck. Not while typing. */
@@ -213,11 +212,35 @@
 {/snippet}
 
 
+{#snippet spaceRow(w: Workspace)}
+  {@const on = $workspaceNav.pins.some((p) => p.id === w.id)}
+  <button
+    class="pin"
+    class:on
+    title={on ? 'Unpin' : 'Pin to the top'}
+    aria-label="{on ? 'Unpin' : 'Pin'} {w.name}"
+    aria-pressed={on}
+    onclick={() => {
+      logAction(on ? 'unpin workspace' : 'pin workspace', w.name)
+      attempt(() => changeWorkspaceNav((nav) => withWorkspacePin(nav, w.id, !on, new Date().toISOString())))
+    }}><Icon name="pin" size={17} /></button
+  >
+  <button class="what" onclick={() => goWorkspace(w.id)}>
+    <span class="t"><span class="wdot" style="background: {TAG_COLOUR_CSS[tagColour($workspaceNav, w.tags[0] ?? w.name)]}" aria-hidden="true"></span>{w.name} <span class="ws-mark">Workspace</span></span>
+    <span class="sub">
+      <span class="p">{count(w.decks.length, 'deck')}</span>
+      {#each w.tags as tag (tag)}<span class="chip">{tag}</span>{/each}
+    </span>
+  </button>
+  <span class="plan"></span>
+  <div class="acts"><button onclick={() => goWorkspace(w.id)}>Open</button></div>
+{/snippet}
+
 <div class="page">
   <header class="phead">
-    <h1>Decks</h1>
+    <h1>{title}</h1>
     <div class="fwrap">
-      {#if $decks && $decks.length > 0}
+      {#if filterable && $decks && $decks.length > 0}
         <button
           class="ftoggle"
           class:on={filtering}
@@ -273,10 +296,9 @@
     </div>
     <div class="hacts">
       <button title="Make a deck from Markdown you copied (⌘⇧V or Ctrl+Shift+V)" onclick={pasteAsNote}>Paste as deck</button>
-      <button class="primary" onclick={create}><Icon name="plus" size={16} /> New deck</button>
     </div>
   </header>
-  <p class="muted">Cards for a call or a talk: each with points and an optional time, shown one at a time on screen.</p>
+  {#if sub}<p class="muted">{sub}</p>{/if}
   <AddedBanner />
   {#if $decks && filtering}
     <!-- The filters that are on, each with × to take it off. -->
@@ -304,36 +326,31 @@
     </div>
   {/if}
 
-  {#if $decks && $decks.length === 0}
+  {#if $decks && refs.length === 0}
     <div class="empty">
-      <p>No decks yet. A deck is a few cards with points under each, kept in a folder of its own in Documents › Oversay › Decks.</p>
-      <button class="primary" onclick={create}><Icon name="plus" size={16} /> New deck</button>
-      <button onclick={goAi}><Icon name="ai" size={16} /> Ask your AI for one</button>
+      <p>{title === 'All decks' ? 'No decks yet. A deck is a few cards with points under each, kept in a folder of its own in Documents › Oversay › Decks.' : 'Nothing here yet.'}</p>
+      {#if title === 'All decks'}<button onclick={goAi}><Icon name="ai" size={16} /> Ask your AI for one</button>{/if}
     </div>
   {:else if $decks}
-    {#if recent.length > 0}
-      <h3 class="sec">Recent</h3>
+    {#if grouped}
+      {#each groups as g (g.label)}
+        <h3 class="sec">{g.label} <span class="cnt">{g.decks.length}</span></h3>
+        <ul class="decklist">
+          {#each g.decks as d (d.path)}<li class:editing={renaming === d.path || deleting === d.path}>{@render item(d)}</li>{/each}
+        </ul>
+      {/each}
+    {:else}
       <ul class="decklist">
-        {#each recent as d (d.path)}
-          <li class:editing={renaming === d.path || deleting === d.path}>
-            {#if renaming === d.path || deleting === d.path}<p class="muted inline">Below, in its group.</p>{:else}{@render row(d, 'recent')}{/if}
-          </li>
+        {#each rows as r (r.kind === 'deck' ? r.deck.path : r.workspace.id)}
+          {#if r.kind === 'deck'}
+            <li class:editing={renaming === r.deck.path || deleting === r.deck.path}>{@render item(r.deck)}</li>
+          {:else}
+            <li class="space">{@render spaceRow(r.workspace)}</li>
+          {/if}
         {/each}
       </ul>
     {/if}
-    {#if pinnedDecks.length > 0}
-      <h3 class="sec">Pinned</h3>
-      <ul class="decklist">
-        {#each pinnedDecks as d (d.path)}<li class:editing={renaming === d.path || deleting === d.path}>{@render item(d)}</li>{/each}
-      </ul>
-    {/if}
-    {#each groups as g (g.label)}
-      <h3 class="sec">{g.label} <span class="cnt">{g.decks.length}</span></h3>
-      <ul class="decklist">
-        {#each g.decks as d (d.path)}<li class:editing={renaming === d.path || deleting === d.path}>{@render item(d)}</li>{/each}
-      </ul>
-    {/each}
-    {#if shown.length === 0}
+    {#if filtering && shown.length === 0}
       <p class="muted">No decks match these filters.</p>
     {/if}
   {/if}
@@ -343,7 +360,7 @@
   .page {
     max-width: 960px;
     margin: 0 auto;
-    padding: 26px 32px 48px;
+    padding: 22px 28px 48px;
   }
 
   .phead {
@@ -715,6 +732,23 @@
     display: inline-flex;
     align-items: center;
     gap: 6px;
+  }
+
+  .wdot {
+    display: inline-block;
+    width: 10px;
+    height: 10px;
+    border-radius: 3px;
+    margin-right: 8px;
+  }
+
+  .ws-mark {
+    font-size: 10.5px;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: var(--muted);
+    margin-left: 6px;
   }
 
   .num {

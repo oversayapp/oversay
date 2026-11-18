@@ -4,9 +4,9 @@
   // (or Alt+↑/↓) into another order, and taken out with ×; Add decks picks from Decks. Its resources
   // folder is below. A deck it lists that Oversay can't find shows as gone, never as an error.
   import { count } from '../lib/words'
-  import { decks, newDeck, type DeckEntry } from '../lib/decks/store'
+  import { decks, type DeckEntry } from '../lib/decks/store'
   import { showDeckOnScreen } from '../lib/decks/show'
-  import { quickName, readQuickFile } from '../lib/notes/files'
+  import { readQuickFile } from '../lib/notes/files'
   import { parseNoteDoc } from '../lib/notes/format'
   import { showBlockedBy } from '../lib/notes/show'
   import { session } from '../lib/session/store'
@@ -19,9 +19,9 @@
   import Icon from './Icon.svelte'
   import InlineRename from './InlineRename.svelte'
   import MiniPlan from './MiniPlan.svelte'
-  import { goDeck, goWorkspaces } from './route'
-  import { showBack } from './back'
-  import TagPicker from './TagPicker.svelte'
+  import { goDeck, goLibrary } from './route'
+  import { newBlankDeck } from './new'
+    import TagPicker from './TagPicker.svelte'
   import DecksResources from './DecksResources.svelte'
   import { changeWorkspaceNav, workspaceNav } from '../lib/settings/store'
   import { withOpened, withPin } from '../lib/workspaces/navigation'
@@ -35,9 +35,6 @@
     (workspace?.decks ?? []).map((deckId) => ({ id: deckId, deck: ($decks ?? []).find((d) => d.id === deckId) ?? null })),
   )
   const blocked = $derived(showBlockedBy($session))
-
-  // The way back, in the search bar's row (back.ts).
-  $effect(() => showBack({ label: 'Workspaces', go: goWorkspaces, width: 960 }))
 
   // Opening it puts it first in the Workspaces page's Recent. Not worth an error if it can't be written.
   $effect(() => {
@@ -104,15 +101,7 @@
   }
 
   /** New deck here: made in Decks, as every deck is, and added to this workspace. */
-  function createHere() {
-    attempt(async () => {
-      const path = await newDeck()
-      const made = ($decks ?? []).find((d) => d.path === path)
-      if (!made?.id) throw new Error(`${quickName(path)} was made, but has no id yet to add it here; add it in a moment`)
-      await addDeckToWorkspace(id, made.id)
-      goDeck(path)
-    })
-  }
+  const createHere = () => attempt(() => newBlankDeck(id))
 
   // Add decks: the decks not in this workspace, narrowed by what is typed.
   let adding = $state(false)
@@ -176,7 +165,7 @@
             deleting = false
             attempt(async () => {
               await deleteWorkspace(id)
-              goWorkspaces()
+              goLibrary()
             })
           }}
           oncancel={() => (deleting = false)}>Delete “{workspace.name}”? Its decks stay in Decks. It moves to the Trash, with its files.</ConfirmDelete

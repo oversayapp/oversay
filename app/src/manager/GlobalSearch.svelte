@@ -15,14 +15,13 @@
   import { supported } from '../lib/updates/store'
   import { back } from './back'
   import type { IconName } from './icons'
-  import { goAi, goDeck, goDecks, goHome, goSession, goSessions, goSettings, goTemplates, goWorkspace, goWorkspaces } from './route'
+  import { goAi, goDeck, goHome, goLibrary, goSession, goSessions, goSettings, goTemplates, goWorkspace } from './route'
   import { workspaces } from '../lib/workspaces/store'
   import { dateLabel, workspacesWith } from '../lib/workspaces/workspaces'
 
   const PAGES: Record<string, { label: string; go: () => void }> = {
     home: { label: 'Home', go: goHome },
-    decks: { label: 'Decks', go: goDecks },
-    workspaces: { label: 'Workspaces', go: goWorkspaces },
+    library: { label: 'Library', go: () => goLibrary() },
     templates: { label: 'Templates', go: goTemplates },
     sessions: { label: 'Sessions', go: goSessions },
     ai: { label: 'AI', go: goAi },

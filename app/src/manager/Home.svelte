@@ -5,7 +5,7 @@
   import Icon from './Icon.svelte'
   import AiCard from './AiCard.svelte'
   import { newDeck } from '../lib/decks/store'
-  import { goDeck, goDecks, goTemplates, goWorkspaces } from './route'
+  import { goDeck, goLibrary, goTemplates } from './route'
 </script>
 
 <div class="page">
@@ -14,8 +14,7 @@
 
   <div class="shortcuts">
     <button class="sc" onclick={() => attempt(async () => goDeck(await newDeck()))}><span class="c"><Icon name="plus" size={22} /></span>New deck</button>
-    <button class="sc" onclick={goDecks}><span class="c"><Icon name="deck" size={22} /></span>Decks</button>
-    <button class="sc" onclick={goWorkspaces}><span class="c"><Icon name="folder" size={22} /></span>Workspaces</button>
+    <button class="sc" onclick={() => goLibrary()}><span class="c"><Icon name="deck" size={22} /></span>Library</button>
     <button class="sc" onclick={goTemplates}><span class="c"><Icon name="template" size={22} /></span>Templates</button>
   </div>
 
