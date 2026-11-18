@@ -24,12 +24,19 @@ export interface DeckOptions {
   colour: 'kinds' | 'one'
   /** What the card leaves off, in `DECK_PARTS` order; none by default. */
   hide: DeckPart[]
+  /**
+   * Record on start (ADR 0047): `on` or `off` overrides Settings › Recordings' Auto record for this
+   * deck; `global`, the default, follows it. `record-on-start` in the front matter; never the retired `record`.
+   */
+  recordOnStart: RecordOnStart
 }
 
-export const DECK_DEFAULTS: DeckOptions = { timing: true, autoAdvance: true, colour: 'kinds', hide: [] }
+export type RecordOnStart = 'global' | 'on' | 'off'
+
+export const DECK_DEFAULTS: DeckOptions = { timing: true, autoAdvance: true, colour: 'kinds', hide: [], recordOnStart: 'global' }
 
 /** The front matter keys a deck adds to a note's. */
-export const DECK_FRONT_KEYS = ['timing', 'auto-advance', 'colour', 'hide'] as const
+export const DECK_FRONT_KEYS = ['timing', 'auto-advance', 'colour', 'hide', 'record-on-start'] as const
 
 /**
  * Keys a deck once read and no longer does: `timeline` chose a timeline window, and every deck now
@@ -49,6 +56,7 @@ export const DECK_VALUES: Record<string, readonly string[]> = {
   'auto-advance': ['on', 'off'],
   colour: ['kinds', 'one'],
   hide: DECK_PARTS,
+  'record-on-start': ['on', 'off'],
 }
 
 const one = <T extends string>(value: string, allowed: readonly T[], fallback: T): T => {
@@ -69,6 +77,7 @@ export function deckOptions(doc: NoteDoc): DeckOptions {
     autoAdvance: one(frontValue(doc, 'auto-advance'), ['on', 'off'], 'on') === 'on',
     colour: one(frontValue(doc, 'colour'), ['kinds', 'one'], DECK_DEFAULTS.colour),
     hide: hiddenParts(frontValue(doc, 'hide')),
+    recordOnStart: one(frontValue(doc, 'record-on-start'), ['on', 'off'], 'global' as RecordOnStart) as RecordOnStart,
   }
 }
 
@@ -79,6 +88,9 @@ export function setDeckOption<K extends keyof DeckOptions>(doc: NoteDoc, option:
       return setFrontValue(doc, 'timing', value ? 'on' : 'off')
     case 'autoAdvance':
       return setFrontValue(doc, 'auto-advance', value ? 'on' : 'off')
+    case 'recordOnStart':
+      // `global` removes the line, so the deck follows Auto record again.
+      return setFrontValue(doc, 'record-on-start', value === 'global' ? '' : (value as string))
     case 'hide':
       return setFrontValue(doc, 'hide', DECK_PARTS.filter((p) => (value as DeckPart[]).includes(p)).join(', '))
     default:

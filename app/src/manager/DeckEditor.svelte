@@ -44,6 +44,7 @@
   import { findWorkspace, workspacesWith } from '../lib/workspaces/workspaces'
   import WorkspacePicker from './WorkspacePicker.svelte'
   import { showBack } from './back'
+  import { settings } from '../lib/settings/store'
   import { removeDeckFromWorkspace, workspaces } from '../lib/workspaces/store'
 
   let { path }: { path: string } = $props()
@@ -430,6 +431,20 @@
               >
             {/each}
           </div>
+          <h3>Record on start</h3>
+          <div class="seg" role="radiogroup" aria-label="Record on start">
+            {#each [['global', 'Use global setting'], ['on', 'On'], ['off', 'Off']] as const as [id, label] (id)}
+              <button role="radio" aria-checked={options.recordOnStart === id} onclick={() => setOption('recordOnStart', id)}>{label}</button>
+            {/each}
+          </div>
+          <p class="sub">
+            {options.recordOnStart === 'global'
+              ? `Follows Settings › Recordings › Auto record, now ${$settings.autoRecord ? 'on' : 'off'}.`
+              : options.recordOnStart === 'on'
+                ? 'Records from Start, whatever Auto record says.'
+                : 'Records only when you press the record button, whatever Auto record says.'}
+            Only your own microphone, transcribed on this computer; the first recording still asks for permission.
+          </p>
           <h3>Colour</h3>
           <div class="seg" role="radiogroup" aria-label="Colour">
             {#each [['kinds', 'By kind'], ['one', 'One colour']] as const as [id, label] (id)}

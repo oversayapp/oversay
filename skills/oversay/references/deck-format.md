@@ -67,7 +67,7 @@ key is optional: leave out what the person didn't ask for and Oversay uses its d
 
 ## Generated from Oversay’s code
 
-**Front matter keys:** `id`, `title`, `audience`, `with`, `project`, `tags`, `timing`, `auto-advance`, `colour`, `hide`, and `made-with` from the skill (`with` is read as `audience`, for decks written before it).
+**Front matter keys:** `id`, `title`, `audience`, `with`, `project`, `tags`, `timing`, `auto-advance`, `colour`, `hide`, `record-on-start`, and `made-with` from the skill (`with` is read as `audience`, for decks written before it).
 
 | Option | Values |
 | - | - |
@@ -75,4 +75,5 @@ key is optional: leave out what the person didn't ask for and Oversay uses its d
 | `auto-advance` | `on`, `off` |
 | `colour` | `kinds`, `one` |
 | `hide` | `position`, `bar`, `next`, `left`, `ends`, comma-separated |
+| `record-on-start` | `on`, `off` |
 <!-- end generated -->

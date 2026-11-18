@@ -14,7 +14,8 @@
     "timing",
     "auto-advance",
     "colour",
-    "hide"
+    "hide",
+    "record-on-start"
   ],
   "retiredDeckKeys": [
     "timeline",
@@ -40,6 +41,10 @@
       "next",
       "left",
       "ends"
+    ],
+    "record-on-start": [
+      "on",
+      "off"
     ]
   },
   "madeWithKey": "made-with",
