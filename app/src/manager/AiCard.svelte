@@ -5,17 +5,21 @@
   import { onMount } from 'svelte'
   import { logAction } from '../lib/log'
   import { hideAiCard, settings } from '../lib/settings/store'
+  import { addedChatApps } from '../lib/skill/page'
   import { installSkill, skillTargets, TARGET_LABELS, type SkillTarget, type SkillTargets } from '../lib/skill/targets'
   import { attempt } from './errors'
   import Icon from './Icon.svelte'
   import { goAi } from './route'
 
+  /** Home shows the card twice: once above everything when a skill is in an AI app (`ready`), else below. */
+  let { show }: { show: 'ready' | 'setup' } = $props()
   let info = $state<SkillTargets | null>(null)
   let copied = $state(false)
 
   onMount(() => attempt(async () => (info = await skillTargets())))
 
-  const installed = $derived(info?.targets.some((t) => t.installedVersion !== null) ?? false)
+  // Installed on this computer, or added to a chat app on the AI page.
+  const installed = $derived((info?.targets.some((t) => t.installedVersion !== null) ?? false) || addedChatApps($settings.aiAdded).length > 0)
   const found = $derived(info?.targets.filter((t) => t.found && t.installedVersion === null) ?? [])
 
   const PROMPT = 'Create an Oversay note for my catch-up with Sam tomorrow: hiring, her promotion case, the offsite. Then show it.'
@@ -37,7 +41,7 @@
   }
 </script>
 
-{#if info && !$settings.aiCardHidden}
+{#if info && !$settings.aiCardHidden && installed === (show === 'ready')}
   <div class="aicard">
     <div class="top">
       <span class="kicon"><Icon name="ai" size={18} /></span>

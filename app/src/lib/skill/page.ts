@@ -16,8 +16,6 @@ export interface AiPagePlan {
   noAiFound: boolean
   /** The chat apps, those with a desktop app found here first. */
   chatApps: ChatApp[]
-  /** Show the terminal tools' rows: one already has the skill. Otherwise they fold into one line. */
-  showTools: boolean
   /** Command-line apps found here, or holding a copy of the skill: a row each. */
   here: SkillTarget[]
   /** The rest, folded into one line until shown. */
@@ -38,7 +36,6 @@ export function planAiPage(info: SkillTargets, added: readonly ChatApp[]): AiPag
   return {
     noAiFound: here.length === 0 && !desktop && added.length === 0,
     chatApps: [...CHAT_APPS.filter((id) => hasDesktop[id]), ...CHAT_APPS.filter((id) => !hasDesktop[id])],
-    showTools: info.targets.some(hasCopy),
     here,
     away: SKILL_TARGETS.filter((id) => !isHere(id)),
     ready,

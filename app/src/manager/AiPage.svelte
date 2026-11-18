@@ -24,7 +24,6 @@
     sharing,
     skillState,
     skillTargets,
-    SKILL_TARGETS,
     TARGET_LABELS,
     type SkillTarget,
     type SkillTargets,
@@ -40,7 +39,6 @@
   /** Rows showing their details. */
   let open = $state<Partial<Record<AiApp, boolean>>>({})
   /** Command-line apps not on this computer, shown after "Show". */
-  let showAway = $state(false)
   let showAllPrompts = $state(false)
   /** A row asking before it replaces or removes a copy. */
   let confirming = $state<{ target: SkillTarget; action: 'replace' | 'remove' } | null>(null)
@@ -475,15 +473,7 @@
     {#snippet tools()}
       <h3 class="sec">Terminal and coding tools</h3>
       <div class="rows">
-        {#if plan!.showTools || showAway}
-          {#each [...plan!.here, ...plan!.away] as id (id)}{@render targetRow(id)}{/each}
-        {:else}
-          {@const names = SKILL_TARGETS.map((id) => TARGET_LABELS[id].name).join(', ')}
-          <button class="arow folded" onclick={() => (showAway = true)}>
-            <span class="grow">{names}: for people who work in a terminal</span>
-            <span class="faint">Show</span>
-          </button>
-        {/if}
+        {#each [...plan!.here, ...plan!.away] as id (id)}{@render targetRow(id)}{/each}
       </div>
     {/snippet}
     {#snippet chats()}
@@ -666,27 +656,6 @@
 
   .chev.open :global(svg) {
     transform: none;
-  }
-
-  .arow.folded {
-    display: flex;
-    width: 100%;
-    gap: 8px;
-    border: 0;
-    border-radius: 0;
-    background: none;
-    text-align: left;
-    color: var(--muted);
-    font-weight: 400;
-    padding: 12px 16px 12px 66px;
-  }
-
-  .arow.folded:not(:first-child) {
-    border-top: 1px solid var(--line);
-  }
-
-  .arow.folded:hover {
-    background: var(--hover);
   }
 
   .arow-b {
@@ -977,8 +946,7 @@
   }
 
   @container (max-width: 560px) {
-    .arow-b,
-    .arow.folded {
+    .arow-b {
       padding-left: 16px;
     }
   }

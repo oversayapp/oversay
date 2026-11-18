@@ -21,16 +21,6 @@ describe('the AI page plan', () => {
     expect(two.chatApps).toEqual(['claude-app', 'chatgpt', 'gemini-app'])
   })
 
-  it('shows the terminal tools only once one has the skill, and folds them before that', () => {
-    const before = planAiPage(info([target('claude-code', true), target('codex', false), target('gemini-cli', false)]), [])
-    expect(before.showTools).toBe(false)
-    expect(before.here).toEqual(['claude-code'])
-    expect(before.away).toEqual(['codex', 'gemini-cli'])
-    expect(before.ready).toEqual([])
-    const after = planAiPage(info([target('claude-code', true, '0.2.0'), target('codex', false)]), [])
-    expect(after.showTools).toBe(true)
-  })
-
   it('says no AI app was found when nothing is here', () => {
     const plan = planAiPage(info([target('claude-code', false), target('codex', false), target('gemini-cli', false)]), [])
     expect(plan.noAiFound).toBe(true)
@@ -46,7 +36,6 @@ describe('the AI page plan', () => {
     const plan = planAiPage(info([target('claude-code', false, '0.1.0'), target('codex', false)]), [])
     expect(plan.here).toEqual(['claude-code'])
     expect(plan.ready).toEqual(['claude-code'])
-    expect(plan.showTools).toBe(true)
   })
 
   it('leaves an app out of Codex’s copy when it isn’t here', () => {
