@@ -97,7 +97,13 @@ const fakeBridge = `(() => {
   // Two favourites: a talk in the sample project, and one whose project has gone (011/02).
   // The Workspaces page's sidebar: one pin, two opened.
   const workspaceNav = { pins: [{ id: 'w_inject01', at: new Date().toISOString() }], opened: [{ id: 'w_svelte01', at: new Date(Date.now() - 3600e3).toISOString() }, { id: 'w_appsec01', at: new Date(Date.now() - 86400e3).toISOString() }], colours: { conferences: 'orange' }, tags: [], place: 'all', sort: 'date' };
-  const settingsFile = JSON.stringify({ version: 1, appearance: 'system', projectLinesMoved: true, workspaceNav, favourites: [
+  // ?library=empty|one|many: a first run, one deck, or 60 decks in 12 workspaces (epic 036 (#54)).
+  const libraryVariant = new URLSearchParams(location.search).get('library');
+  const deckPath = (name) => '/Users/demo/Documents/Oversay/Decks/' + name + '/deck.md';
+  const openedAt = (hours) => new Date(Date.now() - hours * 3600e3).toISOString();
+  const sampleOpened = [{ kind: 'deck', path: deckPath('Stand-up 23 Oct'), id: 'd_standup1', at: openedAt(0.2) }, { kind: 'deck', path: deckPath('Atlas launch review'), id: 'd_atlas001', at: openedAt(30) }];
+  const samplePins = [{ kind: 'deck', path: deckPath('Atlas launch review'), id: 'd_atlas001', at: openedAt(72) }];
+  const settingsFile = JSON.stringify({ version: 1, appearance: 'system', projectLinesMoved: true, exampleDecksInstalled: libraryVariant ? true : undefined, opened: sampleOpened, pins: samplePins, workspaceNav, favourites: [
     { path: '/Users/demo/Documents/launch.oversay.json', talkId: 't_web', talkName: 'Customer webinar 30 min', projectName: 'Oversay launch' },
     { path: '/Users/demo/Documents/missing.oversay.json', talkId: 't_x', talkName: 'Sales kickoff', projectName: 'Sales 2025' },
   ], lastRun: { path: '/Users/demo/Documents/launch.oversay.json', talkId: 't_web', talkName: 'Customer webinar 30 min', projectName: 'Oversay launch', at: new Date(Date.now() - 2 * 86400000).toISOString() } });
@@ -132,6 +138,18 @@ const fakeBridge = `(() => {
       { id: 'w_svelte01', name: 'Svelte 5 basics', folder: 'Svelte 5 basics', tags: ['tutorials'], decks: ['d_standup1'], when: '2026-10-06', where: 'Room 2.14', notes: '', problem: null },
       { id: 'w_atlas001', name: 'Atlas launch', folder: 'Atlas launch', tags: [], decks: [], when: '', where: '', notes: '', problem: null },
   ];
+  if (libraryVariant === 'empty') { quick.decks = {}; spaces = []; }
+  if (libraryVariant === 'one') { quick.decks = { 'Weekly stand-up': quick.decks['Stand-up 23 Oct'] }; quick.decks['Weekly stand-up'].text = quick.decks['Weekly stand-up'].text.replace('d_standup1', 'd_one00001'); spaces = []; }
+  if (libraryVariant === 'many') {
+    const kinds = ['intro', 'topic', 'demo', 'outro'];
+    for (let i = 0; i < 56; i++) {
+      const cards = Array.from({ length: 3 + (i % 5) }, (_, c) => '## Card ' + (c + 1) + ' [' + (2 + c) + 'm, ' + kinds[c % 4] + ']\\n- A point\\n').join('\\n');
+      quick.decks['Deck number ' + (i + 1)] = { at: Date.now() - (i * 26 + 2) * 3600e3, text: '---\\nid: d_many' + String(i).padStart(4, '0') + '\\naudience: Team ' + (i % 6) + '\\n---\\n\\n' + cards };
+    }
+    spaces = [];
+    const names = ['Beacon redesign', 'Comet migration', 'Hiring loop', 'Q1 planning', 'Passkeys talk', 'Supply chain signing', 'Testing with Vitest', 'Advisory board', 'Team offsite', 'Design system', 'Security review', 'Customer calls'];
+    names.forEach((name, i) => spaces.push({ id: 'w_many' + String(i).padStart(4, '0'), name, folder: name, tags: [['Projects', 'Research', 'Talks'][i % 3]], decks: Array.from({ length: 5 }, (_, k) => 'd_many' + String(i * 5 + k).padStart(4, '0')), when: '', where: '', notes: i % 2 ? '' : 'What ' + name + ' is for.', problem: null }));
+  }
   const qext = { notes: '.md', talks: '.oversay.json', decks: '.md' };
   const qdir = (kind) => ({ notes: NOTES_DIR, talks: '/Users/demo/Documents/Oversay/Quick talks/', decks: '/Users/demo/Documents/Oversay/Decks/' })[kind];
   const qname = (kind, path) => path.slice(qdir(kind).length, -qext[kind].length);
@@ -336,27 +354,34 @@ const SCREENS = [
   // Workspaces (ADR 0040): every workspace, with its sidebar of tags; filtered to research; New
   // workspace; a workspace's page with a deck that has gone; Add decks; a deck's editor listing its
   // workspaces, with Add to workspace open.
-  ['workspaces', `[...document.querySelectorAll('nav.rail button')].find((b) => b.textContent.includes('Workspaces')).click()`],
+  // The Library (epic 036 (#54)): the left pane's groups, a workspace's page with its description, + New and the command bar, the picker.
+  ['library', `(async () => { const rail = (t) => [...document.querySelectorAll('nav.rail button')].find((b) => b.textContent.includes(t)); const wait = () => new Promise((r) => setTimeout(r, 250)); const pane = (t) => [...document.querySelectorAll('main .library .side .nav')].find((b) => b.textContent.includes(t)); const bar = () => document.querySelector('input[aria-label="Search Oversay"]'); const typeIn = async (v) => { const i = bar(); i.value = v; i.dispatchEvent(new Event('input', { bubbles: true })); await wait() }; const option = (t) => [...document.querySelectorAll('#search-results [role=option]')].find((b) => b.textContent.includes(t)); rail('Library').click(); await wait() })()`],
+  ['library-pinned', `(async () => { const rail = (t) => [...document.querySelectorAll('nav.rail button')].find((b) => b.textContent.includes(t)); const wait = () => new Promise((r) => setTimeout(r, 250)); const pane = (t) => [...document.querySelectorAll('main .library .side .nav')].find((b) => b.textContent.includes(t)); const bar = () => document.querySelector('input[aria-label="Search Oversay"]'); const typeIn = async (v) => { const i = bar(); i.value = v; i.dispatchEvent(new Event('input', { bubbles: true })); await wait() }; const option = (t) => [...document.querySelectorAll('#search-results [role=option]')].find((b) => b.textContent.includes(t)); pane('Pinned').click(); await wait() })()`],
+  ['library-week', `(async () => { const rail = (t) => [...document.querySelectorAll('nav.rail button')].find((b) => b.textContent.includes(t)); const wait = () => new Promise((r) => setTimeout(r, 250)); const pane = (t) => [...document.querySelectorAll('main .library .side .nav')].find((b) => b.textContent.includes(t)); const bar = () => document.querySelector('input[aria-label="Search Oversay"]'); const typeIn = async (v) => { const i = bar(); i.value = v; i.dispatchEvent(new Event('input', { bubbles: true })); await wait() }; const option = (t) => [...document.querySelectorAll('#search-results [role=option]')].find((b) => b.textContent.includes(t)); pane('This week').click(); await wait() })()`],
+  ['library-unsorted', `(async () => { const rail = (t) => [...document.querySelectorAll('nav.rail button')].find((b) => b.textContent.includes(t)); const wait = () => new Promise((r) => setTimeout(r, 250)); const pane = (t) => [...document.querySelectorAll('main .library .side .nav')].find((b) => b.textContent.includes(t)); const bar = () => document.querySelector('input[aria-label="Search Oversay"]'); const typeIn = async (v) => { const i = bar(); i.value = v; i.dispatchEvent(new Event('input', { bubbles: true })); await wait() }; const option = (t) => [...document.querySelectorAll('#search-results [role=option]')].find((b) => b.textContent.includes(t)); pane('Unsorted').click(); await wait() })()`],
+  ['library-all', `(async () => { const rail = (t) => [...document.querySelectorAll('nav.rail button')].find((b) => b.textContent.includes(t)); const wait = () => new Promise((r) => setTimeout(r, 250)); const pane = (t) => [...document.querySelectorAll('main .library .side .nav')].find((b) => b.textContent.includes(t)); const bar = () => document.querySelector('input[aria-label="Search Oversay"]'); const typeIn = async (v) => { const i = bar(); i.value = v; i.dispatchEvent(new Event('input', { bubbles: true })); await wait() }; const option = (t) => [...document.querySelectorAll('#search-results [role=option]')].find((b) => b.textContent.includes(t)); pane('All decks').click(); await wait() })()`],
+  ['library-workspace', `(async () => { const rail = (t) => [...document.querySelectorAll('nav.rail button')].find((b) => b.textContent.includes(t)); const wait = () => new Promise((r) => setTimeout(r, 250)); const pane = (t) => [...document.querySelectorAll('main .library .side .nav')].find((b) => b.textContent.includes(t)); const bar = () => document.querySelector('input[aria-label="Search Oversay"]'); const typeIn = async (v) => { const i = bar(); i.value = v; i.dispatchEvent(new Event('input', { bubbles: true })); await wait() }; const option = (t) => [...document.querySelectorAll('#search-results [role=option]')].find((b) => b.textContent.includes(t)); pane('AppSec June 2026').click(); await wait() })()`],
+  ['library-description-edit', `(async () => { const rail = (t) => [...document.querySelectorAll('nav.rail button')].find((b) => b.textContent.includes(t)); const wait = () => new Promise((r) => setTimeout(r, 250)); const pane = (t) => [...document.querySelectorAll('main .library .side .nav')].find((b) => b.textContent.includes(t)); const bar = () => document.querySelector('input[aria-label="Search Oversay"]'); const typeIn = async (v) => { const i = bar(); i.value = v; i.dispatchEvent(new Event('input', { bubbles: true })); await wait() }; const option = (t) => [...document.querySelectorAll('#search-results [role=option]')].find((b) => b.textContent.includes(t)); document.querySelector('main button.desc').click(); await wait() })()`],
+  ['library-new', `(async () => { const rail = (t) => [...document.querySelectorAll('nav.rail button')].find((b) => b.textContent.includes(t)); const wait = () => new Promise((r) => setTimeout(r, 250)); const pane = (t) => [...document.querySelectorAll('main .library .side .nav')].find((b) => b.textContent.includes(t)); const bar = () => document.querySelector('input[aria-label="Search Oversay"]'); const typeIn = async (v) => { const i = bar(); i.value = v; i.dispatchEvent(new Event('input', { bubbles: true })); await wait() }; const option = (t) => [...document.querySelectorAll('#search-results [role=option]')].find((b) => b.textContent.includes(t)); document.querySelector('main textarea.desc-edit').dispatchEvent(new FocusEvent('blur')); await wait(); document.querySelector('.topbar button.new').click(); await wait(); bar().dispatchEvent(new FocusEvent('focus')); await wait() })()`],
+  ['library-new-typed', `(async () => { const rail = (t) => [...document.querySelectorAll('nav.rail button')].find((b) => b.textContent.includes(t)); const wait = () => new Promise((r) => setTimeout(r, 250)); const pane = (t) => [...document.querySelectorAll('main .library .side .nav')].find((b) => b.textContent.includes(t)); const bar = () => document.querySelector('input[aria-label="Search Oversay"]'); const typeIn = async (v) => { const i = bar(); i.value = v; i.dispatchEvent(new Event('input', { bubbles: true })); await wait() }; const option = (t) => [...document.querySelectorAll('#search-results [role=option]')].find((b) => b.textContent.includes(t)); await typeIn('Retro') })()`],
+  ['workspace-new', `(async () => { const rail = (t) => [...document.querySelectorAll('nav.rail button')].find((b) => b.textContent.includes(t)); const wait = () => new Promise((r) => setTimeout(r, 250)); const pane = (t) => [...document.querySelectorAll('main .library .side .nav')].find((b) => b.textContent.includes(t)); const bar = () => document.querySelector('input[aria-label="Search Oversay"]'); const typeIn = async (v) => { const i = bar(); i.value = v; i.dispatchEvent(new Event('input', { bubbles: true })); await wait() }; const option = (t) => [...document.querySelectorAll('#search-results [role=option]')].find((b) => b.textContent.includes(t)); await typeIn(''); option('Workspace').click(); await wait() })()`],
+  ['picker', `(async () => { const rail = (t) => [...document.querySelectorAll('nav.rail button')].find((b) => b.textContent.includes(t)); const wait = () => new Promise((r) => setTimeout(r, 250)); const pane = (t) => [...document.querySelectorAll('main .library .side .nav')].find((b) => b.textContent.includes(t)); const bar = () => document.querySelector('input[aria-label="Search Oversay"]'); const typeIn = async (v) => { const i = bar(); i.value = v; i.dispatchEvent(new Event('input', { bubbles: true })); await wait() }; const option = (t) => [...document.querySelectorAll('#search-results [role=option]')].find((b) => b.textContent.includes(t)); document.querySelector('[role=dialog] button[type=button]')?.click(); [...document.querySelectorAll('[role=dialog] button')].find((b) => b.textContent.trim() === 'Cancel').click(); await wait(); document.querySelector('.topbar button.new').click(); await wait(); bar().dispatchEvent(new FocusEvent('focus')); await wait(); option('template').click(); await wait() })()`],
+  ['picker-meetings', `(async () => { const rail = (t) => [...document.querySelectorAll('nav.rail button')].find((b) => b.textContent.includes(t)); const wait = () => new Promise((r) => setTimeout(r, 250)); const pane = (t) => [...document.querySelectorAll('main .library .side .nav')].find((b) => b.textContent.includes(t)); const bar = () => document.querySelector('input[aria-label="Search Oversay"]'); const typeIn = async (v) => { const i = bar(); i.value = v; i.dispatchEvent(new Event('input', { bubbles: true })); await wait() }; const option = (t) => [...document.querySelectorAll('#search-results [role=option]')].find((b) => b.textContent.includes(t)); [...document.querySelectorAll('[role=dialog] .rowbtn')].find((b) => b.textContent.includes('Meetings')).click(); await wait() })()`],
+  ['library-workspace-again', `(async () => { const rail = (t) => [...document.querySelectorAll('nav.rail button')].find((b) => b.textContent.includes(t)); const wait = () => new Promise((r) => setTimeout(r, 250)); const pane = (t) => [...document.querySelectorAll('main .library .side .nav')].find((b) => b.textContent.includes(t)); const bar = () => document.querySelector('input[aria-label="Search Oversay"]'); const typeIn = async (v) => { const i = bar(); i.value = v; i.dispatchEvent(new Event('input', { bubbles: true })); await wait() }; const option = (t) => [...document.querySelectorAll('#search-results [role=option]')].find((b) => b.textContent.includes(t)); [...document.querySelectorAll('[role=dialog] button')].find((b) => b.textContent.trim() === 'Cancel').click(); await wait(); pane('AppSec June 2026').click(); await wait() })()`],
   // The sidebar (John, 27 Oct): a tag, Pinned, Recent, and a tag's ⋯ menu.
-  ['workspaces-research', `(async () => { const side = (t) => [...document.querySelectorAll('main .side .nav')].find((b) => b.textContent.includes(t)); side('Research').click(); await new Promise((r) => setTimeout(r, 200)) })()`],
-  ['workspaces-pinned', `(async () => { const side = (t) => [...document.querySelectorAll('main .side .nav')].find((b) => b.textContent.includes(t)); side('Pinned').click(); await new Promise((r) => setTimeout(r, 200)) })()`],
-  ['workspaces-recent', `(async () => { const side = (t) => [...document.querySelectorAll('main .side .nav')].find((b) => b.textContent.includes(t)); side('Recent').click(); await new Promise((r) => setTimeout(r, 200)) })()`],
-  ['workspaces-tag-menu', `(async () => { const wait = () => new Promise((r) => setTimeout(r, 200)); const side = (t) => [...document.querySelectorAll('main .side .nav')].find((b) => b.textContent.includes(t)); side('Research').click(); await wait(); document.querySelector('main button[aria-label="Change the tag Research"]').click(); await wait() })()`],
-  ['workspace-new', `[...document.querySelectorAll('main button')].find((b) => b.textContent.includes('New workspace')).click()`],
-  ['workspace', `(async () => { const wait = () => new Promise((r) => setTimeout(r, 200)); [...document.querySelectorAll('main button')].find((b) => b.textContent.trim() === 'Cancel').click(); await wait(); [...document.querySelectorAll('main .side .nav')].find((b) => b.textContent.includes('All workspaces')).click(); await wait(); [...document.querySelectorAll('main button.what')].find((b) => b.textContent.includes('AppSec')).click(); await wait() })()`],
   // Adding a tag: the tags in use to pick from, narrowed by what is typed, or a new one (John, 26 Oct).
   ['workspace-tags', `(async () => { const i = document.querySelector('main input[aria-label="Add a tag"]'); i.focus(); i.dispatchEvent(new FocusEvent('focus')); await new Promise((r) => setTimeout(r, 200)) })()`],
   ['workspace-tags-typed', `(async () => { const i = document.querySelector('main input[aria-label="Add a tag"]'); i.value = 'tu'; i.dispatchEvent(new Event('input', { bubbles: true })); await new Promise((r) => setTimeout(r, 200)) })()`],
   ['workspace-add', `(async () => { const i = document.querySelector('main input[aria-label="Add a tag"]'); i.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })); await new Promise((r) => setTimeout(r, 150)); [...document.querySelectorAll('main button')].find((b) => b.textContent.includes('Add decks')).click() })()`],
   ['deck-workspaces', `(async () => { const wait = () => new Promise((r) => setTimeout(r, 250)); [...document.querySelectorAll('main .decklist button.what')].find((b) => b.textContent.includes('Atlas')).click(); await wait(); document.querySelector('main button.addto').click(); await wait() })()`],
-  ['decks', `(async () => { [...document.querySelectorAll('nav.rail button')].find((b) => b.textContent.includes('Decks')).click(); await new Promise((r) => setTimeout(r, 200)) })()`],
+  ['decks', `(async () => { const rail = (t) => [...document.querySelectorAll('nav.rail button')].find((b) => b.textContent.includes(t)); const wait = () => new Promise((r) => setTimeout(r, 250)); const pane = (t) => [...document.querySelectorAll('main .library .side .nav')].find((b) => b.textContent.includes(t)); const bar = () => document.querySelector('input[aria-label="Search Oversay"]'); const typeIn = async (v) => { const i = bar(); i.value = v; i.dispatchEvent(new Event('input', { bubbles: true })); await wait() }; const option = (t) => [...document.querySelectorAll('#search-results [role=option]')].find((b) => b.textContent.includes(t)); rail('Library').click(); await wait(); pane('All decks').click(); await wait() })()`],
   ['deck', `[...document.querySelectorAll('main button.what')].find((b) => b.textContent.includes('Stand-up')).click()`],
   ['deck-options', `(async () => { const wait = () => new Promise((r) => setTimeout(r, 150)); const k = document.querySelector('select.tkind'); k.value = 'outro'; k.dispatchEvent(new Event('change', { bubbles: true })); await wait() })()`],
   // After the deck, below the cards: the latest run against the plan, and an earlier one.
   ['deck-after', `(async () => { document.querySelector('[aria-label="After the deck"]').scrollIntoView(); await new Promise((r) => setTimeout(r, 300)) })()`],
   ['deck-markdown', `[...document.querySelectorAll('main [role=tab]')].find((b) => b.textContent.includes('Markdown')).click()`],
   // back on Decks, Stand-up is in Recent; pin Weekly standup (it goes to the top).
-  ['decks-pinned', `(async () => { const wait = () => new Promise((r) => setTimeout(r, 200)); [...document.querySelectorAll('nav.rail button')].find((b) => b.textContent.includes('Decks')).click(); await wait(); document.querySelector('button[aria-label="Pin Weekly standup"]').click(); await wait() })()`],
+  ['decks-pinned', `(async () => { const wait = () => new Promise((r) => setTimeout(r, 200)); [...document.querySelectorAll('nav.rail button')].find((b) => b.textContent.includes('Library')).click(); await wait(); [...document.querySelectorAll('main .library .side .nav')].find((b) => b.textContent.includes('All decks')).click(); await wait(); document.querySelector('button[aria-label="Pin Weekly standup"]').click(); await wait() })()`],
   // the list filtered to one tag, then to a project.
   // the one search bar finds decks, projects, templates and settings, grouped.
   ['search-results', `(async () => { const wait = () => new Promise((r) => setTimeout(r, 200)); const i = document.querySelector('input[aria-label="Search Oversay"]'); i.focus(); i.dispatchEvent(new FocusEvent('focus')); i.value = 'st'; i.dispatchEvent(new Event('input', { bubbles: true })); await wait() })()`],
@@ -390,7 +415,7 @@ const SCREENS = [
   // task 210, task 224: copies updated when Oversay started; a deck from an older skill arrives, with lines
   // Oversay shows differently from how the AI wrote them.
   ['ai-self-updated', `(async () => { const wait = () => new Promise((r) => setTimeout(r, 200)); window.__skillsUpdated(['claude-code', 'codex']); [...document.querySelectorAll('nav.rail button')].find((b) => b.textContent.includes('Home')).click(); await wait(); [...document.querySelectorAll('nav.rail button')].find((b) => b.textContent.includes('AI')).click(); await wait() })()`],
-  ['deck-old-skill', `(async () => { const wait = () => new Promise((r) => setTimeout(r, 250)); window.__skillsUpdated([]); window.__outside('decks', 'Design crit', '---\\nwhen: Thursday\\ntimeline: sparkline\\nmade-with: Oversay skill 0.0.9\\n---\\n\\n## Flows [10 mins]\\n- Checkout\\n### Open questions\\n- Who signs off\\n'); await wait(); [...document.querySelectorAll('nav.rail button')].find((b) => b.textContent.includes('Decks')).click(); await wait(); [...document.querySelectorAll('main button.what')].find((b) => b.textContent.includes('Design crit')).click(); await wait() })()`],
+  ['deck-old-skill', `(async () => { const wait = () => new Promise((r) => setTimeout(r, 250)); window.__skillsUpdated([]); window.__outside('decks', 'Design crit', '---\\nwhen: Thursday\\ntimeline: sparkline\\nmade-with: Oversay skill 0.0.9\\n---\\n\\n## Flows [10 mins]\\n- Checkout\\n### Open questions\\n- Who signs off\\n'); await wait(); [...document.querySelectorAll('nav.rail button')].find((b) => b.textContent.includes('Library')).click(); await wait(); [...document.querySelectorAll('main .library .side .nav')].find((b) => b.textContent.includes('All decks')).click(); await wait(); [...document.querySelectorAll('main button.what')].find((b) => b.textContent.includes('Design crit')).click(); await wait() })()`],
   ['deck-skill-check', `(async () => { const wait = () => new Promise((r) => setTimeout(r, 250)); [...document.querySelectorAll('main button')].find((b) => b.textContent.includes('What and where'))?.click(); await wait() })()`],
   // Sessions (ADR 0041): every deck's runs by day; filtered to a deck; found by the search bar.
   ['sessions', `(async () => { [...document.querySelectorAll('nav.rail button')].find((b) => b.textContent.includes('Sessions')).click(); await new Promise((r) => setTimeout(r, 300)) })()`],
@@ -410,13 +435,12 @@ const SCREENS = [
   ['session-recording', `(async () => { const wait = () => new Promise((r) => setTimeout(r, 300)); [...document.querySelectorAll('main button')].find((b) => b.textContent.trim() === 'Cancel')?.click(); document.querySelector('.topbar button.back').click(); await wait(); [...document.querySelectorAll('main .runs button.open')].find((b) => b.textContent.includes('Atlas')).click(); await wait(); await wait(); document.querySelector('main .ask')?.scrollIntoView() })()`],
   ['session-back', `(async () => { document.querySelector('.topbar button.back').click(); await new Promise((r) => setTimeout(r, 300)) })()`],
   ['templates', `[...document.querySelectorAll('nav.rail button')].find((b) => b.textContent.includes('Templates')).click()`],
-  ['templates-meetings', `[...document.querySelectorAll('button.chip')].find((b) => b.textContent.trim() === 'Meetings').click()`],
-  ['templates-mine', `[...document.querySelectorAll('button.chip')].find((b) => b.textContent.trim() === 'My templates').click()`],
-  ['templates-category', `[...document.querySelectorAll('button.chip')].find((b) => b.textContent.trim() === 'Client work').click()`],
-  ['templates-category-rename', `[...document.querySelectorAll('.cat-bar button')].find((b) => b.textContent.includes('Rename')).click()`],
-  ['templates-category-delete', `(async () => { [...document.querySelectorAll('.cat-bar button')].find((b) => b.textContent.trim() === 'Cancel').click(); await new Promise((r) => setTimeout(r, 100)); [...document.querySelectorAll('.cat-bar button')].find((b) => b.textContent.includes('Delete category')).click() })()`],
-  ['templates-delete', `(async () => { [...document.querySelectorAll('.cat-bar button')].find((b) => b.textContent.trim() === 'Cancel').click(); await new Promise((r) => setTimeout(r, 100)); [...document.querySelectorAll('.manage button')].find((b) => b.textContent.includes('Delete')).click() })()`],
-  ['templates-search', `(() => { [...document.querySelectorAll('button.chip')].find((b) => b.textContent.trim() === 'All').click(); const i = document.querySelector('main .search input'); i.value = 'demo'; i.dispatchEvent(new Event('input', { bubbles: true })) })()`],
+  ['templates-meetings', `[...document.querySelectorAll('main .rowbtn')].find((b) => b.textContent.includes('Meetings')).click()`],
+  ['templates-mine', `[...document.querySelectorAll('main .rowbtn')].find((b) => b.textContent.includes('My templates')).click()`],
+  ['templates-category', `[...document.querySelectorAll('main .rowbtn')].find((b) => b.textContent.includes('Client work')).click()`],
+  ['templates-category-menu', `(async () => { document.querySelector('main button[aria-label="More for Client work"]').click(); await new Promise((r) => setTimeout(r, 200)) })()`],
+  ['templates-category-delete', `(async () => { [...document.querySelectorAll('main [role=menuitem]')].find((b) => b.textContent.includes('Delete category')).click(); await new Promise((r) => setTimeout(r, 200)) })()`],
+  ['templates-template-delete', `(async () => { document.querySelector('[role=alertdialog] button').click(); await new Promise((r) => setTimeout(r, 150)); document.querySelector('main button[aria-label^="Delete "]').click(); await new Promise((r) => setTimeout(r, 200)) })()`],
   ['settings', `[...document.querySelectorAll('nav.rail button')].find((b) => b.textContent.includes('Settings')).click()`],
   // 013/02: the section list: jump to Shortcuts, scroll to the end, and (narrow) the open menu.
   // Each step runs at the widest size and the picture is then taken at each width.
@@ -507,11 +531,9 @@ for (let waited = 0; waited < 30000; waited += 250) {
 await sleep(500)
 
 const written = []
-for (const [name, step] of SCREENS) {
-  await send('Emulation.setDeviceMetricsOverride', { width: WIDTHS[0], height: HEIGHT, deviceScaleFactor: 2, mobile: false })
-  await run(step)
-  await sleep(500)
-  if (!wanted(name)) continue
+// One picture of the page as it is, at each width, in light and dark.
+async function shoot(name) {
+  if (!wanted(name)) return
   for (const width of WIDTHS) {
     for (const scheme of SCHEMES) {
       await send('Emulation.setDeviceMetricsOverride', { width, height: HEIGHT, deviceScaleFactor: 2, mobile: false })
@@ -523,6 +545,27 @@ for (const [name, step] of SCREENS) {
       written.push(file)
     }
   }
+}
+for (const [name, step] of SCREENS) {
+  await send('Emulation.setDeviceMetricsOverride', { width: WIDTHS[0], height: HEIGHT, deviceScaleFactor: 2, mobile: false })
+  await run(step)
+  await sleep(500)
+  await shoot(name)
+}
+
+// The Library with nothing in it (a first run), with one deck, and with 60 decks in 12 workspaces
+// (epic 036 (#54)): Home must stay calm in all three, and the Library's left pane must keep to a few.
+for (const variant of ['empty', 'one', 'many']) {
+  await send('Page.navigate', { url: `http://localhost:${port}/?library=${variant}` })
+  for (let waited = 0; waited < 30000; waited += 250) {
+    const up = await send('Runtime.evaluate', { expression: `!!document.querySelector('nav.rail')` })
+    if (up.result?.result?.value) break
+    await sleep(250)
+  }
+  await sleep(900)
+  await shoot(`home-${variant}`)
+  await run(`(async () => { [...document.querySelectorAll('nav.rail button')].find((b) => b.textContent.includes('Library')).click(); await new Promise((r) => setTimeout(r, 400)) })()`)
+  await shoot(`library-${variant}`)
 }
 
 if (wanted('overlay')) {
