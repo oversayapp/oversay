@@ -9,6 +9,7 @@
   import { searchEverything, type SearchKind, type Searchable } from '../lib/search/everything'
   import { commandsFor, type Command } from '../lib/search/commands'
   import { addDeckToWorkspace, removeDeckFromWorkspace } from '../lib/workspaces/store'
+  import { pasteAsNote } from './drop'
   import { attempt } from './errors'
   import { askToMake, makeRequest, newBlankDeck, openWorkspaceDialog, showDeckEntry } from './new'
   import { openTemplatePicker } from './picker'
@@ -109,6 +110,7 @@
     input?.blur()
     if (c.kind === 'blank-deck') attempt(() => newBlankDeck(undefined, c.name))
     else if (c.kind === 'deck-from-template') openTemplatePicker($nav.workspace)
+    else if (c.kind === 'paste-deck') pasteAsNote()
     else if (c.kind === 'new-workspace') openWorkspaceDialog(c.name)
     else if (c.kind === 'show' && d) attempt(() => showDeckEntry(d))
     else if (c.kind === 'add-to' && d && c.workspace) attempt(() => addDeckToWorkspace(c.workspace!, d.id))
@@ -202,7 +204,7 @@
           {#each commands as command (command.kind + (command.workspace ?? ''))}
             {@const i = flat.findIndex((r) => 'command' in r && r.command === command)}
             <button id="sr-{i}" role="option" aria-selected={i === active} class:active={i === active} onmouseenter={() => (active = i)} onclick={() => run(command)}>
-              <span class="ic"><Icon name={command.kind === 'show' ? 'show' : command.kind === 'new-workspace' ? 'folder' : command.kind === 'deck-from-template' ? 'template' : 'plus'} size={16} /></span>
+              <span class="ic"><Icon name={command.kind === 'show' ? 'show' : command.kind === 'new-workspace' ? 'folder' : command.kind === 'deck-from-template' ? 'template' : command.kind === 'paste-deck' ? 'file' : 'plus'} size={16} /></span>
               <span class="what"><span class="t">{command.label}</span></span>
             </button>
           {/each}

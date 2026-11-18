@@ -2,7 +2,7 @@
 // From a template, New workspace; and, on an open deck, Show, Add to …, Take out of …. Pure, so the bar
 // and its tests agree.
 
-export type CommandKind = 'blank-deck' | 'deck-from-template' | 'new-workspace' | 'show' | 'add-to' | 'take-out'
+export type CommandKind = 'blank-deck' | 'deck-from-template' | 'paste-deck' | 'new-workspace' | 'show' | 'add-to' | 'take-out'
 
 export interface Command {
   kind: CommandKind
@@ -35,7 +35,7 @@ export function commandsFor(c: CommandContext): Command[] {
 
   const make: Command[] = []
   if (c.making) {
-    make.push(named('blank-deck', 'deck', 'Blank deck', query), { kind: 'deck-from-template', label: 'Deck from a template…' }, named('new-workspace', 'workspace', 'Workspace…', query))
+    make.push(named('blank-deck', 'deck', 'Blank deck', query), { kind: 'deck-from-template', label: 'Deck from a template…' }, { kind: 'paste-deck', label: 'Paste as deck' }, named('new-workspace', 'workspace', 'Workspace…', query))
   } else {
     const typed = /^new\s+(deck|workspace)\s+(.+)$/i.exec(query)
     if (typed) {
@@ -44,6 +44,7 @@ export function commandsFor(c: CommandContext): Command[] {
     } else {
       if (matches(query, 'New deck', 'blank')) make.push({ kind: 'blank-deck', label: 'New deck' })
       if (matches(query, 'Deck from a template', 'new start')) make.push({ kind: 'deck-from-template', label: 'Deck from a template…' })
+      if (matches(query, 'Paste as deck', 'markdown clipboard')) make.push({ kind: 'paste-deck', label: 'Paste as deck' })
       if (matches(query, 'New workspace', '')) make.push({ kind: 'new-workspace', label: 'New workspace' })
     }
   }

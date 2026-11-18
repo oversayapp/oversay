@@ -314,7 +314,7 @@
     {:else}Ask for a note, download it, and drop it on this window.{/if}
   {:else if i === 0}{started[app] ? 'Copied the instructions.' : 'Copy the instructions.'}
   {:else if i === 1}Paste them into a Project’s instructions, or <b>Settings › Personalization › Custom instructions</b>.
-  {:else}Copy the note ChatGPT writes, then <b>Decks › Paste as deck</b> here.{/if}
+  {:else}Copy the note ChatGPT writes, then <b>Paste as deck</b> in the command bar (⌘⇧V).{/if}
 {/snippet}
 
 {#snippet steps(app: ChatApp)}
@@ -392,7 +392,7 @@
     </div>
     {#each PROMPTS as p (p)}{@render prompt(p)}{/each}
     {#if app === 'chatgpt'}
-      <p class="meta">Copy the note it writes, then Paste as deck on Decks.</p>
+      <p class="meta">Copy the note it writes, then Paste as deck in the command bar (⌘⇧V).</p>
     {:else if app === 'claude-app' || app === 'gemini-app'}
       <p class="meta">In a chat, download the note it gives you and drop it on this window.</p>
     {/if}
