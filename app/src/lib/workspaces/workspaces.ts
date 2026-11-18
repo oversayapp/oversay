@@ -139,3 +139,6 @@ export function parseTags(text: string): string[] {
   for (const t of text.split(',').map(tagCase)) if (t && !out.some((o) => o.toLowerCase() === t.toLowerCase())) out.push(t)
   return out
 }
+
+/** What the search bar finds a workspace by besides its name: its tags and its description (the notes field, epic 036 (#54)). */
+export const workspaceTerms = (w: Workspace): string[] => [...w.tags, w.notes.trim()].filter(Boolean)

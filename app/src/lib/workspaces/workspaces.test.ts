@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { findWorkspace, groupByTag, movedDeck, parseTags, parseWorkspaces, sortWorkspaces, tagsInUse, withDeck, withoutDeck, workspacesWith, type Workspace } from './workspaces'
+import { workspaceTerms, findWorkspace, groupByTag, movedDeck, parseTags, parseWorkspaces, sortWorkspaces, tagsInUse, withDeck, withoutDeck, workspacesWith, type Workspace } from './workspaces'
 
 const w = (name: string, tags: string[], decks: string[] = [], when = ''): Workspace => ({
   id: `w_${name.toLowerCase().replace(/\W/g, '').slice(0, 8).padEnd(8, '0')}`,
@@ -61,5 +61,13 @@ describe('tags (ADR 0040)', () => {
 
   it('reads tags typed in one field, each with an initial capital', () => {
     expect(parseTags(' research,  appSec   talks ,Research,, ')).toEqual(['Research', 'AppSec talks'])
+  })
+})
+
+describe('a workspace is found by its description (epic 036 (#54))', () => {
+  it('its search terms are its tags and its description, the notes field', () => {
+    const ws = { ...w('Atlas launch', ['Projects']), notes: 'The readout for leadership.' }
+    expect(workspaceTerms(ws)).toEqual(['Projects', 'The readout for leadership.'])
+    expect(workspaceTerms(w('Empty', []))).toEqual([])
   })
 })

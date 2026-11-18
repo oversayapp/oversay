@@ -11,7 +11,7 @@
   import { showBlockedBy } from '../lib/notes/show'
   import { session } from '../lib/session/store'
   import { addDeckToWorkspace, deleteWorkspace, removeDeckFromWorkspace, reorderWorkspace, updateWorkspace, workspaces } from '../lib/workspaces/store'
-  import { findWorkspace, movedDeck, type WorkspaceChange } from '../lib/workspaces/workspaces'
+  import { findWorkspace, movedDeck } from '../lib/workspaces/workspaces'
   import { dropIndex, moveItemTo } from '../lib/project/lists'
   import ConfirmDelete from './ConfirmDelete.svelte'
   import DeckResources from './DeckResources.svelte'
@@ -55,9 +55,11 @@
   // Tags group workspaces on the Workspaces page (ADR 0040): picked from the tags in use, or new.
   const setTags = (tags: string[]) => attempt(() => updateWorkspace(id, { tags }, 'workspace tags'))
 
-  function change(field: keyof WorkspaceChange, value: string) {
-    if (!workspace || (workspace[field as 'when' | 'where' | 'notes'] ?? '') === value.trim()) return
-    attempt(() => updateWorkspace(id, { [field]: value }, `workspace ${field}`))
+  let editingDescription = $state(false)
+  function saveDescription(value: string) {
+    editingDescription = false
+    if (!workspace || workspace.notes === value.trim()) return
+    attempt(() => updateWorkspace(id, { notes: value }, 'workspace description'))
   }
 
   function show(d: DeckEntry) {
@@ -180,13 +182,23 @@
         <span class="lab">Tags</span>
         <TagPicker tags={workspace.tags} onchange={setTags} />
       </div>
-      <div class="details">
-        <label>When <input type="date" value={workspace.when} onchange={(e) => change('when', e.currentTarget.value)} /></label>
-        <label>Where <input value={workspace.where} placeholder="Zoom, Lisbon…" onchange={(e) => change('where', e.currentTarget.value)} /></label>
-        <label class="wide"
-          >Notes <textarea rows="2" value={workspace.notes} placeholder="Who it's with, what it's for" onchange={(e) => change('notes', e.currentTarget.value)}></textarea></label
-        >
-      </div>
+      <!-- The description is the workspace's notes: plain text, edited in place, found by search. -->
+      {#if editingDescription}
+        <!-- svelte-ignore a11y_autofocus -->
+        <textarea
+          class="desc-edit"
+          rows="3"
+          aria-label="Description"
+          placeholder="What this workspace is for"
+          value={workspace.notes}
+          autofocus
+          onblur={(e) => saveDescription(e.currentTarget.value)}
+          onkeydown={(e) => e.key === 'Escape' && (editingDescription = false)}
+        ></textarea>
+        <p class="muted small">Plain text, a few lines. Click away to save.</p>
+      {:else}
+        <button class="desc" class:none={!workspace.notes.trim()} title="Click to edit" onclick={() => (editingDescription = true)}>{workspace.notes.trim() || 'Add a description…'}</button>
+      {/if}
     {/if}
 
     <div class="dhead">
@@ -311,30 +323,38 @@
     margin-right: 2px;
   }
 
-  .details {
-    display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
-    gap: 10px 14px;
-    margin: 16px 0 6px;
-  }
-
-  label {
-    display: flex;
-    flex-direction: column;
-    gap: 4px;
-    font-size: 12.5px;
-    font-weight: 600;
+  .desc {
+    display: block;
+    width: 100%;
+    margin: 6px 0 0;
+    padding: 4px 8px;
+    margin-left: -8px;
+    border: 0;
+    background: none;
+    text-align: left;
     color: var(--muted);
-  }
-
-  label input,
-  label textarea {
     font-weight: 400;
-    color: var(--text);
+    white-space: pre-wrap;
+    border-radius: 8px;
   }
 
-  .wide {
-    grid-column: 1 / -1;
+  .desc:hover {
+    background: var(--hover);
+  }
+
+  .desc.none {
+    color: var(--faint);
+  }
+
+  .desc-edit {
+    width: 100%;
+    margin-top: 6px;
+    font-weight: 400;
+  }
+
+  .small {
+    font-size: 12px;
+    margin: 4px 0 0;
   }
 
   .sec {

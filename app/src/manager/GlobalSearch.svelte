@@ -22,7 +22,7 @@
   import type { IconName } from './icons'
   import { goAi, goDeck, goHome, goLibrary, goSession, goSessions, goSettings, goTemplates, goWorkspace, nav } from './route'
   import { workspaces } from '../lib/workspaces/store'
-  import { dateLabel, workspacesWith } from '../lib/workspaces/workspaces'
+  import { workspaceTerms, workspacesWith } from '../lib/workspaces/workspaces'
 
   const PAGES: Record<string, { label: string; go: () => void }> = {
     home: { label: 'Home', go: goHome },
@@ -45,7 +45,7 @@
       }),
     ...($workspaces ?? [])
       .filter((w) => w.id)
-      .map((w) => ({ kind: 'workspace' as const, id: w.id, label: w.name, terms: [...w.tags, w.where].filter(Boolean), sub: [...w.tags, dateLabel(w.when), w.where].filter(Boolean).join(' · ') || 'Workspace' })),
+      .map((w) => ({ kind: 'workspace' as const, id: w.id, label: w.name, terms: workspaceTerms(w), sub: w.notes.trim() ? w.notes.trim().split('\n')[0] : w.tags.join(' · ') || 'Workspace' })),
     // Sessions by their deck's name, newest first, with when each ran (ADR 0041).
     ...($decks ?? [])
       .filter((d) => !d.unreadable)
