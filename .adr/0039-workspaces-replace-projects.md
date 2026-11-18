@@ -12,7 +12,7 @@ ADR 0038 kept projects as they were, beside workspaces, until a later epic turne
 - **Workspaces take the rail's place of Projects.** The rail is Home, Decks, Workspaces, Templates, AI and Settings. Workspaces shows the workspace in use (its name is the menu that switches workspace, or picks All workspaces), its collections, and each collection's page.
 - **Decks is every deck**, as it was before ADR 0038 was built: no Collections tab. It still filters by collection.
 - **The project app goes**, with nothing converted: the Projects page, project files and their versions, the talk editor, Get ready, a talk's live session, the demo project, recent projects, Home's project cards, and `oversay://talks/…` opening a talk. Decks, the flashcard widget, its timeline widget and their sessions are untouched.
-- **Templates stays**, as a page to browse and edit, without Create talk; it is to be reworked to start decks later.
+- **Templates stays**, as a page to browse and edit, without Create talk; it is to be reworked to start decks later. *(Done in epic 036 (#54).)*
 - **Files already in `Documents/Oversay/Projects` are left alone.** Oversay stops reading them; a person who wants them gone deletes the folder.
 
 ## Considered options
@@ -25,6 +25,6 @@ ADR 0038 kept projects as they were, beside workspaces, until a later epic turne
 
 - ADR 0038's "today's projects become collections in the Projects workspace in a later epic; until then projects stay as they are" is replaced by this. The Projects workspace stays as the first workspace a start makes.
 - ADR 0008 (explicit save with a leave guard), 0009 (the manager keeps the project open), 0013 (new projects get a folder), 0014 (versions beside the file), 0015 (deleting a project), 0019 (the project sidebar and Get ready) and 0027 (quick talks as project files) no longer apply to anything the app makes; each says so.
-- Templates have nothing to create until they start decks; until then the page says so.
+- Templates have nothing to create until they start decks; until then the page says so. *(Epic 036 (#54): templates now start decks, and the page says so no more; see spec §4.)*
 
 *Changed by ADR 0040: Workspaces lists every workspace by tag, with no workspace "in use", and a workspace is a group of decks (no collections).*

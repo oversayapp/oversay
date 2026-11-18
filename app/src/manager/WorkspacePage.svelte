@@ -4,14 +4,14 @@
   // (or Alt+↑/↓) into another order, and taken out with ×; Add decks picks from Decks. Its resources
   // folder is below. A deck it lists that Oversay can't find shows as gone, never as an error.
   import { count } from '../lib/words'
-  import { decks, newDeck, type DeckEntry } from '../lib/decks/store'
+  import { decks, type DeckEntry } from '../lib/decks/store'
   import { showDeckOnScreen } from '../lib/decks/show'
-  import { quickName, readQuickFile } from '../lib/notes/files'
+  import { readQuickFile } from '../lib/notes/files'
   import { parseNoteDoc } from '../lib/notes/format'
   import { showBlockedBy } from '../lib/notes/show'
   import { session } from '../lib/session/store'
   import { addDeckToWorkspace, deleteWorkspace, removeDeckFromWorkspace, reorderWorkspace, updateWorkspace, workspaces } from '../lib/workspaces/store'
-  import { findWorkspace, movedDeck, type WorkspaceChange } from '../lib/workspaces/workspaces'
+  import { findWorkspace, movedDeck } from '../lib/workspaces/workspaces'
   import { dropIndex, moveItemTo } from '../lib/project/lists'
   import ConfirmDelete from './ConfirmDelete.svelte'
   import DeckResources from './DeckResources.svelte'
@@ -19,9 +19,9 @@
   import Icon from './Icon.svelte'
   import InlineRename from './InlineRename.svelte'
   import MiniPlan from './MiniPlan.svelte'
-  import { goDeck, goWorkspaces } from './route'
-  import { showBack } from './back'
-  import TagPicker from './TagPicker.svelte'
+  import { goDeck, goLibrary } from './route'
+  import { newBlankDeck } from './new'
+    import TagPicker from './TagPicker.svelte'
   import DecksResources from './DecksResources.svelte'
   import { changeWorkspaceNav, workspaceNav } from '../lib/settings/store'
   import { withOpened, withPin } from '../lib/workspaces/navigation'
@@ -35,9 +35,6 @@
     (workspace?.decks ?? []).map((deckId) => ({ id: deckId, deck: ($decks ?? []).find((d) => d.id === deckId) ?? null })),
   )
   const blocked = $derived(showBlockedBy($session))
-
-  // The way back, in the search bar's row (back.ts).
-  $effect(() => showBack({ label: 'Workspaces', go: goWorkspaces, width: 960 }))
 
   // Opening it puts it first in the Workspaces page's Recent. Not worth an error if it can't be written.
   $effect(() => {
@@ -58,9 +55,11 @@
   // Tags group workspaces on the Workspaces page (ADR 0040): picked from the tags in use, or new.
   const setTags = (tags: string[]) => attempt(() => updateWorkspace(id, { tags }, 'workspace tags'))
 
-  function change(field: keyof WorkspaceChange, value: string) {
-    if (!workspace || (workspace[field as 'when' | 'where' | 'notes'] ?? '') === value.trim()) return
-    attempt(() => updateWorkspace(id, { [field]: value }, `workspace ${field}`))
+  let editingDescription = $state(false)
+  function saveDescription(value: string) {
+    editingDescription = false
+    if (!workspace || workspace.notes === value.trim()) return
+    attempt(() => updateWorkspace(id, { notes: value }, 'workspace description'))
   }
 
   function show(d: DeckEntry) {
@@ -104,15 +103,7 @@
   }
 
   /** New deck here: made in Decks, as every deck is, and added to this workspace. */
-  function createHere() {
-    attempt(async () => {
-      const path = await newDeck()
-      const made = ($decks ?? []).find((d) => d.path === path)
-      if (!made?.id) throw new Error(`${quickName(path)} was made, but has no id yet to add it here; add it in a moment`)
-      await addDeckToWorkspace(id, made.id)
-      goDeck(path)
-    })
-  }
+  const createHere = () => attempt(() => newBlankDeck(id))
 
   // Add decks: the decks not in this workspace, narrowed by what is typed.
   let adding = $state(false)
@@ -176,7 +167,7 @@
             deleting = false
             attempt(async () => {
               await deleteWorkspace(id)
-              goWorkspaces()
+              goLibrary()
             })
           }}
           oncancel={() => (deleting = false)}>Delete “{workspace.name}”? Its decks stay in Decks. It moves to the Trash, with its files.</ConfirmDelete
@@ -191,13 +182,23 @@
         <span class="lab">Tags</span>
         <TagPicker tags={workspace.tags} onchange={setTags} />
       </div>
-      <div class="details">
-        <label>When <input type="date" value={workspace.when} onchange={(e) => change('when', e.currentTarget.value)} /></label>
-        <label>Where <input value={workspace.where} placeholder="Zoom, Lisbon…" onchange={(e) => change('where', e.currentTarget.value)} /></label>
-        <label class="wide"
-          >Notes <textarea rows="2" value={workspace.notes} placeholder="Who it's with, what it's for" onchange={(e) => change('notes', e.currentTarget.value)}></textarea></label
-        >
-      </div>
+      <!-- The description is the workspace's notes: plain text, edited in place, found by search. -->
+      {#if editingDescription}
+        <!-- svelte-ignore a11y_autofocus -->
+        <textarea
+          class="desc-edit"
+          rows="3"
+          aria-label="Description"
+          placeholder="What this workspace is for"
+          value={workspace.notes}
+          autofocus
+          onblur={(e) => saveDescription(e.currentTarget.value)}
+          onkeydown={(e) => e.key === 'Escape' && (editingDescription = false)}
+        ></textarea>
+        <p class="muted small">Plain text, a few lines. Click away to save.</p>
+      {:else}
+        <button class="desc" class:none={!workspace.notes.trim()} title="Click to edit" onclick={() => (editingDescription = true)}>{workspace.notes.trim() || 'Add a description…'}</button>
+      {/if}
     {/if}
 
     <div class="dhead">
@@ -322,30 +323,38 @@
     margin-right: 2px;
   }
 
-  .details {
-    display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
-    gap: 10px 14px;
-    margin: 16px 0 6px;
-  }
-
-  label {
-    display: flex;
-    flex-direction: column;
-    gap: 4px;
-    font-size: 12.5px;
-    font-weight: 600;
+  .desc {
+    display: block;
+    width: 100%;
+    margin: 6px 0 0;
+    padding: 4px 8px;
+    margin-left: -8px;
+    border: 0;
+    background: none;
+    text-align: left;
     color: var(--muted);
-  }
-
-  label input,
-  label textarea {
     font-weight: 400;
-    color: var(--text);
+    white-space: pre-wrap;
+    border-radius: 8px;
   }
 
-  .wide {
-    grid-column: 1 / -1;
+  .desc:hover {
+    background: var(--hover);
+  }
+
+  .desc.none {
+    color: var(--faint);
+  }
+
+  .desc-edit {
+    width: 100%;
+    margin-top: 6px;
+    font-weight: 400;
+  }
+
+  .small {
+    font-size: 12px;
+    margin: 4px 0 0;
   }
 
   .sec {

@@ -3,20 +3,16 @@
   import { logAction } from '../lib/log'
   import { updateAvailable } from '../lib/updates/store'
   import { settings } from '../lib/settings/store'
-  import { goAi, goDecks, goHome, goSessions, goSettings, goTemplates, goWorkspaces, nav as screen } from './route'
+  import { goAi, goHome, goLibrary, goSessions, goSettings, goTemplates, nav as screen } from './route'
 </script>
 
 <nav class="rail" aria-label="Main">
   <button aria-current={$screen.view === 'home' ? 'page' : undefined} onclick={goHome}>
     <Icon name="home" size={22} /><span>Home</span>
   </button>
-  <!-- Decks replace Notes and Talks (epic 023 (#24), ADR 0036, task 225): their files are moved in. -->
-  <button aria-current={$screen.view === 'decks' ? 'page' : undefined} onclick={goDecks}>
-    <Icon name="deck" size={22} /><span>Decks</span>
-  </button>
-  <!-- Workspaces take the place of projects (ADR 0039): every workspace, by tag (ADR 0040). -->
-  <button aria-current={$screen.view === 'workspaces' ? 'page' : undefined} onclick={goWorkspaces}>
-    <Icon name="folder" size={22} /><span>Workspaces</span>
+  <!-- Decks and workspaces in one place (epic 036 (#54)); a deck in the editor is still in the Library. -->
+  <button aria-current={$screen.view === 'library' ? 'page' : undefined} onclick={() => goLibrary()}>
+    <Icon name="deck" size={22} /><span>Library</span>
   </button>
   <button aria-current={$screen.view === 'templates' ? 'page' : undefined} onclick={goTemplates}>
     <Icon name="template" size={22} /><span>Templates</span>

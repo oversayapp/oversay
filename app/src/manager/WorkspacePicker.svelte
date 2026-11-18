@@ -5,7 +5,7 @@
   import { sortWorkspaces } from '../lib/workspaces/workspaces'
   import { attempt } from './errors'
   import Icon from './Icon.svelte'
-  import { goWorkspaces } from './route'
+  import { goLibrary } from './route'
 
   let { deckId, onclose }: { deckId: string; onclose: () => void } = $props()
 
@@ -29,7 +29,7 @@
     <p class="muted">This deck has no id yet; try again in a moment.</p>
   {:else if usable.length === 0}
     <p class="muted">No workspaces yet.</p>
-    <button class="link" onclick={() => (onclose(), goWorkspaces())}>Make one in Workspaces</button>
+    <button class="link" onclick={() => (onclose(), goLibrary())}>Make one with + New</button>
   {:else}
     {#each usable as w (w.id)}
       {@const inIt = w.decks.includes(deckId)}

@@ -40,6 +40,7 @@
   import { attempt } from './errors'
   import Icon from './Icon.svelte'
   import { goBackFromDeck, goDeck, goWorkspace, nav } from './route'
+  import { PLACE_TITLES } from './nav'
   import { findWorkspace, workspacesWith } from '../lib/workspaces/workspaces'
   import WorkspacePicker from './WorkspacePicker.svelte'
   import { showBack } from './back'
@@ -59,9 +60,9 @@
     })
   })
 
-  // The way back, in the search bar's row (back.ts): to the workspace it was opened from, or Decks.
+  // The way back, in the search bar's row (back.ts): to the workspace it was opened from, or the Library group.
   $effect(() =>
-    showBack({ label: ($nav.workspace && findWorkspace($workspaces ?? [], $nav.workspace)?.name) || 'Decks', go: goBackFromDeck, width: 1040 }),
+    showBack({ label: ($nav.workspace && findWorkspace($workspaces ?? [], $nav.workspace)?.name) || PLACE_TITLES[$nav.place ?? 'all'], go: goBackFromDeck, width: 1040 }),
   )
 
   onDestroy(() => {

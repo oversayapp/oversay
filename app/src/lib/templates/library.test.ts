@@ -6,6 +6,7 @@ import {
   addCategory,
   addTemplate,
   countInCategory,
+  categoryDeletion,
   deleteCategory,
   deleteTemplate,
   deletedStarters,
@@ -183,5 +184,17 @@ describe('parseLibrary', () => {
       ['c_x', 'slate'],
     ])
     expect(lib.templates).toEqual([])
+  })
+})
+
+describe('what deleting a category takes with it (epic 036 (#54))', () => {
+  it('counts the starter and your own templates in it, which can and cannot be brought back', () => {
+    const lib = addTemplate(EMPTY_LIBRARY, { ...templateFromTalk(talk, 'Mine', 'meetings') })
+    const n = STARTER_TEMPLATES.filter((t) => t.category === 'meetings').length
+    expect(categoryDeletion(lib, 'meetings')).toEqual({ templates: n + 1, starters: n, yours: 1 })
+  })
+
+  it('is empty for a category with nothing in it', () => {
+    expect(categoryDeletion(EMPTY_LIBRARY, 'mine')).toEqual({ templates: 0, starters: 0, yours: 0 })
   })
 })

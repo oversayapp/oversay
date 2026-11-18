@@ -1,16 +1,19 @@
 <script lang="ts">
-  // New workspace (ADR 0040): a name, the tags that group it (research, tutorials), and when, where
-  // and notes if there are any.
+  // New workspace (ADR 0040, epic 036 (#54)): a name, a description (the workspace's notes) and the tags
+  // that group it (research, tutorials). When and where stay in the file; they are not asked for.
   import type { WorkspaceChange } from '../lib/workspaces/workspaces'
   import TagPicker from './TagPicker.svelte'
 
   let {
     tags = [],
+    name = '',
     oncreate,
     oncancel,
   }: {
     /** Tags to start with: the tag the page is filtered to. */
     tags?: string[]
+    /** A name to start with: what was typed in the bar. */
+    name?: string
     oncreate: (change: WorkspaceChange) => void
     oncancel: () => void
   } = $props()
@@ -24,7 +27,7 @@
     const form = new FormData(e.currentTarget as HTMLFormElement)
     const text = (key: string) => String(form.get(key) ?? '').trim()
     if (!text('name')) return
-    oncreate({ name: text('name'), tags: chosen, when: text('when'), where: text('where'), notes: text('notes') })
+    oncreate({ name: text('name'), tags: chosen, notes: text('notes') })
   }
 </script>
 
@@ -33,12 +36,10 @@
   <div class="grid">
     <label class="wide">Name
       <!-- svelte-ignore a11y_autofocus -->
-      <input name="name" required placeholder="Prompt injection in AI agents" autofocus onkeydown={(e) => e.key === 'Escape' && oncancel()} />
+      <input name="name" required value={name} placeholder="Prompt injection in AI agents" autofocus onkeydown={(e) => e.key === 'Escape' && oncancel()} />
     </label>
     <div class="wide field"><span>Tags</span><TagPicker tags={chosen} onchange={(t) => (chosen = t)} placeholder="research, talks…" /></div>
-    <label>When <input name="when" type="date" /></label>
-    <label>Where <input name="where" placeholder="Zoom, Lisbon…" /></label>
-    <label class="wide">Notes <textarea name="notes" rows="2" placeholder="Who it's with, what it's for"></textarea></label>
+    <label class="wide">Description <textarea name="notes" rows="3" placeholder="What this workspace is for"></textarea></label>
   </div>
   <div class="acts">
     <button type="submit" class="primary">Create</button>
@@ -48,8 +49,8 @@
 
 <style>
   .panel {
-    margin: 4px 0 18px;
-    padding: 14px 16px;
+    margin: 0;
+    padding: 18px 20px;
     border: 1px solid var(--line-strong);
     border-radius: 14px;
     background: var(--card);

@@ -27,7 +27,7 @@
   import { findWorkspace, workspacesWith } from '../lib/workspaces/workspaces'
   import Icon from './Icon.svelte'
   import RunBar from './RunBar.svelte'
-  import { goDecks, goSession } from './route'
+  import { goLibrary, goSession } from './route'
 
   const runs = $derived(
     everyRun(
@@ -173,7 +173,7 @@
   {#if $decks && $deckSessions && runs.length === 0}
     <div class="empty">
       <p><b>No sessions yet.</b> Show a deck and press Start: each run is kept here, card by card, to look back on.</p>
-      <button class="primary" onclick={goDecks}><Icon name="deck" size={16} /> Go to Decks</button>
+      <button class="primary" onclick={() => goLibrary()}><Icon name="deck" size={16} /> Go to the Library</button>
     </div>
   {:else}
     {#each groups as g (g.label)}

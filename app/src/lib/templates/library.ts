@@ -114,6 +114,16 @@ export function deleteCategory(lib: Library, id: CategoryId): Library {
   return { ...lib, templates, categories: lib.categories.filter((c) => c.id !== id) }
 }
 
+/**
+ * What deleting a category takes with it: its templates, starters (Settings brings them back) and yours
+ * (nothing does), so the question before it can say which (epic 036 (#54)).
+ */
+export function categoryDeletion(lib: Library, id: CategoryId): { templates: number; starters: number; yours: number } {
+  const inIt = visibleTemplates(lib).filter((t) => t.category === id)
+  const starters = inIt.filter((t) => t.builtin).length
+  return { templates: inIt.length, starters, yours: inIt.length - starters }
+}
+
 /** The talk's structure only: segment names, kinds, lengths and open-ended flags. */
 export function templateFromTalk(talk: Talk, name: string, category: CategoryId): Template {
   return {

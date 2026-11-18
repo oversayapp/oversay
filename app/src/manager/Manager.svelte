@@ -1,5 +1,5 @@
 <script lang="ts">
-  // The manager window (ADR 0039, 0041): Home, Decks, Workspaces, Templates, Sessions, AI and Settings, with the
+  // The manager window (ADR 0039, 0041): Home, Library (decks and workspaces), Templates, Sessions, AI and Settings, with the
   // one search bar above every page. Decks are what Oversay shows; projects are gone.
   import { onMount } from 'svelte'
   import { get } from 'svelte/store'
@@ -16,14 +16,14 @@
   import { LINK_EVENT } from '../lib/links'
   import { followLinks } from './links'
   import LinkPrompt from './LinkPrompt.svelte'
+  import NewWorkspace from './NewWorkspace.svelte'
+  import TemplatePicker from './TemplatePicker.svelte'
   import DropZone from './DropZone.svelte'
   import { loadLibrary } from '../lib/templates/library-store'
   import { attempt, notice } from './errors'
   import { goSession, nav } from './route'
   import Home from './Home.svelte'
-  import DecksPage from './DecksPage.svelte'
-  import WorkspacesPage from './WorkspacesPage.svelte'
-  import WorkspacePage from './WorkspacePage.svelte'
+  import LibraryPage from './LibraryPage.svelte'
   import SessionsPage from './SessionsPage.svelte'
   import SessionPage from './SessionPage.svelte'
   import DeckEditor from './DeckEditor.svelte'
@@ -155,18 +155,14 @@
 
     <!-- No router library: the nav state decides the screen. A deck opens in its editor over
          Decks, or over the workspace it was opened from (ADR 0039, 0040). -->
-    {#if $nav.deck && ($nav.view === 'decks' || $nav.view === 'workspaces')}
+    {#if $nav.deck && $nav.view === 'library'}
       <DeckEditor path={$nav.deck} />
     {:else if $nav.view === 'settings'}
       <Settings />
     {:else if $nav.view === 'ai'}
       <AiPage />
-    {:else if $nav.view === 'decks'}
-      <DecksPage />
-    {:else if $nav.view === 'workspaces' && $nav.workspace}
-      <WorkspacePage id={$nav.workspace} />
-    {:else if $nav.view === 'workspaces'}
-      <WorkspacesPage />
+    {:else if $nav.view === 'library'}
+      <LibraryPage />
     {:else if $nav.view === 'templates'}
       <TemplatesPage />
     {:else if $nav.view === 'sessions' && $nav.session}
@@ -181,6 +177,8 @@
 </div>
 
 <LinkPrompt />
+<NewWorkspace />
+<TemplatePicker />
 <DropZone />
 
 <style>

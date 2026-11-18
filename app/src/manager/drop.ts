@@ -11,7 +11,7 @@ import { session } from '../lib/session/store'
 import { forgetQuickPath } from '../lib/settings/store'
 import { showBlockedBy } from '../lib/notes/show'
 import { attempt, notice } from './errors'
-import { goDecks, nav } from './route'
+import { goLibrary, nav } from './route'
 
 /** Files being dragged over the window, or null. */
 export const dropOver = writable<DropPlan | null>(null)
@@ -32,7 +32,7 @@ export const resourcesChanged = writable(0)
 /** The deck open in the editor, or the workspace open on its page, whose resources a drop adds to (ADR 0040); null elsewhere. */
 export function dropOwner(): ResourceOwner | null {
   const n = get(nav)
-  if (n.view !== 'decks') return null
+  if (n.view !== 'library') return null
   if (n.deck) return { deck: n.deck }
   return n.workspace ? { workspace: n.workspace } : null
 }
@@ -85,7 +85,7 @@ export function handleDrop(paths: readonly string[]): void {
     }
     await loadDecks()
     added.set({ paths: made, renamed })
-    goDecks()
+    goLibrary('all')
   })
 }
 
