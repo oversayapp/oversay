@@ -83,7 +83,8 @@
   /** Every row the arrow keys walk: the actions first, then what was found. */
   type Row = { command: Command } | { item: Searchable }
   const flat = $derived<Row[]>([...commands.map((command) => ({ command })), ...groups.flatMap((g) => g.items.map((item) => ({ item })))])
-  const open = $derived(focused && (query.trim() !== '' || making))
+  // Clicked into, the bar lists what it can do even before anything is typed.
+  const open = $derived(focused)
   const subOf = (item: Searchable) => items.find((i) => i.kind === item.kind && i.id === item.id)?.sub ?? ''
 
   // A new query starts at the best match.
@@ -225,7 +226,7 @@
             </button>
           {/each}
         {:else}
-          {#if commands.length === 0}<p class="none">Nothing matches “{query.trim()}”.</p>{/if}
+          {#if commands.length === 0 && query.trim()}<p class="none">Nothing matches “{query.trim()}”.</p>{/if}
         {/each}
       </div>
     {/if}
@@ -251,7 +252,7 @@
     padding: 0 32px;
     display: grid;
     /* The way back at the left, the search in the middle while there's room. */
-    grid-template-columns: minmax(max-content, 1fr) minmax(0, 640px) 1fr;
+    grid-template-columns: minmax(max-content, 1fr) minmax(0, 480px) 1fr;
     align-items: center;
     gap: 12px;
   }
@@ -308,9 +309,11 @@
     position: relative;
     flex: 1;
     min-width: 0;
+    /* Small and flat until it is clicked into: no border, a faint fill. */
+    font-size: 13px;
     background: var(--rail);
     border: 1px solid transparent;
-    border-radius: 10px;
+    border-radius: 8px;
     transition: border-color 0.15s, background 0.15s;
   }
 
@@ -334,7 +337,8 @@
     min-width: 0;
     border: 0;
     background: none;
-    padding: 7px 0;
+    padding: 4px 0;
+    font-size: inherit;
     outline: none;
   }
 

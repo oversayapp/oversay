@@ -36,7 +36,7 @@ export function commandsFor(c: CommandContext): Command[] {
   const make: Command[] = []
   if (c.making) {
     make.push(named('blank-deck', 'deck', 'Blank deck', query), { kind: 'deck-from-template', label: 'Deck from a template…' }, named('new-workspace', 'workspace', 'Workspace…', query))
-  } else if (query) {
+  } else {
     const typed = /^new\s+(deck|workspace)\s+(.+)$/i.exec(query)
     if (typed) {
       const kind = typed[1].toLowerCase() === 'deck' ? 'blank-deck' : 'new-workspace'
@@ -50,7 +50,7 @@ export function commandsFor(c: CommandContext): Command[] {
 
   const onDeck: Command[] = []
   const d = c.deck
-  if (d && query && !c.making) {
+  if (d && !c.making) {
     const inIt = new Set(d.inWorkspaces.map((w) => w.id))
     if (d.canShow && matches(query, `Show “${d.name}”`, 'on screen')) onDeck.push({ kind: 'show', label: `Show “${d.name}”` })
     for (const w of c.workspaces) {

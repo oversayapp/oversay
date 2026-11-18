@@ -4,6 +4,18 @@ import { commandsFor, type CommandContext } from './commands'
 const ctx = (over: Partial<CommandContext> = {}): CommandContext => ({ query: '', making: false, deck: null, workspaces: [], ...over })
 const labels = (c: CommandContext) => commandsFor(c).map((x) => x.label)
 
+describe('the command bar, clicked into with nothing typed', () => {
+  it('lists what you can do, so there is something to pick', () => {
+    expect(commandsFor(ctx()).map((c) => c.kind)).toEqual(['blank-deck', 'deck-from-template', 'new-workspace'])
+  })
+
+  it('on an open deck, also Show and Add to / Take out of its workspaces', () => {
+    const deck = { name: 'Stand-up', id: 'd_a', canShow: true, inWorkspaces: [{ id: 'w_a', name: 'Atlas' }] }
+    const all = commandsFor(ctx({ deck, workspaces: [{ id: 'w_a', name: 'Atlas' }, { id: 'w_b', name: 'Bees' }] })).map((c) => c.label)
+    expect(all).toEqual(['New deck', 'Deck from a template…', 'New workspace', 'Show “Stand-up”', 'Take out of Atlas', 'Add to Bees'])
+  })
+})
+
 describe('the command bar: making things', () => {
   it('opened by + New with nothing typed, lists what you can make', () => {
     expect(commandsFor(ctx({ making: true })).map((c) => c.kind)).toEqual(['blank-deck', 'deck-from-template', 'new-workspace'])
@@ -26,10 +38,6 @@ describe('the command bar: making things', () => {
     expect(commandsFor(ctx({ query: 'new' })).map((c) => c.kind)).toEqual(['blank-deck', 'deck-from-template', 'new-workspace'])
     expect(commandsFor(ctx({ query: 'templ' })).map((c) => c.kind)).toEqual(['deck-from-template'])
     expect(commandsFor(ctx({ query: 'zzz' }))).toEqual([])
-  })
-
-  it('offers nothing for an empty query unless it was opened to make something', () => {
-    expect(commandsFor(ctx())).toEqual([])
   })
 })
 

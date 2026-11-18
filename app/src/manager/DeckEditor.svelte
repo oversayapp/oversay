@@ -342,15 +342,19 @@
         <p class="bar-hint">Drag the handle on a card’s right edge to change its time in 30-second steps, or select it and press ← →.</p>
       </div>
     {/if}
-        <div class="tabs" role="tablist">
-          <button role="tab" aria-selected={page === 'cards'} onclick={() => (page = 'cards')}>Cards</button>
-          <button role="tab" aria-selected={page === 'settings'} onclick={() => (page = 'settings')}>Settings</button>
+        <div class="tabrow">
+          <div class="tabs" role="tablist">
+            <button role="tab" aria-selected={page === 'cards'} onclick={() => (page = 'cards')}>Cards</button>
+            <button role="tab" aria-selected={page === 'settings'} onclick={() => (page = 'settings')}>Settings</button>
+          </div>
+          {#if page === 'cards'}
+            <div class="modes" role="group" aria-label="View">
+              <button aria-pressed={view === 'edit'} onclick={() => showView('edit')}>Edit</button>
+              <button aria-pressed={view === 'markdown'} onclick={() => showView('markdown')}>Markdown</button>
+            </div>
+          {/if}
         </div>
         {#if page === 'cards'}
-          <div class="modes" role="group" aria-label="View">
-            <button aria-pressed={view === 'edit'} onclick={() => showView('edit')}>Edit</button>
-            <button aria-pressed={view === 'markdown'} onclick={() => showView('markdown')}>Markdown</button>
-          </div>
           <div class="main">
         {#if view === 'edit'}
           <NoteTopics {doc} noteName={deck.name} onchange={change} bind:current word="card" kinds />
@@ -808,15 +812,29 @@
     justify-content: flex-end;
   }
 
+  /* Tabs at the left, the page's own options at the right of the same row. */
+  .tabrow {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 12px;
+  }
+
   .modes {
     display: inline-flex;
-    gap: 4px;
-    margin: 0 0 10px;
+    gap: 2px;
+    border: 1px solid var(--line-strong);
+    border-radius: 10px;
+    padding: 2px;
   }
 
   .modes button {
-    padding: 3px 10px;
+    border: 0;
+    background: none;
+    padding: 4px 12px;
     font-size: 12.5px;
+    font-weight: 600;
+    color: var(--muted);
     border-radius: 8px;
   }
 
