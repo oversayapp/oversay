@@ -2,7 +2,7 @@
 // note on the Decks page, becomes a deck. What was added is shown in a banner on Decks, with Undo.
 import { get, writable } from 'svelte/store'
 import { readText } from '@tauri-apps/plugin-clipboard-manager'
-import { fileName, nameForPasted, planDrop, type DropPlan } from '../lib/notes/drop'
+import { fileName, nameForPasted, pastedDeckText, planDrop, type DropPlan } from '../lib/notes/drop'
 import { importNote, quickName, trashQuickFile } from '../lib/notes/files'
 import { createDeck, loadDecks } from '../lib/decks/store'
 import { addResources, type ResourceOwner } from '../lib/decks/resources'
@@ -106,21 +106,29 @@ export function handleDrop(paths: readonly string[]): void {
   })
 }
 
-/** New deck from clipboard (it was Paste as deck): Markdown on the clipboard becomes a deck (it was Paste as note). */
+/** New deck from the clipboard: opens a dialog with what is on the clipboard, to look at, change and Create or Cancel. */
 export function pasteAsNote(): void {
   attempt(async () => {
     const text = (await readText().catch(() => '')) ?? ''
-    if (text.trim() === '') {
-      notice.set('The clipboard has no text to make a note from.')
-      return
-    }
-    const name = nameForPasted(text)
-    logAction('paste as note')
-    const path = await createDeck(name, text.endsWith('\n') ? text : text + '\n')
-    await loadDecks()
-    // Named as asked: two decks may share a name (ADR 0037).
-    added.set({ paths: [path], renamed: [] })
+    logAction('new deck from clipboard', text.trim() === '' ? 'empty' : 'text')
+    pasteDialog.set({ open: true, text })
   })
+}
+
+/** The dialog for it: open, and the text in it. */
+export const pasteDialog = writable<{ open: boolean; text: string }>({ open: false, text: '' })
+export const closePasteDialog = () => pasteDialog.set({ open: false, text: '' })
+
+/** Create: the text becomes a deck, named from it, and the list says what was added, with Undo. */
+export async function createFromPasted(text: string): Promise<void> {
+  const body = pastedDeckText(text)
+  if (!body) return
+  logAction('create deck from pasted text')
+  const path = await createDeck(nameForPasted(body), body)
+  await loadDecks()
+  closePasteDialog()
+  // Named as asked: two decks may share a name (ADR 0037).
+  added.set({ paths: [path], renamed: [] })
 }
 
 /** Moves what the last drop or paste added to the Trash. */

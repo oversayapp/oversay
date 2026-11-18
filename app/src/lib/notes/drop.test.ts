@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { nameForPasted, planDrop } from './drop'
+import { nameForPasted, pastedDeckText, planDrop } from './drop'
 
 describe('a note file dropped on Oversay', () => {
   it('copies Markdown files in and leaves out what is not a note', () => {
@@ -20,5 +20,13 @@ describe('Markdown pasted as a note', () => {
     expect(nameForPasted('---\nwith: Sam\n---\n## Hiring [10m]\n- Two roles\n')).toBe('Hiring')
     expect(nameForPasted('- just a point\n')).toBe('Pasted note')
     expect(nameForPasted('# Release notes ##\n')).toBe('Release notes')
+  })
+})
+
+describe('the text a pasted deck is made from', () => {
+  it('ends in one newline, and is nothing when it is blank', () => {
+    expect(pastedDeckText('## A [1m]\n- b')).toBe('## A [1m]\n- b\n')
+    expect(pastedDeckText('## A\n\n\n')).toBe('## A\n')
+    expect(pastedDeckText('  \n ')).toBeNull()
   })
 })

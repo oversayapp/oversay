@@ -28,7 +28,7 @@ When the person asks what this skill or the Oversay plugin can do, or to be walk
 3. In Cowork, use the Decks folder inside the folder the person let the task work in (`Oversay/Decks`, or `Decks` when that folder is `Oversay` itself).
 4. Create the folder if it is missing. In it, only ever make a new deck's folder and write a deck's `deck.md`, or, when [reviewing a session](#review-a-session), a file in a deck's `reviews/` or `transcripts/`. Leave the rest alone: each deck's `sessions.json` (Oversay keeps its runs there; read it to review one), its `recordings/`, its `resources/` (read them only when asked, below) and any `.sessions` folder.
 
-If you can't write files on this computer (a chat in a browser, for example), give the person the whole deck as one Markdown block named `<name>.md`. Tell them to drop the file on Oversay's window, or to copy it and use **New deck from clipboard** in Oversay's command bar.
+If you can't write files on this computer (a chat in a browser, for example), give the person the whole deck as one Markdown block named `<name>.md`. Tell them to drop the file on Oversay's window, or to copy it and use **New deck from the clipboard** in Oversay's command bar.
 
 ## Make a deck
 

@@ -17,6 +17,7 @@
   import { followLinks } from './links'
   import LinkPrompt from './LinkPrompt.svelte'
   import NewWorkspace from './NewWorkspace.svelte'
+  import PasteDeckDialog from './PasteDeckDialog.svelte'
   import TemplatePicker from './TemplatePicker.svelte'
   import DropZone from './DropZone.svelte'
   import { loadLibrary } from '../lib/templates/library-store'
@@ -184,6 +185,7 @@
 
 <LinkPrompt />
 <NewWorkspace />
+<PasteDeckDialog />
 <TemplatePicker />
 <DropZone />
 

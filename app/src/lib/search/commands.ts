@@ -35,7 +35,7 @@ export function commandsFor(c: CommandContext): Command[] {
 
   const make: Command[] = []
   if (c.making) {
-    make.push(named('blank-deck', 'deck', 'Blank deck', query), { kind: 'deck-from-template', label: 'Deck from a template…' }, { kind: 'paste-deck', label: 'New deck from clipboard' }, named('new-workspace', 'workspace', 'Workspace…', query))
+    make.push(named('blank-deck', 'deck', 'Blank deck', query), { kind: 'deck-from-template', label: 'New deck from the template…' }, { kind: 'paste-deck', label: 'New deck from the clipboard…' }, named('new-workspace', 'workspace', 'Workspace…', query))
   } else {
     const typed = /^new\s+(deck|workspace)\s+(.+)$/i.exec(query)
     if (typed) {
@@ -43,8 +43,8 @@ export function commandsFor(c: CommandContext): Command[] {
       make.push(named(kind, typed[1].toLowerCase(), '', typed[2].trim()))
     } else {
       if (matches(query, 'New deck', 'blank')) make.push({ kind: 'blank-deck', label: 'New deck' })
-      if (matches(query, 'Deck from a template', 'new start')) make.push({ kind: 'deck-from-template', label: 'Deck from a template…' })
-      if (matches(query, 'New deck from clipboard', 'paste markdown create')) make.push({ kind: 'paste-deck', label: 'New deck from clipboard' })
+      if (matches(query, 'New deck from the template', 'start')) make.push({ kind: 'deck-from-template', label: 'New deck from the template…' })
+      if (matches(query, 'New deck from the clipboard', 'paste markdown create')) make.push({ kind: 'paste-deck', label: 'New deck from the clipboard…' })
       if (matches(query, 'New workspace', '')) make.push({ kind: 'new-workspace', label: 'New workspace' })
     }
   }
