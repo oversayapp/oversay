@@ -44,6 +44,7 @@
   import { findWorkspace, workspacesWith } from '../lib/workspaces/workspaces'
   import WorkspacePicker from './WorkspacePicker.svelte'
   import { showBack } from './back'
+  import { decks } from '../lib/decks/store'
   import { settings } from '../lib/settings/store'
   import { removeDeckFromWorkspace, workspaces } from '../lib/workspaces/store'
 
@@ -190,7 +191,9 @@
   })
 
   // Edit (cards) or Markdown; both edit the same text, and switching keeps the card.
-  let tab = $state<'edit' | 'markdown'>('edit')
+  let view = $state<'edit' | 'markdown'>('edit')
+  /** The page in the middle: the cards, or the deck's settings (ADR 0046). */
+  let page = $state<'cards' | 'settings'>('cards')
   let current = $state(0)
   /** The card being edited, among the deck's cards. */
   const editing = $derived(doc ? cardAt(doc, current) : 0)
@@ -198,10 +201,10 @@
 
   const change = (next: NoteDoc) => editNote(writeNoteDoc(next))
 
-  async function showTab(next: 'edit' | 'markdown') {
-    if (next === tab) return
-    logAction('deck tab', next)
-    tab = next
+  async function showView(next: 'edit' | 'markdown') {
+    if (next === view) return
+    logAction('deck view', next)
+    view = next
     if (next !== 'markdown' || !doc) return
     await tick()
     if (!area) return
@@ -291,7 +294,92 @@
     {/if}
     <SkillNoteCheck {doc} text={deck.text} deck />
     {#if $justRan === deck.path}<DeckAfter path={deck.path} top />{/if}
-    <div class="front">
+    <div class="ed">
+      <aside class="side">
+        <section class="pv" aria-label="Preview on screen">
+          <div class="pvh">
+            <b>On screen</b>
+            <span class="grow"></span>
+            <button
+              class="onscreen"
+              class:on={previewing}
+              title={previewing ? 'Close the preview on your screen' : 'Open it on your screen as it will look; nothing is recorded'}
+              onclick={previewOnScreen}><Icon name="popout" size={14} /> {previewing ? 'Stop preview' : 'Preview'}</button
+            >
+            <button class="link" onclick={() => (previewShown = !previewShown)}>{previewShown ? 'Hide' : 'Show'}</button>
+          </div>
+          {#if previewShown}
+            <DeckPreview {doc} name={deck.name} {options} bind:current />
+            <p class="sub">The card you're editing; hover it for Previous and Next.</p>
+          {/if}
+          {#if previewing}<p class="sub">On your screen, following your edits. Nothing is recorded; its ✕ closes it.</p>{/if}
+        </section>
+        <AddResource deckId={deckIdNow} />
+        <dl class="facts" aria-label="About this deck">
+          <div><dt>Cards</dt><dd>{cards.length}</dd></div>
+          <div><dt>Length</dt><dd class="num">{length}</dd></div>
+          <div><dt>Changed</dt><dd>{new Date(($decks ?? []).find((d) => d.path === deck.path)?.modifiedMs ?? Date.now()).toLocaleDateString(undefined, { day: 'numeric', month: 'short' })}</dd></div>
+          <div>
+            <dt>Workspaces</dt>
+            <dd>
+              {#each inWorkspaces as c (c.id)}<button class="link" title="Open {c.name}" onclick={() => goWorkspace(c.id)}>{c.name}</button>{:else}None{/each}
+            </dd>
+          </div>
+        </dl>
+      </aside>
+      <section class="mid">
+        {#if seconds > 0}
+      <div class="planbar">
+        <PlanBar
+          segments={bar}
+          selectedId={bar[editing]?.id ?? null}
+          onselect={(id) => {
+            const t = doc ? topicOfCard(doc, barIndex(id)) : -1
+            if (t >= 0) current = t
+          }}
+          onresize={resize}
+        />
+        <p class="bar-hint">Drag the handle on a card’s right edge to change its time in 30-second steps, or select it and press ← →.</p>
+      </div>
+    {/if}
+        <div class="tabs" role="tablist">
+          <button role="tab" aria-selected={page === 'cards'} onclick={() => (page = 'cards')}>Cards</button>
+          <button role="tab" aria-selected={page === 'settings'} onclick={() => (page = 'settings')}>Settings</button>
+        </div>
+        {#if page === 'cards'}
+          <div class="modes" role="group" aria-label="View">
+            <button aria-pressed={view === 'edit'} onclick={() => showView('edit')}>Edit</button>
+            <button aria-pressed={view === 'markdown'} onclick={() => showView('markdown')}>Markdown</button>
+          </div>
+          <div class="main">
+        {#if view === 'edit'}
+          <NoteTopics {doc} noteName={deck.name} onchange={change} bind:current word="card" kinds />
+          {#if $justRan !== deck.path}<DeckAfter path={deck.path} />{/if}
+        {:else}
+          <textarea
+            class="md"
+            aria-label="The deck in Markdown"
+            spellcheck="true"
+            bind:this={area}
+            value={deck.text}
+            oninput={(e) => {
+              editNote(e.currentTarget.value)
+              followCursor()
+            }}
+            onclick={followCursor}
+            onkeyup={followCursor}
+          ></textarea>
+          <p class="hint muted">
+            <code>## Card [3m]</code> starts a card, <code>[3m, demo]</code> gives it a kind and <code>[open]</code> or no time leaves it
+            untimed; <code>- point</code> adds a point. Quotes, tables and code are kept but not shown.
+          </p>
+        {/if}
+          </div>
+        {:else}
+          <div class="groups">
+            <section class="grp" aria-label="About">
+              <h3>About</h3>
+              <div class="front">
       <label>
         <span>Audience</span>
         <input value={deckAudience(doc)} placeholder="Who it is for" onchange={(e) => setAudience(e.currentTarget.value)} />
@@ -337,72 +425,10 @@
           {#if picking}<WorkspacePicker deckId={deckIdNow} onclose={() => (picking = false)} />{/if}
         </span>
       </div>
-    </div>
-    {#if seconds > 0}
-      <div class="planbar">
-        <PlanBar
-          segments={bar}
-          selectedId={bar[editing]?.id ?? null}
-          onselect={(id) => {
-            const t = doc ? topicOfCard(doc, barIndex(id)) : -1
-            if (t >= 0) current = t
-          }}
-          onresize={resize}
-        />
-        <p class="bar-hint">Drag the handle on a card’s right edge to change its time in 30-second steps, or select it and press ← →.</p>
-      </div>
-    {/if}
-    <div class="tabs" role="tablist">
-      <button role="tab" aria-selected={tab === 'edit'} onclick={() => showTab('edit')}>Edit</button>
-      <button role="tab" aria-selected={tab === 'markdown'} onclick={() => showTab('markdown')}>Markdown</button>
-    </div>
-    <div class="deckeed">
-      <div class="main">
-        {#if tab === 'edit'}
-          <NoteTopics {doc} noteName={deck.name} onchange={change} bind:current word="card" kinds />
-          {#if $justRan !== deck.path}<DeckAfter path={deck.path} />{/if}
-        {:else}
-          <textarea
-            class="md"
-            aria-label="The deck in Markdown"
-            spellcheck="true"
-            bind:this={area}
-            value={deck.text}
-            oninput={(e) => {
-              editNote(e.currentTarget.value)
-              followCursor()
-            }}
-            onclick={followCursor}
-            onkeyup={followCursor}
-          ></textarea>
-          <p class="hint muted">
-            <code>## Card [3m]</code> starts a card, <code>[3m, demo]</code> gives it a kind and <code>[open]</code> or no time leaves it
-            untimed; <code>- point</code> adds a point. Quotes, tables and code are kept but not shown.
-          </p>
-        {/if}
-      </div>
-      <aside class="side">
-        <AddResource deckId={deckIdNow} />
-        <section class="pv" aria-label="Preview on screen">
-          <div class="pvh">
-            <b>On screen</b>
-            <span class="grow"></span>
-            <button
-              class="onscreen"
-              class:on={previewing}
-              title={previewing ? 'Close the preview on your screen' : 'Open it on your screen as it will look; nothing is recorded'}
-              onclick={previewOnScreen}><Icon name="popout" size={14} /> {previewing ? 'Stop preview' : 'Preview'}</button
-            >
-            <button class="link" onclick={() => (previewShown = !previewShown)}>{previewShown ? 'Hide' : 'Show'}</button>
-          </div>
-          {#if previewShown}
-            <DeckPreview {doc} name={deck.name} {options} bind:current />
-            <p class="sub">The card you're editing; hover it for Previous and Next.</p>
-          {/if}
-          {#if previewing}<p class="sub">On your screen, following your edits. Nothing is recorded; its ✕ closes it.</p>{/if}
-        </section>
-        <section class="opts" aria-label="Deck options">
-          <h3>Timing</h3>
+              </div>
+            </section>
+            <section class="grp" aria-label="Timing">
+              <h3>Timing</h3>
           <div class="seg" role="radiogroup" aria-label="Timing">
             {#each [[true, 'On'], [false, 'Off']] as const as [on, label] (label)}
               <button role="radio" aria-checked={options.timing === on} onclick={() => setOption('timing', on)}>{label}</button>
@@ -422,16 +448,9 @@
             /> Auto-advance</label
           >
           <p class="sub">Go to the next card when its time is up. Off, a card waits for Next, counting on in red.</p>
-          <h3>The card shows</h3>
-          <div class="parts">
-            {#each DECK_PARTS as part (part)}
-              <label class="chk part"
-                ><input type="checkbox" checked={!options.hide.includes(part)} onchange={(e) => showPart(part, e.currentTarget.checked)} />
-                {PART_LABELS[part]}</label
-              >
-            {/each}
-          </div>
-          <h3>Record on start</h3>
+            </section>
+            <section class="grp" aria-label="Recording">
+              <h3>Recording</h3>
           <div class="seg" role="radiogroup" aria-label="Record on start">
             {#each [['global', 'Use global setting'], ['on', 'On'], ['off', 'Off']] as const as [id, label] (id)}
               <button role="radio" aria-checked={options.recordOnStart === id} onclick={() => setOption('recordOnStart', id)}>{label}</button>
@@ -445,14 +464,28 @@
                 : 'Records only when you press the record button, whatever Auto record says.'}
             Only your own microphone, transcribed on this computer; the first recording still asks for permission.
           </p>
-          <h3>Colour</h3>
+            </section>
+            <section class="grp" aria-label="Look">
+              <h3>Look</h3>
+          <h4>The card shows</h4>
+          <div class="parts">
+            {#each DECK_PARTS as part (part)}
+              <label class="chk part"
+                ><input type="checkbox" checked={!options.hide.includes(part)} onchange={(e) => showPart(part, e.currentTarget.checked)} />
+                {PART_LABELS[part]}</label
+              >
+            {/each}
+          </div>
+          <h4>Colour</h4>
           <div class="seg" role="radiogroup" aria-label="Colour">
             {#each [['kinds', 'By kind'], ['one', 'One colour']] as const as [id, label] (id)}
               <button role="radio" aria-checked={options.colour === id} onclick={() => setOption('colour', id)}>{label}</button>
             {/each}
           </div>
-        </section>
-      </aside>
+            </section>
+          </div>
+        {/if}
+      </section>
     </div>
   {/if}
 </div>
@@ -532,7 +565,7 @@
     display: flex;
     gap: 10px;
     flex-wrap: wrap;
-    margin: 12px 0 14px;
+    margin: 0;
   }
 
   .front label {
@@ -642,11 +675,17 @@
     color: var(--accent-text);
   }
 
-  .deckeed {
+  /* The slim left column (preview, Add resource, the deck's facts) and the middle (plan bar over Cards | Settings). */
+  .ed {
     display: grid;
-    grid-template-columns: minmax(0, 1fr) 340px;
+    grid-template-columns: 290px minmax(0, 1fr);
     gap: 22px;
     align-items: start;
+    margin-top: 14px;
+  }
+
+  .mid {
+    min-width: 0;
   }
 
   /* Stays in view while the cards scroll; scrolls itself when taller than the window. */
@@ -659,7 +698,7 @@
   }
 
   @media (max-width: 900px) {
-    .deckeed {
+    .ed {
       grid-template-columns: 1fr;
     }
   }
@@ -713,23 +752,77 @@
 
 
 
-  .opts {
+  .groups {
+    display: grid;
+    gap: 12px;
+    max-width: 680px;
+  }
+
+  .grp {
     border: 1px solid var(--line);
     border-radius: 14px;
     background: var(--card);
     padding: 12px 14px 14px;
   }
 
-  .opts h3 {
-    margin: 14px 0 6px;
+  .grp h3 {
+    margin: 0 0 8px;
     font-size: 12px;
     letter-spacing: 0.07em;
     text-transform: uppercase;
     color: var(--faint);
   }
 
-  .opts h3:first-child {
-    margin-top: 0;
+  .grp h4 {
+    margin: 14px 0 6px;
+    font-size: 12.5px;
+    color: var(--muted);
+  }
+
+  .facts {
+    margin: 0;
+    padding: 10px 12px;
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    display: grid;
+    gap: 6px;
+    font-size: 13px;
+  }
+
+  .facts div {
+    display: flex;
+    justify-content: space-between;
+    gap: 10px;
+  }
+
+  .facts dt {
+    color: var(--faint);
+  }
+
+  .facts dd {
+    margin: 0;
+    text-align: right;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    justify-content: flex-end;
+  }
+
+  .modes {
+    display: inline-flex;
+    gap: 4px;
+    margin: 0 0 10px;
+  }
+
+  .modes button {
+    padding: 3px 10px;
+    font-size: 12.5px;
+    border-radius: 8px;
+  }
+
+  .modes button[aria-pressed='true'] {
+    background: var(--accent-soft);
+    color: var(--accent-text);
   }
 
   .parts {
