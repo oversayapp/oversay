@@ -19,6 +19,7 @@ const m = vi.hoisted(() => {
   return {
     invoke: vi.fn(),
     setPin: vi.fn(),
+    seedOpened: vi.fn(),
     markInstalled: vi.fn(),
     loadWorkspaces: vi.fn(),
     settings: store<{ exampleDecksInstalled?: boolean }>({}),
@@ -32,14 +33,20 @@ vi.mock('../settings/store', () => ({
   markKnown: vi.fn(),
   markExampleDecksInstalled: () => m.markInstalled(),
   setPin: (...a: unknown[]) => m.setPin(...a),
+  seedOpened: (...a: unknown[]) => m.seedOpened(...a),
 }))
 vi.mock('../workspaces/store', () => ({ loadWorkspaces: () => m.loadWorkspaces() }))
 vi.mock('./store', () => ({
   decks: m.decks,
-  loadDecks: async () => m.decks.set([{ id: 'd_exinterv', path: '/Decks/Interview/deck.md' }, { id: 'd_exwelcome', path: '/Decks/Welcome/deck.md' }]),
+  loadDecks: async () => m.decks.set([
+    { id: 'd_exinterv', path: '/Decks/Interview/deck.md' },
+    { id: 'd_exsemin', path: '/Decks/Bees/deck.md' },
+    { id: 'd_exconf', path: '/Decks/Notes/deck.md' },
+    { id: 'd_exwelcome', path: '/Decks/Welcome/deck.md' },
+  ]),
 }))
 
-import { EXAMPLE_PINNED_ID, installExampleDecksOnFirstRun } from './examples'
+import { EXAMPLE_PINNED_ID, installExampleDecks, installExampleDecksOnFirstRun } from './examples'
 
 describe('the example decks on the first run', () => {
   beforeEach(() => {
@@ -60,5 +67,22 @@ describe('the example decks on the first run', () => {
     await installExampleDecksOnFirstRun()
     expect(m.invoke).not.toHaveBeenCalled()
     expect(m.setPin).not.toHaveBeenCalled()
+  })
+
+  it('puts the three unpinned examples in Recent on the first run, Welcome first', async () => {
+    await installExampleDecksOnFirstRun()
+    expect(m.seedOpened).toHaveBeenCalledTimes(1)
+    expect(m.seedOpened).toHaveBeenCalledWith([
+      { path: '/Decks/Welcome/deck.md', id: 'd_exwelcome' },
+      { path: '/Decks/Notes/deck.md', id: 'd_exconf' },
+      { path: '/Decks/Bees/deck.md', id: 'd_exsemin' },
+    ])
+  })
+
+  it('does not touch Recent after the first run, or when examples are restored from Settings', async () => {
+    m.settings.set({ exampleDecksInstalled: true })
+    await installExampleDecksOnFirstRun()
+    await installExampleDecks()
+    expect(m.seedOpened).not.toHaveBeenCalled()
   })
 })

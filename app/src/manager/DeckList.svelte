@@ -62,6 +62,15 @@
   const shown = $derived(filterDecks(listed.filter((d) => inList.some((x) => x.path === d.path)), filters, Date.now()))
   /** What the list shows, in its order: filters hide workspaces, which they don't describe. */
   const rows = $derived(filtering ? refs.filter((r) => r.kind === 'deck' && shown.some((d) => d.path === r.deck.path)) : refs)
+  /** A list that mixes decks and workspaces (Recent, Pinned, This week) is split in two under quiet headings; each part keeps its own order. */
+  const parts = $derived.by(() => {
+    const decksPart = rows.filter((r) => r.kind === 'deck')
+    const spacesPart = rows.filter((r) => r.kind === 'workspace')
+    return [
+      { label: 'Decks', rows: decksPart },
+      { label: 'Workspaces', rows: spacesPart },
+    ].filter((p) => p.rows.length)
+  })
   const groups = $derived(grouped ? groupByDate(shown, Date.now()) : [])
 
   /** Who it is for and when it changed, under its name; its tags show beside as chips. */
@@ -340,15 +349,18 @@
         </ul>
       {/each}
     {:else}
-      <ul class="decklist">
-        {#each rows as r (r.kind === 'deck' ? r.deck.path : r.workspace.id)}
-          {#if r.kind === 'deck'}
-            <li class:editing={renaming === r.deck.path || deleting === r.deck.path}>{@render item(r.deck)}</li>
-          {:else}
-            <li class="space">{@render spaceRow(r.workspace)}</li>
-          {/if}
-        {/each}
-      </ul>
+      {#each parts as part (part.label)}
+        {#if parts.length > 1}<h3 class="sec">{part.label} <span class="cnt">{part.rows.length}</span></h3>{/if}
+        <ul class="decklist">
+          {#each part.rows as r (r.kind === 'deck' ? r.deck.path : r.workspace.id)}
+            {#if r.kind === 'deck'}
+              <li class:editing={renaming === r.deck.path || deleting === r.deck.path}>{@render item(r.deck)}</li>
+            {:else}
+              <li class="space">{@render spaceRow(r.workspace)}</li>
+            {/if}
+          {/each}
+        </ul>
+      {/each}
     {/if}
     {#if filtering && shown.length === 0}
       <p class="muted">No decks match these filters.</p>

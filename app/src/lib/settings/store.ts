@@ -23,6 +23,7 @@ import {
   withDecksFollowed,
   type ListedDeck,
   withQuickFavourite,
+  type Opened,
   type QuickFavourite,
   type QuickItemKind,
   type QuickSeen,
@@ -267,6 +268,21 @@ export function markOpened(kind: QuickItemKind, path: string, id?: string): Prom
     const folder = kind === 'note' ? 'notes' : kind === 'talk' ? 'talks' : kind === 'deck' ? 'decks' : null
     const quickSeen: QuickSeen = folder ? { ...seen, [folder]: withoutFresh(seen[folder], path) } : seen
     await save({ ...current, opened: withOpened(parseOpened(current.opened), kind, path, new Date().toISOString(), id), quickSeen })
+  }).catch(() => {})
+}
+
+/**
+ * First run only: puts decks in Recent, the first of `decks` the newest. Nothing is written when
+ * something has been opened already, so it never adds to what a person's use has made.
+ */
+export function seedOpened(decks: readonly { path: string; id: string }[]): Promise<void> {
+  return inTurn(async () => {
+    const current = get(settings)
+    if (parseOpened(current.opened).length) return
+    const start = Date.now()
+    // Each a second apart, so their order is kept when Recent sorts by time.
+    const opened = [...decks].reverse().reduce((list, d, i) => withOpened(list, 'deck', d.path, new Date(start + i * 1000).toISOString(), d.id), [] as Opened[])
+    await save({ ...current, opened })
   }).catch(() => {})
 }
 

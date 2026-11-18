@@ -5,12 +5,15 @@
 import { invoke } from '@tauri-apps/api/core'
 import { get } from 'svelte/store'
 import { logAction } from '../log'
-import { markExampleDecksInstalled, markKnown, setPin, settings, settingsReadable } from '../settings/store'
+import { markExampleDecksInstalled, markKnown, seedOpened, setPin, settings, settingsReadable } from '../settings/store'
 import { loadWorkspaces } from '../workspaces/store'
 import { decks, loadDecks } from './store'
 
 /** The id the example interview deck carries (examples/Interview talking points.md): pinned on the first run, so Pinned has one. */
 export const EXAMPLE_PINNED_ID = 'd_exinterv'
+
+/** The examples that start in Recent on the first run, Welcome first (the newest): all but the pinned interview deck. */
+export const EXAMPLE_RECENT_IDS = ['d_exwelcome', 'd_exconf', 'd_exsemin']
 
 /** The example decks Decks doesn't have, by name. */
 export const missingExampleDecks = (): Promise<string[]> => invoke<string[]>('missing_example_decks')
@@ -36,5 +39,7 @@ export async function installExampleDecksOnFirstRun(): Promise<void> {
   await installExampleDecks()
   const pinned = get(decks)?.find((d) => d.id === EXAMPLE_PINNED_ID)
   if (pinned) await setPin('deck', pinned.path, true, pinned.id)
+  const recent = EXAMPLE_RECENT_IDS.flatMap((id) => get(decks)?.find((d) => d.id === id) ?? [])
+  if (recent.length) await seedOpened(recent.map((d) => ({ path: d.path, id: d.id })))
   await markExampleDecksInstalled()
 }
