@@ -1,10 +1,13 @@
 // Making things from + New, the command bar and Home (epic 036 (#54)). Looking at a workspace, a new deck goes in it.
 import { get, writable } from 'svelte/store'
+import { logAction } from '../lib/log'
 import { decks, newDeck, type DeckEntry } from '../lib/decks/store'
 import { showDeckOnScreen } from '../lib/decks/show'
 import { quickName, readQuickFile } from '../lib/notes/files'
 import { parseNoteDoc } from '../lib/notes/format'
 import { addDeckToWorkspace, createWorkspace } from '../lib/workspaces/store'
+import { deckFromTemplate } from '../lib/templates/deck'
+import type { Template } from '../lib/templates/catalog'
 import type { WorkspaceChange } from '../lib/workspaces/workspaces'
 import { goDeck, goWorkspace, nav } from './route'
 
@@ -39,6 +42,14 @@ export async function putInWorkspace(path: string, id: string): Promise<void> {
 /** A blank deck, in the workspace being looked at if there is one, opened in the editor. */
 export async function newBlankDeck(workspace: string | undefined = get(nav).workspace, name?: string): Promise<void> {
   const path = await newDeck(name)
+  if (workspace) await putInWorkspace(path, workspace)
+  goDeck(path)
+}
+
+/** A deck from a template: its cards, kinds and times, in the workspace being looked at if there is one; opened in the editor. */
+export async function startDeckFromTemplate(template: Template, workspace: string | undefined = get(nav).workspace): Promise<void> {
+  const path = await newDeck(template.name, deckFromTemplate(template, template.name))
+  logAction('deck from template', template.builtin ? template.id : 'one of yours')
   if (workspace) await putInWorkspace(path, workspace)
   goDeck(path)
 }

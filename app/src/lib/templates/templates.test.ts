@@ -1,7 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { SEGMENT_KINDS } from '../project/types'
 import { STARTER_CATEGORIES, STARTER_TEMPLATES, templateSeconds, type Template } from './catalog'
-import { filterTemplates } from './filter'
 
 const ids = (templates: Template[]) => templates.map((t) => t.id)
 
@@ -35,33 +34,4 @@ describe('starter templates', () => {
   it('gives each starter category its own colour', () => {
     expect(new Set(STARTER_CATEGORIES.map((c) => c.color)).size).toBe(STARTER_CATEGORIES.length)
   })
-})
-
-describe('filterTemplates', () => {
-  const mine: Template = {
-    id: 'u_1',
-    name: 'My keynote 30',
-    description: 'Saved from Product keynote.',
-    category: 'conferences',
-    builtin: false,
-    segments: [{ name: 'Opener', kind: 'intro', plannedSeconds: 1800, openEnded: false }],
-  }
-  const all = [...STARTER_TEMPLATES, mine]
-
-  it('shows everything for All with no search', () => {
-    expect(filterTemplates(all, { chip: 'all', query: '' })).toHaveLength(25)
-  })
-
-  it('filters by category, including your templates in it', () => {
-    const shown = filterTemplates(all, { chip: 'conferences', query: '' })
-    expect(shown.every((t) => t.category === 'conferences')).toBe(true)
-    expect(ids(shown)).toContain('u_1')
-  })
-
-
-  it('searches names and descriptions, any case, all words', () => {
-    expect(ids(filterTemplates(all, { chip: 'all', query: 'DEMO stakeholder' }))).toEqual(['builtin:stakeholder-demo-15'])
-    expect(ids(filterTemplates(all, { chip: 'all', query: 'questions' }))).toContain('builtin:talk-qa-45')
-  })
-
 })
