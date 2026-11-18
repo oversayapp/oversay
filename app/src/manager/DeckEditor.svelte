@@ -149,9 +149,8 @@
     setOption('hide', on ? options.hide.filter((p) => p !== part) : [...options.hide, part])
   }
 
-  // The preview: in the page, or hidden; and the real widget on screen in preview, never
+  // The preview in the page, and the real widget on screen in preview, never
   // recorded, following the card being edited and the deck as it changes.
-  let previewShown = $state(true)
   const previewing = $derived(!!$session?.preview && !!$session.deck && $session.status !== 'finished')
 
   function previewOnScreen() {
@@ -306,12 +305,9 @@
               title={previewing ? 'Close the preview on your screen' : 'Open it on your screen as it will look; nothing is recorded'}
               onclick={previewOnScreen}><Icon name="popout" size={14} /> {previewing ? 'Stop preview' : 'Preview'}</button
             >
-            <button class="link" onclick={() => (previewShown = !previewShown)}>{previewShown ? 'Hide' : 'Show'}</button>
           </div>
-          {#if previewShown}
-            <DeckPreview {doc} name={deck.name} {options} bind:current />
-            <p class="sub">The card you're editing; hover it for Previous and Next.</p>
-          {/if}
+          <DeckPreview {doc} name={deck.name} {options} bind:current />
+          <p class="sub">The card you're editing; hover it for Previous and Next.</p>
           {#if previewing}<p class="sub">On your screen, following your edits. Nothing is recorded; its ✕ closes it.</p>{/if}
         </section>
         <AddResource deckId={deckIdNow} />
