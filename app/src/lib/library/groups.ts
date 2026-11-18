@@ -63,3 +63,19 @@ export function libraryGroups(i: GroupInput): LibraryGroups {
   const unsorted = i.workspaces.length ? readable.filter((d) => !d.id || !filed.has(d.id)) : []
   return { recent, pinned, week, unsorted }
 }
+
+/** How many workspaces the pane lists before "All N workspaces". */
+export const PANE_WORKSPACES = 6
+
+/**
+ * The workspaces in the Library's left pane: A-Z (case-insensitive, locale-aware), and the same order
+ * whatever was opened, since Recent is the one place that orders by use. The open one stays in the
+ * list even when it is past the sixth.
+ */
+export function paneWorkspaces(workspaces: readonly Workspace[], openId: string | undefined, all: boolean): Workspace[] {
+  const list = workspaces.filter((w) => w.id).sort((a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: 'base' }))
+  if (all) return list
+  const shown = list.slice(0, PANE_WORKSPACES)
+  const open = openId ? list.find((w) => w.id === openId) : undefined
+  return open && !shown.includes(open) ? [...shown.slice(0, PANE_WORKSPACES - 1), open] : shown
+}

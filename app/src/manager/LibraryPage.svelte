@@ -5,11 +5,10 @@
   // one picked, or is the workspace's page. New is the + New beside the search bar (NewMenu), not here.
   import { onMount } from 'svelte'
   import { decks, loadDecks } from '../lib/decks/store'
-  import { libraryGroups, type LibraryRef } from '../lib/library/groups'
+  import { libraryGroups, paneWorkspaces, type LibraryRef } from '../lib/library/groups'
   import { opened, pins, workspaceNav } from '../lib/settings/store'
   import { TAG_COLOUR_CSS, tagColour } from '../lib/workspaces/navigation'
   import { loadWorkspaces, workspaces } from '../lib/workspaces/store'
-  import { sortWorkspaces } from '../lib/workspaces/workspaces'
   import { attempt } from './errors'
   import { goAi, goLibrary, goWorkspace, nav as screen } from './route'
   import { newBlankDeck } from './new'
@@ -26,19 +25,12 @@
     libraryGroups({ decks: $decks ?? [], workspaces: $workspaces ?? [], pins: $pins, opened: $opened, workspaceNav: $workspaceNav, now: Date.now() }),
   )
   const place = $derived<LibraryPlace>($screen.place ?? (groups.recent.length ? 'recent' : 'all'))
-  const allSpaces = $derived(sortWorkspaces(($workspaces ?? []).filter((w) => w.id)))
+  const allSpaces = $derived(($workspaces ?? []).filter((w) => w.id))
   const empty = $derived($decks !== null && $decks.length === 0 && allSpaces.length === 0)
 
-  /** Workspaces in the pane: the last opened first, then the rest, six unless "All N workspaces" is on. */
+  /** Workspaces in the pane: A-Z, six unless "All N workspaces" is on. */
   let allShown = $state(false)
-  const paneSpaces = $derived.by(() => {
-    const byOpened = $workspaceNav.opened.flatMap((o) => allSpaces.find((w) => w.id === o.id) ?? [])
-    const list = [...byOpened, ...allSpaces.filter((w) => !byOpened.includes(w))]
-    // The one open stays in the list even when it is past the sixth.
-    const shown = list.slice(0, 6)
-    const open = $screen.workspace ? list.find((w) => w.id === $screen.workspace) : undefined
-    return allShown ? list : open && !shown.includes(open) ? [...shown.slice(0, 5), open] : shown
-  })
+  const paneSpaces = $derived(paneWorkspaces(allSpaces, $screen.workspace, allShown))
 
   const decksIn = (refs: LibraryRef[]) => refs
   const asDecks = (list: { path: string }[]): LibraryRef[] =>
