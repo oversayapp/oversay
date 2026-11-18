@@ -2,7 +2,7 @@
 // note on the Decks page, becomes a deck. What was added is shown in a banner on Decks, with Undo.
 import { get, writable } from 'svelte/store'
 import { readText } from '@tauri-apps/plugin-clipboard-manager'
-import { fileName, nameForPasted, planDrop, type DropPlan } from '../lib/notes/drop'
+import { fileName, nameForPasted, pastedDeckText, planDrop, type DropPlan } from '../lib/notes/drop'
 import { importNote, quickName, trashQuickFile } from '../lib/notes/files'
 import { createDeck, loadDecks } from '../lib/decks/store'
 import { addResources, type ResourceOwner } from '../lib/decks/resources'
@@ -12,6 +12,12 @@ import { forgetQuickPath } from '../lib/settings/store'
 import { showBlockedBy } from '../lib/notes/show'
 import { attempt, notice } from './errors'
 import { goLibrary, nav } from './route'
+import { openNote } from '../lib/notes/store'
+import { parseNoteDoc } from '../lib/notes/format'
+import { deckId } from '../lib/decks/deck'
+import { workspaces } from '../lib/workspaces/store'
+import { findWorkspace, workspacesWith } from '../lib/workspaces/workspaces'
+import { addResourceTarget } from '../lib/workspaces/resources'
 
 /** Files being dragged over the window, or null. */
 export const dropOver = writable<DropPlan | null>(null)
@@ -26,16 +32,27 @@ export interface Added {
 /** What the last drop or paste added, for the banner on Notes; null once closed or undone. */
 export const added = writable<Added | null>(null)
 
-/** Counts the drops that added to a deck's resources, so its editor lists them again. */
+/** Counts the drops that added to a workspace's resources, so its page lists them again. */
 export const resourcesChanged = writable(0)
 
-/** The deck open in the editor, or the workspace open on its page, whose resources a drop adds to (ADR 0040); null elsewhere. */
+/**
+ * The workspace whose resources a drop adds to (ADR 0046): the workspace open on its page, or, on
+ * a deck open in the editor, the workspace Add resource to workspace would choose; null elsewhere,
+ * and for a deck that has to be asked which.
+ */
 export function dropOwner(): ResourceOwner | null {
   const n = get(nav)
   if (n.view !== 'library') return null
-  if (n.deck) return { deck: n.deck }
-  return n.workspace ? { workspace: n.workspace } : null
+  if (!n.deck) return n.workspace ? { workspace: n.workspace } : null
+  const open = get(openNote)
+  const id = open && open.path === n.deck ? deckId(parseNoteDoc(open.text)) : ''
+  const target = addResourceTarget(id ? workspacesWith(get(workspaces) ?? [], id).map((w) => w.id) : [], n.workspace ?? null)
+  return target.kind === 'to' ? { workspace: target.id } : null
 }
+
+/** The name of the workspace a drop on `owner` adds to, for the veil. */
+export const dropTargetName = (owner: ResourceOwner): string =>
+  ('workspace' in owner && findWorkspace(get(workspaces) ?? [], owner.workspace)?.name) || 'this workspace'
 
 /** A transcript dropped on a session's page (ADR 0041): the page lines it up with the session. */
 export const transcriptDropped = writable<string | null>(null)
@@ -53,11 +70,11 @@ export function handleDrop(paths: readonly string[]): void {
     transcriptDropped.set(paths[0] ?? null)
     return
   }
-  // On an open deck or workspace, any file is one of its resources: copied into its resources folder.
+  // On a workspace's page (or a deck with one workspace to go to), any file is one of its resources: copied into its resources folder.
   const owner = dropOwner()
   if (owner) {
     attempt(async () => {
-      const said = await addResources(owner, paths)
+      const said = await addResources(owner, paths, dropTargetName(owner))
       resourcesChanged.update((n) => n + 1)
       if (said) notice.set(said)
     })
@@ -89,21 +106,29 @@ export function handleDrop(paths: readonly string[]): void {
   })
 }
 
-/** Decks › Paste as deck: Markdown on the clipboard becomes a deck (it was Paste as note). */
+/** New deck from the clipboard: opens a dialog with what is on the clipboard, to look at, change and Create or Cancel. */
 export function pasteAsNote(): void {
   attempt(async () => {
     const text = (await readText().catch(() => '')) ?? ''
-    if (text.trim() === '') {
-      notice.set('The clipboard has no text to make a note from.')
-      return
-    }
-    const name = nameForPasted(text)
-    logAction('paste as note')
-    const path = await createDeck(name, text.endsWith('\n') ? text : text + '\n')
-    await loadDecks()
-    // Named as asked: two decks may share a name (ADR 0037).
-    added.set({ paths: [path], renamed: [] })
+    logAction('new deck from clipboard', text.trim() === '' ? 'empty' : 'text')
+    pasteDialog.set({ open: true, text })
   })
+}
+
+/** The dialog for it: open, and the text in it. */
+export const pasteDialog = writable<{ open: boolean; text: string }>({ open: false, text: '' })
+export const closePasteDialog = () => pasteDialog.set({ open: false, text: '' })
+
+/** Create: the text becomes a deck, named from it, and the list says what was added, with Undo. */
+export async function createFromPasted(text: string): Promise<void> {
+  const body = pastedDeckText(text)
+  if (!body) return
+  logAction('create deck from pasted text')
+  const path = await createDeck(nameForPasted(body), body)
+  await loadDecks()
+  closePasteDialog()
+  // Named as asked: two decks may share a name (ADR 0037).
+  added.set({ paths: [path], renamed: [] })
 }
 
 /** Moves what the last drop or paste added to the Trash. */

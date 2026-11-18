@@ -43,6 +43,8 @@
     "allow-list-resources",
     "allow-add-resources",
     "allow-add-resource-link",
+    "allow-move-deck-resources",
+    "allow-undo-resources-move",
     "allow-open-resource",
     "allow-open-resources-folder",
     "allow-list-session-files",

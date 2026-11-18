@@ -2,7 +2,7 @@
 // From a template, New workspace; and, on an open deck, Show, Add to …, Take out of …. Pure, so the bar
 // and its tests agree.
 
-export type CommandKind = 'blank-deck' | 'deck-from-template' | 'new-workspace' | 'show' | 'add-to' | 'take-out'
+export type CommandKind = 'blank-deck' | 'deck-from-template' | 'paste-deck' | 'new-workspace' | 'show' | 'add-to' | 'take-out'
 
 export interface Command {
   kind: CommandKind
@@ -35,22 +35,23 @@ export function commandsFor(c: CommandContext): Command[] {
 
   const make: Command[] = []
   if (c.making) {
-    make.push(named('blank-deck', 'deck', 'Blank deck', query), { kind: 'deck-from-template', label: 'Deck from a template…' }, named('new-workspace', 'workspace', 'Workspace…', query))
-  } else if (query) {
+    make.push(named('blank-deck', 'deck', 'Blank deck', query), { kind: 'deck-from-template', label: 'New deck from the template…' }, { kind: 'paste-deck', label: 'New deck from the clipboard…' }, named('new-workspace', 'workspace', 'Workspace…', query))
+  } else {
     const typed = /^new\s+(deck|workspace)\s+(.+)$/i.exec(query)
     if (typed) {
       const kind = typed[1].toLowerCase() === 'deck' ? 'blank-deck' : 'new-workspace'
       make.push(named(kind, typed[1].toLowerCase(), '', typed[2].trim()))
     } else {
       if (matches(query, 'New deck', 'blank')) make.push({ kind: 'blank-deck', label: 'New deck' })
-      if (matches(query, 'Deck from a template', 'new start')) make.push({ kind: 'deck-from-template', label: 'Deck from a template…' })
+      if (matches(query, 'New deck from the template', 'start')) make.push({ kind: 'deck-from-template', label: 'New deck from the template…' })
+      if (matches(query, 'New deck from the clipboard', 'paste markdown create')) make.push({ kind: 'paste-deck', label: 'New deck from the clipboard…' })
       if (matches(query, 'New workspace', '')) make.push({ kind: 'new-workspace', label: 'New workspace' })
     }
   }
 
   const onDeck: Command[] = []
   const d = c.deck
-  if (d && query && !c.making) {
+  if (d && !c.making) {
     const inIt = new Set(d.inWorkspaces.map((w) => w.id))
     if (d.canShow && matches(query, `Show “${d.name}”`, 'on screen')) onDeck.push({ kind: 'show', label: `Show “${d.name}”` })
     for (const w of c.workspaces) {

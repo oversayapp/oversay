@@ -10,7 +10,7 @@
 {#if $picker.open}
   <!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_static_element_interactions -->
   <div class="scrim" onclick={(e) => e.target === e.currentTarget && closeTemplatePicker()}>
-    <div class="dialog" role="dialog" aria-modal="true" aria-label="Deck from a template">
+    <div class="dialog" role="dialog" aria-modal="true" aria-label="New deck from the template">
       <TemplateBrowser
         mode="picker"
         initial={$picker.template}

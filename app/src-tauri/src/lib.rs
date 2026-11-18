@@ -12,6 +12,7 @@ mod platform;
 mod quick;
 mod recorder;
 mod resources;
+mod resources_move;
 mod session;
 mod session_check;
 mod session_files;
@@ -162,6 +163,8 @@ pub fn run() {
             resources::add_resource_link,
             resources::open_resource,
             resources::open_resources_folder,
+            resources_move::move_deck_resources,
+            resources_move::undo_resources_move,
             session_files::list_session_files,
             session_files::read_session_file,
             session_files::write_transcript,

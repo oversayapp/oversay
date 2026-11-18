@@ -1,6 +1,6 @@
 // Record my voice (ADR 0041): while a deck runs, the Rust recorder (recorder.rs) can
 // record this computer's microphone into the deck's recordings/, named as the session will be. With
-// Settings › Recordings' Auto record on, the manager starts it at Start; off, the deck widget's
+// Settings › Recordings' Auto record on (or the deck's own Record on start), the manager starts it at Start; off, the deck widget's
 // record button does. Pause and Resume pause it, Stop ends it; the record button stops it and
 // records again, adding to the run's recording. Every window hears each change as the `recording` event.
 
@@ -37,7 +37,13 @@ export const canRecord = (s: SessionState | null): boolean => !!s?.deck && !s.pr
 /** When the run started (its Start), or null before. */
 const startOf = (s: SessionState): string | null => s.events.find((e) => e.type === 'start')?.at ?? null
 
-/** What the follower does next for `s`, given the run it last saw, whether it is recording, and Auto record. */
+/** Whether the deck records from Start: its own Record on start (ADR 0047), else Auto record. */
+function recordsAtStart(s: SessionState, auto: boolean): boolean {
+  const own = (s.talk as { deck?: { recordOnStart?: string } } | null)?.deck?.recordOnStart
+  return own === 'on' ? true : own === 'off' ? false : auto
+}
+
+/** What the follower does next for `s`, given the run it last saw, whether it is recording, and Auto record (a deck's own Record on start overrides it). */
 export function nextStep(
   s: SessionState | null,
   seenRun: string | null,
@@ -47,7 +53,7 @@ export function nextStep(
 ): 'start' | 'pause' | 'resume' | 'stop' | null {
   const run = s ? startOf(s) : null
   if (!s || s.status === 'finished' || !s.deck) return recordingNow ? 'stop' : null
-  if (s.status === 'running' && run && run !== seenRun) return auto && canRecord(s) ? 'start' : null
+  if (s.status === 'running' && run && run !== seenRun) return recordsAtStart(s, auto) && canRecord(s) ? 'start' : null
   if (!recordingNow) return null
   if (s.paused && !pausedNow) return 'pause'
   if (!s.paused && pausedNow) return 'resume'

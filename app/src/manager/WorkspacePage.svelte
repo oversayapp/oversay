@@ -2,7 +2,7 @@
   // A workspace's page (ADR 0040): its name, tags, when, where and notes (changed
   // in place), its decks in order, each with Show and opening in the deck editor, dragged by its grip
   // (or Alt+↑/↓) into another order, and taken out with ×; Add decks picks from Decks. Its resources
-  // folder is below. A deck it lists that Oversay can't find shows as gone, never as an error.
+  // are the Files and links tab beside the decks (ADR 0046). A deck it lists that Oversay can't find shows as gone, never as an error.
   import { count } from '../lib/words'
   import { decks, type DeckEntry } from '../lib/decks/store'
   import { showDeckOnScreen } from '../lib/decks/show'
@@ -14,20 +14,32 @@
   import { findWorkspace, movedDeck } from '../lib/workspaces/workspaces'
   import { dropIndex, moveItemTo } from '../lib/project/lists'
   import ConfirmDelete from './ConfirmDelete.svelte'
-  import DeckResources from './DeckResources.svelte'
+  import WorkspaceResources from './WorkspaceResources.svelte'
+  import { listResources } from '../lib/decks/resources'
+  import { resourcesChanged } from './drop'
   import { attempt } from './errors'
   import Icon from './Icon.svelte'
   import InlineRename from './InlineRename.svelte'
   import MiniPlan from './MiniPlan.svelte'
   import { goDeck, goLibrary } from './route'
   import { newBlankDeck } from './new'
-    import TagPicker from './TagPicker.svelte'
-  import DecksResources from './DecksResources.svelte'
+  import TagPicker from './TagPicker.svelte'
   import { changeWorkspaceNav, workspaceNav } from '../lib/settings/store'
   import { withOpened, withPin } from '../lib/workspaces/navigation'
   import { logAction } from '../lib/log'
 
   let { id }: { id: string } = $props()
+
+  // Decks, or Files and links (ADR 0046); the count of the latter is read from its folder.
+  let tab = $state<'decks' | 'files'>('decks')
+  let fileCount = $state<number | null>(null)
+  $effect(() => {
+    void $resourcesChanged
+    const ws = id
+    listResources({ workspace: ws })
+      .then((r) => (fileCount = r.length))
+      .catch(() => (fileCount = null))
+  })
 
   const workspace = $derived(findWorkspace($workspaces ?? [], id))
   /** Its decks in order: each listed deck, or its id when Oversay can't find it. */
@@ -202,14 +214,22 @@
     {/if}
 
     <div class="dhead">
-      <h3 class="sec">Decks <span class="cnt">{workspace.decks.length}</span></h3>
-      {#if !workspace.problem}
+      <div class="tabs" role="tablist" aria-label="Decks, or files and links">
+        <button role="tab" aria-selected={tab === 'decks'} onclick={() => (tab = 'decks')}>Decks <span class="cnt">{workspace.decks.length}</span></button>
+        {#if workspace.id && !workspace.problem}
+          <button role="tab" aria-selected={tab === 'files'} onclick={() => (tab = 'files')}>Files and links <span class="cnt">{fileCount ?? ''}</span></button>
+        {/if}
+      </div>
+      {#if tab === 'decks' && !workspace.problem}
         <span class="dacts">
           <button onclick={() => ((adding = !adding), (addText = ''))} aria-expanded={adding}><Icon name="plus" size={15} /> Add decks</button>
           <button onclick={createHere}><Icon name="plus" size={15} /> New deck</button>
         </span>
       {/if}
     </div>
+    {#if tab === 'files' && workspace.id && !workspace.problem}
+      <WorkspaceResources workspaceId={workspace.id} name={workspace.name} />
+    {:else}
     {#if adding}
       <div class="adder" role="group" aria-label="Add decks">
         <!-- svelte-ignore a11y_autofocus -->
@@ -281,11 +301,6 @@
       </ol>
     {/if}
 
-    {#if workspace.id && !workspace.problem}
-      <!-- Its own files first, then each of its decks' (ADR 0040). -->
-      <DeckResources owner={{ workspace: workspace.id }}>
-        <DecksResources decks={entries.flatMap((e) => (e.deck ? [e.deck] : []))} />
-      </DeckResources>
     {/if}
   {/if}
 </div>
@@ -357,14 +372,6 @@
     margin: 4px 0 0;
   }
 
-  .sec {
-    margin: 22px 0 8px;
-    font-size: 12px;
-    letter-spacing: 0.07em;
-    text-transform: uppercase;
-    color: var(--faint);
-  }
-
   .cnt {
     font-weight: 500;
     letter-spacing: 0;
@@ -386,8 +393,28 @@
     margin: 22px 0 8px;
   }
 
-  .dhead .sec {
-    margin: 0;
+  .tabs {
+    display: flex;
+    gap: 4px;
+  }
+
+  .tabs button {
+    padding: 4px 12px;
+    border: 0;
+    border-bottom: 2px solid transparent;
+    border-radius: 0;
+    background: none;
+    color: var(--muted);
+    font-size: 12px;
+    letter-spacing: 0.07em;
+    text-transform: uppercase;
+    font-weight: 600;
+    cursor: pointer;
+  }
+
+  .tabs button[aria-selected='true'] {
+    color: var(--ink, inherit);
+    border-bottom-color: var(--accent);
   }
 
   .dacts {

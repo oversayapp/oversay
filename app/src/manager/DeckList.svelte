@@ -303,9 +303,6 @@
         </div>
       {/if}
     </div>
-    <div class="hacts">
-      <button title="Make a deck from Markdown you copied (⌘⇧V or Ctrl+Shift+V)" onclick={pasteAsNote}>Paste as deck</button>
-    </div>
   </header>
   {#if sub}<p class="muted">{sub}</p>{/if}
   <AddedBanner />
@@ -384,11 +381,6 @@
 
   .phead h1 {
     margin-right: auto;
-  }
-
-  .hacts {
-    display: flex;
-    gap: 10px;
   }
 
   .phead button {

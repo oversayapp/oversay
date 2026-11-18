@@ -45,7 +45,7 @@ I can open a deck in Oversay, or show it on screen ready for your call. If Overs
 ## Where it works
 
 - **Claude Code, Codex, Gemini CLI and Cowork** write decks straight into Oversay. You don't need Oversay open.
-- **Chat in a browser or a chat app** can't reach your computer. There, I give you the deck as a file. Drop it on Oversay's window, or copy it and use **Decks › Paste as deck** in Oversay.
+- **Chat in a browser or a chat app** can't reach your computer. There, I give you the deck as a file. Drop it on Oversay's window, or copy it and use **New deck from the clipboard** in Oversay's command bar.
 
 ## What I won't do
 

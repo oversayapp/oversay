@@ -30,3 +30,8 @@ export function nameForPasted(text: string): string {
   const topic = shownTopics(parseNoteDoc(text)).find((t) => t.name.trim() !== '')?.name
   return topic?.trim() || 'Pasted note'
 }
+
+/** What a pasted deck is made from: the text ending in one newline, or null when it is blank. */
+export function pastedDeckText(text: string): string | null {
+  return text.trim() === '' ? null : `${text.trimEnd()}\n`
+}

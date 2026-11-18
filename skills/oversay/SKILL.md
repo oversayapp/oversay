@@ -28,7 +28,7 @@ When the person asks what this skill or the Oversay plugin can do, or to be walk
 3. In Cowork, use the Decks folder inside the folder the person let the task work in (`Oversay/Decks`, or `Decks` when that folder is `Oversay` itself).
 4. Create the folder if it is missing. In it, only ever make a new deck's folder and write a deck's `deck.md`, or, when [reviewing a session](#review-a-session), a file in a deck's `reviews/` or `transcripts/`. Leave the rest alone: each deck's `sessions.json` (Oversay keeps its runs there; read it to review one), its `recordings/`, its `resources/` (read them only when asked, below) and any `.sessions` folder.
 
-If you can't write files on this computer (a chat in a browser, for example), give the person the whole deck as one Markdown block named `<name>.md`. Tell them to drop the file on Oversay's window, or to copy it and use **Decks › Paste as deck**.
+If you can't write files on this computer (a chat in a browser, for example), give the person the whole deck as one Markdown block named `<name>.md`. Tell them to drop the file on Oversay's window, or to copy it and use **New deck from the clipboard** in Oversay's command bar.
 
 ## Make a deck
 
@@ -59,9 +59,9 @@ If you can't write files on this computer (a chat in a browser, for example), gi
 6. [Check it](#check-it).
 7. If the deck may be open in Oversay, say that Oversay may save over the change. The person should close the deck in Oversay first, or add the lines again after.
 
-## Use a deck's resources
+## Use a workspace's resources
 
-A deck's folder can hold a `resources/` folder: documents, web links and other files the person keeps with the deck. When they ask you to use them ("use the files in this deck's resources", "from the docs in the deck"), read the files in that deck's `resources/` and use what they say. A web link file (`.webloc` on a Mac, `.url` on Windows) holds a URL: read it from the file, and open it only if you can browse and the person asked. Only read: never add, change, move or delete anything in `resources/`, and never read it unless asked.
+A workspace's folder can hold a `resources/` folder: documents, web links and other files the person keeps with the workspace (a deck has none of its own; an older deck's folder may still hold one until Oversay moves it up). When they ask you to use them ("use the files in this workspace's resources", "from the docs for the seminar"), find the workspace, read the files in its `resources/` and use what they say. A web link file (`.webloc` on a Mac, `.url` on Windows) holds a URL: read it from the file, and open it only if you can browse and the person asked. Only read: never add, change, move or delete anything in `resources/`, and never read it unless asked.
 
 ## Review a session
 

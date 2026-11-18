@@ -9,6 +9,7 @@
   import { searchEverything, type SearchKind, type Searchable } from '../lib/search/everything'
   import { commandsFor, type Command } from '../lib/search/commands'
   import { addDeckToWorkspace, removeDeckFromWorkspace } from '../lib/workspaces/store'
+  import { pasteAsNote } from './drop'
   import { attempt } from './errors'
   import { askToMake, makeRequest, newBlankDeck, openWorkspaceDialog, showDeckEntry } from './new'
   import { openTemplatePicker } from './picker'
@@ -83,7 +84,8 @@
   /** Every row the arrow keys walk: the actions first, then what was found. */
   type Row = { command: Command } | { item: Searchable }
   const flat = $derived<Row[]>([...commands.map((command) => ({ command })), ...groups.flatMap((g) => g.items.map((item) => ({ item })))])
-  const open = $derived(focused && (query.trim() !== '' || making))
+  // Clicked into, the bar lists what it can do even before anything is typed.
+  const open = $derived(focused)
   const subOf = (item: Searchable) => items.find((i) => i.kind === item.kind && i.id === item.id)?.sub ?? ''
 
   // A new query starts at the best match.
@@ -108,6 +110,7 @@
     input?.blur()
     if (c.kind === 'blank-deck') attempt(() => newBlankDeck(undefined, c.name))
     else if (c.kind === 'deck-from-template') openTemplatePicker($nav.workspace)
+    else if (c.kind === 'paste-deck') pasteAsNote()
     else if (c.kind === 'new-workspace') openWorkspaceDialog(c.name)
     else if (c.kind === 'show' && d) attempt(() => showDeckEntry(d))
     else if (c.kind === 'add-to' && d && c.workspace) attempt(() => addDeckToWorkspace(c.workspace!, d.id))
@@ -189,8 +192,9 @@
         onblur={() => ((focused = false), (making = false))}
         onkeydown={onInputKey}
       />
-      <!-- Centred while empty, as Zoom's is; it moves aside once you type. -->
-      <span class="hint" aria-hidden="true">Search or type a command (⌘K)</span>
+      <!-- Left-aligned while empty with its shortcut at the right; both go once you type. -->
+      <span class="hint" aria-hidden="true">Search or type a command</span>
+      <kbd class="key" aria-hidden="true">⌘K</kbd>
     </label>
     {#if open}
       <!-- mousedown keeps the focus in the bar, so a click lands before it closes. -->
@@ -200,7 +204,7 @@
           {#each commands as command (command.kind + (command.workspace ?? ''))}
             {@const i = flat.findIndex((r) => 'command' in r && r.command === command)}
             <button id="sr-{i}" role="option" aria-selected={i === active} class:active={i === active} onmouseenter={() => (active = i)} onclick={() => run(command)}>
-              <span class="ic"><Icon name={command.kind === 'show' ? 'show' : command.kind === 'new-workspace' ? 'folder' : command.kind === 'deck-from-template' ? 'template' : 'plus'} size={16} /></span>
+              <span class="ic"><Icon name={command.kind === 'show' ? 'show' : command.kind === 'new-workspace' ? 'folder' : command.kind === 'deck-from-template' ? 'template' : command.kind === 'paste-deck' ? 'file' : 'plus'} size={16} /></span>
               <span class="what"><span class="t">{command.label}</span></span>
             </button>
           {/each}
@@ -225,7 +229,7 @@
             </button>
           {/each}
         {:else}
-          {#if commands.length === 0}<p class="none">Nothing matches “{query.trim()}”.</p>{/if}
+          {#if commands.length === 0 && query.trim()}<p class="none">Nothing matches “{query.trim()}”.</p>{/if}
         {/each}
       </div>
     {/if}
@@ -251,7 +255,7 @@
     padding: 0 32px;
     display: grid;
     /* The way back at the left, the search in the middle while there's room. */
-    grid-template-columns: minmax(max-content, 1fr) minmax(0, 640px) 1fr;
+    grid-template-columns: minmax(max-content, 1fr) minmax(0, 480px) 1fr;
     align-items: center;
     gap: 12px;
   }
@@ -281,7 +285,8 @@
 
   .mid {
     display: flex;
-    align-items: center;
+    /* The field and the New button are one height. */
+    align-items: stretch;
     gap: 8px;
     min-width: 0;
   }
@@ -306,12 +311,21 @@
 
   .find {
     position: relative;
+    display: flex;
     flex: 1;
     min-width: 0;
-    background: var(--rail);
-    border: 1px solid transparent;
-    border-radius: 10px;
+    /* A clear edge and a faint fill until it is clicked into (then the accent). */
+    font-size: 13px;
+    /* A fill lighter than the page in both themes, so it reads as a field and not a hole. */
+    background: var(--hover);
+    border: 1px solid var(--line-strong);
+    border-radius: 8px;
     transition: border-color 0.15s, background 0.15s;
+  }
+
+  .find:hover {
+    background: color-mix(in srgb, var(--hover) 60%, var(--line));
+    border-color: var(--muted);
   }
 
   .find:focus-within {
@@ -321,10 +335,11 @@
 
   .search {
     position: relative;
+    flex: 1;
     display: flex;
     align-items: center;
     gap: 7px;
-    padding: 0 11px;
+    padding: 3px 9px 3px 11px;
     color: var(--muted);
   }
 
@@ -334,7 +349,8 @@
     min-width: 0;
     border: 0;
     background: none;
-    padding: 7px 0;
+    padding: 4px 0;
+    font-size: inherit;
     outline: none;
   }
 
@@ -347,19 +363,31 @@
     pointer-events: none;
   }
 
-  /* Empty and not focused: the icon and "Search (⌘F)" sit in the middle of the bar. */
-  .search.idle:not(:focus-within) {
-    justify-content: center;
-  }
-
+  /* Empty and not focused: the icon and the prompt at the left, the shortcut as a key at the right. */
   .search.idle:not(:focus-within) input {
     position: absolute;
     inset: 0;
     width: 100%;
-    padding-left: 11px;
+    padding-left: 32px;
   }
 
   .search.idle:not(:focus-within) .hint {
+    display: inline;
+    flex: 1;
+  }
+
+  .key {
+    display: none;
+    pointer-events: none;
+    padding: 1px 6px;
+    border: 1px solid var(--line-strong);
+    border-radius: 5px;
+    font: inherit;
+    font-size: 11.5px;
+    color: var(--faint);
+  }
+
+  .search.idle:not(:focus-within) .key {
     display: inline;
   }
 

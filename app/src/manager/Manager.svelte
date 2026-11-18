@@ -17,6 +17,7 @@
   import { followLinks } from './links'
   import LinkPrompt from './LinkPrompt.svelte'
   import NewWorkspace from './NewWorkspace.svelte'
+  import PasteDeckDialog from './PasteDeckDialog.svelte'
   import TemplatePicker from './TemplatePicker.svelte'
   import DropZone from './DropZone.svelte'
   import { loadLibrary } from '../lib/templates/library-store'
@@ -28,12 +29,14 @@
   import SessionPage from './SessionPage.svelte'
   import DeckEditor from './DeckEditor.svelte'
   import { decks, loadDecks } from '../lib/decks/store'
-  import { WORKSPACES_CHANGED_EVENT, loadWorkspaces, moveProjectLines } from '../lib/workspaces/store'
+  import { WORKSPACES_CHANGED_EVENT, loadWorkspaces, moveProjectLines, workspaces } from '../lib/workspaces/store'
   import { justRan, recordFinishedDecks } from '../lib/decks/sessions'
   import { loadDeckSessions } from '../lib/sessions/store'
   import { followRecording } from '../lib/sessions/recording'
   import { followVoiceWork, transcribeAfterRun } from '../lib/sessions/whisper'
   import { moveIntoDecks } from '../lib/decks/migrate'
+  import { moveDeckResources, movePlan } from '../lib/workspaces/resources'
+  import MovedBanner, { moved as resourcesMoved } from './MovedBanner.svelte'
   import { count } from '../lib/words'
   import Rail from './Rail.svelte'
   import GlobalSearch from './GlobalSearch.svelte'
@@ -72,6 +75,9 @@
       // Decks' project lines become collections in Projects, once (ADR 0038).
       const moved = await moveProjectLines(get(decks) ?? [])
       if (moved) notice.set(`Put ${count(moved, 'deck')} into collections in Projects, from their project lines.`)
+      // A deck's own resources move up to its workspaces, once (ADR 0046).
+      const up = await moveDeckResources(movePlan(get(decks) ?? [], get(workspaces) ?? [])).catch((e) => (logProblem('resources not moved up', String(e)), null))
+      if (up) resourcesMoved.set(up)
       // A link Oversay was started with, now that Settings says whether it may show things (ADR 0032).
       await followLinks()
     })
@@ -152,6 +158,7 @@
   <GlobalSearch />
   <main>
     {#if $notice}<p class="error notice" role="alert">{$notice}</p>{/if}
+    <MovedBanner />
 
     <!-- No router library: the nav state decides the screen. A deck opens in its editor over
          Decks, or over the workspace it was opened from (ADR 0039, 0040). -->
@@ -178,6 +185,7 @@
 
 <LinkPrompt />
 <NewWorkspace />
+<PasteDeckDialog />
 <TemplatePicker />
 <DropZone />
 
