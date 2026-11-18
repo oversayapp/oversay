@@ -7,6 +7,11 @@
   import { deckSessions } from '../lib/sessions/store'
   import { difference, runTimes } from '../lib/sessions/runs'
   import { searchEverything, type SearchKind, type Searchable } from '../lib/search/everything'
+  import { commandsFor, type Command } from '../lib/search/commands'
+  import { addDeckToWorkspace, removeDeckFromWorkspace } from '../lib/workspaces/store'
+  import { attempt } from './errors'
+  import { askToMake, makeRequest, newBlankDeck, openWorkspaceDialog, showDeckEntry } from './new'
+  import { openTemplatePicker } from './picker'
   import { visibleSections, type SettingsSectionId } from '../lib/settings/sections'
   import { visibleTemplates } from '../lib/templates/library'
   import { library } from '../lib/templates/library-store'
@@ -15,7 +20,7 @@
   import { supported } from '../lib/updates/store'
   import { back } from './back'
   import type { IconName } from './icons'
-  import { goAi, goDeck, goHome, goLibrary, goSession, goSessions, goSettings, goTemplates, goWorkspace } from './route'
+  import { goAi, goDeck, goHome, goLibrary, goSession, goSessions, goSettings, goTemplates, goWorkspace, nav } from './route'
   import { workspaces } from '../lib/workspaces/store'
   import { dateLabel, workspacesWith } from '../lib/workspaces/workspaces'
 
@@ -57,13 +62,28 @@
   ])
 
   let query = $state('')
+  /** Opened by + New or ⌘N: the bar lists what you can make, and what you type names it. */
+  let making = $state(false)
   let focused = $state(false)
   let active = $state(0)
   let input = $state<HTMLInputElement | null>(null)
 
   const groups = $derived(searchEverything(query, items))
-  const flat = $derived(groups.flatMap((g) => g.items))
-  const open = $derived(focused && query.trim() !== '')
+  const openDeck = $derived($nav.deck ? ($decks ?? []).find((d) => d.path === $nav.deck) : undefined)
+  const commands = $derived(
+    commandsFor({
+      query,
+      making,
+      deck: openDeck
+        ? { name: openDeck.name, id: openDeck.id, canShow: openDeck.cards > 0 && !openDeck.unreadable, inWorkspaces: workspacesWith($workspaces ?? [], openDeck.id).map((w) => ({ id: w.id, name: w.name })) }
+        : null,
+      workspaces: ($workspaces ?? []).map((w) => ({ id: w.id, name: w.name })),
+    }),
+  )
+  /** Every row the arrow keys walk: the actions first, then what was found. */
+  type Row = { command: Command } | { item: Searchable }
+  const flat = $derived<Row[]>([...commands.map((command) => ({ command })), ...groups.flatMap((g) => g.items.map((item) => ({ item })))])
+  const open = $derived(focused && (query.trim() !== '' || making))
   const subOf = (item: Searchable) => items.find((i) => i.kind === item.kind && i.id === item.id)?.sub ?? ''
 
   // A new query starts at the best match.
@@ -72,14 +92,37 @@
     active = 0
   })
 
+  /** + New and ⌘N: the bar, opened on what you can make. */
+  $effect(() => {
+    if ($makeRequest === 0) return
+    making = true
+    query = ''
+    input?.focus()
+  })
+
+  function run(c: Command) {
+    logAction('command', c.label)
+    const d = openDeck
+    query = ''
+    making = false
+    input?.blur()
+    if (c.kind === 'blank-deck') attempt(() => newBlankDeck(undefined, c.name))
+    else if (c.kind === 'deck-from-template') openTemplatePicker($nav.workspace)
+    else if (c.kind === 'new-workspace') openWorkspaceDialog(c.name)
+    else if (c.kind === 'show' && d) attempt(() => showDeckEntry(d))
+    else if (c.kind === 'add-to' && d && c.workspace) attempt(() => addDeckToWorkspace(c.workspace!, d.id))
+    else if (c.kind === 'take-out' && d && c.workspace) attempt(() => removeDeckFromWorkspace(c.workspace!, d.id))
+  }
+
   function choose(item: Searchable) {
     logAction('search', `${item.kind} ${item.label}`)
     query = ''
+    making = false
     input?.blur()
     if (item.kind === 'deck') goDeck(item.id)
     else if (item.kind === 'workspace') goWorkspace(item.id)
     else if (item.kind === 'session') goSession(item.id.slice(0, item.id.lastIndexOf('#')), item.id.slice(item.id.lastIndexOf('#') + 1))
-    else if (item.kind === 'template') goTemplates()
+    else if (item.kind === 'template') openTemplatePicker($nav.workspace, item.id)
     else if (item.kind === 'setting') goSettings(item.id as SettingsSectionId)
     else PAGES[item.id]?.go()
   }
@@ -90,19 +133,28 @@
       if (flat.length) active = (active + (e.key === 'ArrowDown' ? 1 : flat.length - 1)) % flat.length
     } else if (e.key === 'Enter' && flat[active]) {
       e.preventDefault()
-      choose(flat[active])
+      const row = flat[active]
+      if ('command' in row) run(row.command)
+      else choose(row.item)
     } else if (e.key === 'Escape') {
       query = ''
+      making = false
       input?.blur()
     }
   }
 
-  /** ⌘F (Ctrl+F) goes to the bar from anywhere. */
+  /** ⌘K and ⌘F (Ctrl+K, Ctrl+F) go to the bar from anywhere; ⌘N opens it on what you can make. */
   function onWindowKey(e: KeyboardEvent) {
-    if ((e.metaKey || e.ctrlKey) && !e.shiftKey && !e.altKey && e.key.toLowerCase() === 'f') {
+    if (!(e.metaKey || e.ctrlKey) || e.shiftKey || e.altKey) return
+    const key = e.key.toLowerCase()
+    if (key === 'f' || key === 'k') {
       e.preventDefault()
+      making = false
       input?.focus()
       input?.select()
+    } else if (key === 'n') {
+      e.preventDefault()
+      askToMake()
     }
   }
 </script>
@@ -118,6 +170,7 @@
       <button class="back" onclick={() => b.go()}><Icon name="back" size={15} /> {b.label}</button>
     {/if}
   </span>
+  <div class="mid">
   <div class="find" class:open>
     <label class="search" class:idle={!query}>
       <Icon name="search" size={15} />
@@ -133,19 +186,29 @@
         bind:this={input}
         bind:value={query}
         onfocus={() => (focused = true)}
-        onblur={() => (focused = false)}
+        onblur={() => ((focused = false), (making = false))}
         onkeydown={onInputKey}
       />
       <!-- Centred while empty, as Zoom's is; it moves aside once you type. -->
-      <span class="hint" aria-hidden="true">Search (⌘F)</span>
+      <span class="hint" aria-hidden="true">Search or type a command (⌘K)</span>
     </label>
     {#if open}
       <!-- mousedown keeps the focus in the bar, so a click lands before it closes. -->
       <div class="results" id="search-results" role="listbox" aria-label="Results" tabindex="-1" onmousedown={(e) => e.preventDefault()}>
+        {#if commands.length}
+          <h4>{making ? 'Make' : 'Actions'}</h4>
+          {#each commands as command (command.kind + (command.workspace ?? ''))}
+            {@const i = flat.findIndex((r) => 'command' in r && r.command === command)}
+            <button id="sr-{i}" role="option" aria-selected={i === active} class:active={i === active} onmouseenter={() => (active = i)} onclick={() => run(command)}>
+              <span class="ic"><Icon name={command.kind === 'show' ? 'show' : command.kind === 'new-workspace' ? 'folder' : command.kind === 'deck-from-template' ? 'template' : 'plus'} size={16} /></span>
+              <span class="what"><span class="t">{command.label}</span></span>
+            </button>
+          {/each}
+        {/if}
         {#each groups as g (g.kind)}
           <h4>{g.label}</h4>
           {#each g.items as item (item.kind + item.id)}
-            {@const i = flat.indexOf(item)}
+            {@const i = flat.findIndex((r) => 'item' in r && r.item === item)}
             <button
               id="sr-{i}"
               role="option"
@@ -162,10 +225,13 @@
             </button>
           {/each}
         {:else}
-          <p class="none">Nothing matches “{query.trim()}”.</p>
+          {#if commands.length === 0}<p class="none">Nothing matches “{query.trim()}”.</p>{/if}
         {/each}
       </div>
     {/if}
+  </div>
+  <!-- One way to make anything: it opens the bar on Blank deck, From a template and Workspace (⌘N). -->
+  <button class="new" onclick={askToMake} title="New (⌘N)"><Icon name="plus" size={15} /> New</button>
   </div>
   <UpdatePill />
   </div>
@@ -185,7 +251,7 @@
     padding: 0 32px;
     display: grid;
     /* The way back at the left, the search in the middle while there's room. */
-    grid-template-columns: minmax(max-content, 1fr) minmax(0, 560px) 1fr;
+    grid-template-columns: minmax(max-content, 1fr) minmax(0, 640px) 1fr;
     align-items: center;
     gap: 12px;
   }
@@ -213,9 +279,35 @@
     white-space: nowrap;
   }
 
+  .mid {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    min-width: 0;
+  }
+
+  .new {
+    flex: none;
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    padding: 7px 14px;
+    border-radius: 10px;
+    border: 0;
+    background: var(--accent);
+    color: var(--on-accent);
+    font-weight: 650;
+    white-space: nowrap;
+  }
+
+  .new:hover {
+    filter: brightness(1.08);
+  }
+
   .find {
     position: relative;
-    width: 100%;
+    flex: 1;
+    min-width: 0;
     background: var(--rail);
     border: 1px solid transparent;
     border-radius: 10px;

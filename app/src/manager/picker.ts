@@ -7,9 +7,11 @@ export interface PickerState {
   open: boolean
   /** The workspace's id the deck made goes into. */
   workspace?: string
+  /** A template to start on, when it was found by name. */
+  template?: string
 }
 
 export const picker = writable<PickerState>({ open: false })
 
-export const openTemplatePicker = (workspace?: string) => picker.set({ open: true, workspace })
+export const openTemplatePicker = (workspace?: string, template?: string) => picker.set({ open: true, workspace, template })
 export const closeTemplatePicker = () => picker.set({ open: false })

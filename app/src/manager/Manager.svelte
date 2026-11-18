@@ -16,6 +16,7 @@
   import { LINK_EVENT } from '../lib/links'
   import { followLinks } from './links'
   import LinkPrompt from './LinkPrompt.svelte'
+  import NewWorkspace from './NewWorkspace.svelte'
   import DropZone from './DropZone.svelte'
   import { loadLibrary } from '../lib/templates/library-store'
   import { attempt, notice } from './errors'
@@ -175,6 +176,7 @@
 </div>
 
 <LinkPrompt />
+<NewWorkspace />
 <DropZone />
 
 <style>
