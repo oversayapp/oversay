@@ -1,0 +1,72 @@
+{
+  "frontKeys": [
+    "with",
+    "when",
+    "length"
+  ],
+  "deckKeys": [
+    "id",
+    "title",
+    "audience",
+    "with",
+    "project",
+    "tags",
+    "timing",
+    "auto-advance",
+    "colour",
+    "hide",
+    "record-on-start"
+  ],
+  "retiredDeckKeys": [
+    "timeline",
+    "deck-bar",
+    "record"
+  ],
+  "deckValues": {
+    "timing": [
+      "on",
+      "off"
+    ],
+    "auto-advance": [
+      "on",
+      "off"
+    ],
+    "colour": [
+      "kinds",
+      "one"
+    ],
+    "hide": [
+      "position",
+      "bar",
+      "next",
+      "left",
+      "ends"
+    ],
+    "record-on-start": [
+      "on",
+      "off"
+    ]
+  },
+  "madeWithKey": "made-with",
+  "segmentKinds": [
+    "intro",
+    "topic",
+    "demo",
+    "outro",
+    "break"
+  ],
+  "messages": {
+    "front-open": "The front matter has no closing `---`, so Oversay reads it as part of the note.",
+    "front-line": "`{text}` isn’t a `key: value` line, so Oversay ignores it.",
+    "front-key": "Oversay doesn’t use `{text}`. The keys are {keys}.",
+    "front-length": "`{text}` isn’t a length Oversay reads. Write it like `30m` or `1:30:00`.",
+    "made-with": "`{text}` should be `Oversay skill` and a version, like `Oversay skill 0.2.0`.",
+    "deck-value": "`{text}` isn’t one Oversay reads, so it uses the default. Write one of {values}.",
+    "no-topics": "There are no `## Topic` lines, so Oversay shows nothing.",
+    "before-topic": "This point comes before the first `## Topic` line, so it shows under a topic with no name.",
+    "topic-name": "This topic has no name.",
+    "topic-time": "Oversay doesn’t read `[{text}]` as a time or a kind, so it shows as part of the topic’s name. Times look like `[10m]`, `[1:30]`, `[~5m]` or `[open]`; the kinds are {kinds}.",
+    "heading": "`{text}` isn’t shown. Use `## Topic` for a topic, or `- point` for a point.",
+    "deep-point": "This is deeper than a sub-point, so Oversay shows it as a sub-point. Notes have one level of sub-points."
+  }
+}

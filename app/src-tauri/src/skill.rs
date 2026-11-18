@@ -401,6 +401,48 @@ fn write_zip(path: &Path, files: &[(String, Vec<u8>)]) -> Result<(), String> {
     Ok(())
 }
 
+/// The two files a tagged release carries (ADR 0048), named as the AI page's Save… buttons name them.
+const SKILL_ZIP: &str = "oversay-skill.zip";
+const PLUGIN_ZIP: &str = "oversay-plugin.zip";
+
+/// Writes both zips of the skill folder `skill` into `out`, the same files the app saves.
+fn package_to(skill: &Path, out: &Path, version: &str) -> Result<(), String> {
+    fs::create_dir_all(out).map_err(|e| format!("Could not make {}: {e}", out.display()))?;
+    for (file, kind) in [
+        (SKILL_ZIP, ZipKind::Skill),
+        (PLUGIN_ZIP, ZipKind::ClaudePlugin),
+    ] {
+        let files = zip_files(skill, kind, version)
+            .map_err(|e| format!("Could not read the skill {}: {e}", skill.display()))?;
+        write_zip(&out.join(file), &files)?;
+    }
+    Ok(())
+}
+
+/// Runs `--package-skill <skill folder> <out folder>` when the app was started with it, so the
+/// release job makes its zips with the code that makes the app's: the exit code, or None to go on.
+pub fn package_from_args() -> Option<i32> {
+    let args: Vec<String> = std::env::args().collect();
+    if args.get(1).map(String::as_str) != Some("--package-skill") {
+        return None;
+    }
+    crate::platform::attach_console();
+    let (Some(skill), Some(out)) = (args.get(2), args.get(3)) else {
+        eprintln!("Usage: Oversay --package-skill <skill folder> <out folder>");
+        return Some(2);
+    };
+    match package_to(Path::new(skill), Path::new(out), env!("CARGO_PKG_VERSION")) {
+        Ok(()) => {
+            println!("Wrote {SKILL_ZIP} and {PLUGIN_ZIP} in {out}");
+            Some(0)
+        }
+        Err(e) => {
+            eprintln!("{e}");
+            Some(1)
+        }
+    }
+}
+
 /// Saves the skill as `kind` at `path` (from the save dialog) and shows it in Finder or Explorer.
 #[tauri::command]
 pub async fn save_skill_zip(app: AppHandle, kind: ZipKind, path: String) -> Result<(), String> {
@@ -606,6 +648,37 @@ mod tests {
         assert_eq!(read, want);
         assert!(archive.by_name("skills/oversay/SKILL.md").unwrap().size() > 100);
         fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
+    fn a_release_gets_the_same_two_zips_the_app_saves() {
+        let out = temp_dir("release-zips");
+        package_to(&source(), &out, "0.4.0").unwrap();
+        for (file, kind) in [
+            (SKILL_ZIP, ZipKind::Skill),
+            (PLUGIN_ZIP, ZipKind::ClaudePlugin),
+        ] {
+            let archive = zip::ZipArchive::new(fs::File::open(out.join(file)).unwrap()).unwrap();
+            let mut read: Vec<String> = archive
+                .file_names()
+                .map(|n| n.unwrap().into_owned())
+                .collect();
+            read.sort();
+            let mut want: Vec<String> = zip_files(&source(), kind, "0.4.0")
+                .unwrap()
+                .into_iter()
+                .map(|(n, _)| n)
+                .collect();
+            want.sort();
+            read.dedup();
+            want.dedup();
+            // The plugin's icon is added when the archive is written.
+            read.retain(|n| n != ".claude-plugin/icon.png");
+            want.retain(|n| n != ".claude-plugin/icon.png");
+            assert_eq!(read, want, "{file}");
+        }
+        assert!(package_to(&out.join("no-such-skill"), &out, "0.4.0").is_err());
+        fs::remove_dir_all(out).unwrap();
     }
 
     #[test]

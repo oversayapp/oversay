@@ -407,7 +407,7 @@ const SCREENS = [
   ['ai-details', `(async () => { [...document.querySelectorAll('main button.toggle')].find((b) => b.textContent.includes('Codex')).click(); await new Promise((r) => setTimeout(r, 200)) })()`],
   ['ai-installed', `(async () => { [...document.querySelectorAll('main button')].find((b) => b.textContent.trim() === 'Install').click(); await new Promise((r) => setTimeout(r, 300)) })()`],
   ['ai-arrived', `(async () => { window.__outside('decks', 'Board prep', '## Numbers [10m]\\n- Q3 revenue\\n'); await new Promise((r) => setTimeout(r, 400)) })()`],
-  ['ai-plugin-saved', `(async () => { [...document.querySelectorAll('main button')].find((b) => b.textContent.includes('Save plugin')).click(); await new Promise((r) => setTimeout(r, 300)) })()`],
+  ['ai-claude-app', `(async () => { [...document.querySelectorAll('main button.toggle')].find((b) => b.textContent.includes('Claude app')).click(); await new Promise((r) => setTimeout(r, 300)) })()`],
   // Gemini CLI shown though not here (it reads Codex's copy), and the Gemini app's skill saved.
   ['ai-gemini', `(async () => { const wait = () => new Promise((r) => setTimeout(r, 250)); [...document.querySelectorAll('main button.folded')].forEach((b) => b.click()); await wait(); [...document.querySelectorAll('main button.toggle')].find((b) => b.textContent.includes('Gemini CLI')).click(); [...document.querySelectorAll('main button')].find((b) => b.textContent.includes('Save skill')).click(); await wait(); document.querySelector('main button.toggle[aria-expanded="true"]')?.scrollIntoView() })()`],
   ['home-ai', `[...document.querySelectorAll('nav.rail button')].find((b) => b.textContent.includes('Home')).click()`],

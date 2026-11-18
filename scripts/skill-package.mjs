@@ -112,3 +112,10 @@ export function writePackaging(root) {
   mkdirSync(join(root, '.claude-plugin'), { recursive: true })
   writeFileSync(join(root, MARKETPLACE), json(marketplaceManifest(pkg, version)))
 }
+
+// `node scripts/skill-package.mjs --write` (make skills) writes the plugin and the marketplace.
+import { fileURLToPath } from 'node:url'
+if (process.argv[1] === fileURLToPath(import.meta.url) && process.argv[2] === '--write') {
+  writePackaging(join(dirname(fileURLToPath(import.meta.url)), '..'))
+  console.log(`skill-package: wrote ${PLUGIN_DIR} and ${MARKETPLACE}`)
+}

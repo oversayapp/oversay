@@ -5,7 +5,7 @@ How versions are numbered, how a release is cut, and what each build does about 
 ## Versions
 
 - The version is set in one place, `app/package.json`. `tauri.conf.json` reads it; `make check` fails when `Cargo.toml` differs.
-- Change it only with the script, which sets `package.json`, `package-lock.json`, `Cargo.toml` and `Cargo.lock` together and then runs `make skills`, because the Oversay skill's files embed the version:
+- Change it only with the script, which sets `package.json`, `package-lock.json`, `Cargo.toml` and `Cargo.lock` together and then runs `make skills`, because the Oversay skill's files embed the version (`SKILL.md`, and the plugin in `plugins/oversay/` and the marketplace in `.claude-plugin/marketplace.json`, both written by `make skills` from `skills/oversay`). `make check` and the release job fail when any of them differs, or when a hand edit has changed a generated file (ADR 0049):
 
   ```bash
   node scripts/version.mjs 0.2.0
@@ -13,6 +13,10 @@ How versions are numbered, how a release is cut, and what each build does about 
 
 - Plain `X.Y.Z` only: the Windows `.msi` takes no pre-release text such as `-beta.1`.
 - Until 1.0: the minor number for new features, the patch number for fixes only. The first release is 0.2.0, newer than every 0.1.0 build already handed out.
+
+## The skill's release files
+
+A tagged release carries `oversay-skill.zip` and `oversay-plugin.zip`, made by the built macOS app (`Oversay --package-skill skills/oversay <folder>`), the code behind the AI page's Save… buttons, so they cannot differ from the app's. The release job runs `node scripts/version.mjs --zips release` and fails before publishing when either zip does not carry the release's version. People who add this repository as a marketplace get the plugin from `main`, whose version moves only when a release commit bumps it.
 
 ## What CI builds
 

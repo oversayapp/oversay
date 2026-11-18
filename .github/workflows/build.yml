@@ -272,6 +272,19 @@ jobs:
         if: always() && env.SIGN == 'true'
         run: rm -f "$RUNNER_TEMP"/AuthKey_*.p8
 
+      # The skill's two zips (ADR 0048), made by the built app with the code behind the AI page's
+      # Save… buttons, so a release can never carry different files from the app.
+      - name: Package the skill zips
+        run: |
+          bin=$(find src-tauri/target/universal-apple-darwin/release/bundle/macos -path '*Oversay.app/Contents/MacOS/*' -type f | head -1)
+          "$bin" --package-skill ../skills/oversay "$RUNNER_TEMP/skill-zips"
+          ls -l "$RUNNER_TEMP/skill-zips"
+
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        with:
+          name: oversay-skill-zips
+          path: ${{ runner.temp }}/skill-zips/*.zip
+
       # Only the .dmg is uploaded: artifact zips drop the exec bit inside a raw .app.
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
@@ -373,6 +386,8 @@ jobs:
           cp artifacts/oversay-macos-dmg/*.dmg release/
           cp artifacts/oversay-macos-update/* release/ 2>/dev/null || true
           cp artifacts/oversay-windows-portable/oversay.exe release/Oversay_portable_x64.exe
+          cp artifacts/oversay-skill-zips/*.zip release/
+          node scripts/version.mjs --zips release
           if ls release/*.sig > /dev/null 2>&1; then
             node scripts/latest-json.mjs --dir release --version "${TAG#v}" --base "$FILES_BASE" --page "$RELEASE_PAGE" --notes-file "$RUNNER_TEMP/notes.md"
           else

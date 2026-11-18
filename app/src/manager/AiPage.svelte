@@ -30,6 +30,7 @@
     type ZipKind,
   } from '../lib/skill/targets'
   import { chatInstructions } from '../lib/skill/chatgpt'
+  import { claudeCodeInstallPrompt, codexInstallPrompt, marketplaceAddress } from '../lib/skill/install'
   import { attempt } from './errors'
   import Icon from './Icon.svelte'
   import { goDeck } from './route'
@@ -183,6 +184,19 @@
     })
   }
 
+  /** The Claude app takes a marketplace address, so there is no file to save (ADR 0048). */
+  function copyMarketplace() {
+    const address = marketplaceAddress()
+    copy(address)
+    started = { ...started, 'claude-app': address }
+    open = { ...open, 'claude-app': true }
+  }
+
+  function copyInstallPrompt(id: 'claude-code' | 'codex') {
+    logAction('copy install prompt', id)
+    copy(id === 'codex' ? codexInstallPrompt() : claudeCodeInstallPrompt())
+  }
+
   function copyInstructions() {
     copy(chatInstructions(info?.bundledVersion ?? ''))
     started = { ...started, chatgpt: 'instructions' }
@@ -290,10 +304,14 @@
           <p>Install copies the skill to <code>{t.dir}</code>. Start a new {label.name} session afterwards.</p>
         {/if}
         {#if id === 'claude-code'}
+          <p>Or have Claude Code install it from the plugin marketplace, which can update with each release: <button class="link" onclick={() => copyInstallPrompt('claude-code')}>{copied.startsWith('Install the Oversay') ? 'Copied' : 'Copy the install prompt'}</button>, and paste it into Claude Code.</p>
           <p>If you also add the Claude plugin to your Claude account, keep one of the two in Claude Code (<code>/plugin</code>).</p>
         {/if}
         {#if sharing(info!.targets, id).length}
           <p>{sharing(info!.targets, id).map((o) => TARGET_LABELS[o].name).join(' and ')} reads the same copy, so installing for one installs for both.</p>
+        {/if}
+        {#if id === 'codex'}
+          <p>Or have Codex install it from the plugin marketplace: <button class="link" onclick={() => copyInstallPrompt('codex')}>{copied.startsWith('Install the Oversay') ? 'Copied' : 'Copy the install prompt'}</button>, and paste it into Codex. It is a second copy beside this one: keep one.</p>
         {/if}
         {#if id === 'gemini-cli'}
           <p>Antigravity CLI reads <code>.agents/skills</code> in a project; whether it reads this copy in your home folder isn’t confirmed yet.</p>
@@ -305,8 +323,8 @@
 
 {#snippet stepText(app: ChatApp, i: number)}
   {#if app === 'claude-app'}
-    {#if i === 0}{#if started[app]}Saved <code>{started[app]}</code>; it’s shown in Finder.{:else}Save the plugin.{/if}
-    {:else if i === 1}In Claude, open <b>Customize › Plugins › Add › Upload plugin</b> and choose it. (Customize › Skills won’t take a plugin.)
+    {#if i === 0}{#if started[app]}Copied <code>{started[app]}</code>.{:else}Copy the marketplace address.{/if}
+    {:else if i === 1}In Claude, open <b>Customize › Plugins › Add › Add marketplace</b>, paste it, and install Oversay.
     {:else}For Cowork, let the task work in <code>Documents/Oversay</code>.{/if}
   {:else if app === 'gemini-app'}
     {#if i === 0}{#if started[app]}Saved <code>{started[app]}</code>; it’s shown in Finder.{:else}Save the skill.{/if}
@@ -348,7 +366,7 @@
         {:else if app === 'gemini-app'}
           <button onclick={() => saveZip('skill', app)}><Icon name={started[app] ? 'check' : 'saveas'} size={15} /> {started[app] ? 'Saved' : 'Save skill…'}</button>
         {:else if app === 'claude-app'}
-          <button onclick={() => saveZip('claude-plugin', app)}><Icon name={started[app] ? 'check' : 'saveas'} size={15} /> {started[app] ? 'Saved' : 'Save plugin…'}</button>
+          <button onclick={copyMarketplace}><Icon name={started[app] ? 'check' : 'copy'} size={15} /> {started[app] ? 'Copied' : 'Copy marketplace address'}</button>
         {:else}
           <button onclick={copyInstructions}><Icon name={started[app] ? 'check' : 'copy'} size={15} /> {started[app] ? 'Copied' : 'Copy instructions'}</button>
         {/if}
@@ -363,7 +381,7 @@
           <ul>
             <li>The plugin is kept on your Claude account, so it reaches chat, Cowork and Claude Code.</li>
             <li>Chat runs away from your computer: it gives you the note to download. Drop it on Oversay’s window.</li>
-            <li>Or <button class="link" onclick={() => saveZip('skill', app)}>save the skill alone</button> for Customize › Skills.</li>
+            <li>No marketplace? <button class="link" onclick={() => saveZip('claude-plugin', app)}>Save the plugin as a file</button> for Add › Upload plugin, or <button class="link" onclick={() => saveZip('skill', app)}>the skill alone</button> for Customize › Skills.</li>
           </ul>
         {:else if app === 'gemini-app'}
           {@render steps(app)}

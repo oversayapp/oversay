@@ -7,6 +7,8 @@
 //                                       Cargo.toml and Cargo.lock, then run make skills
 //   node scripts/version.mjs --check    fail when Cargo.toml, the skill, or the plugin and marketplace made
 //                                       from it differ from package.json (make check)
+//   node scripts/version.mjs --zips <dir>
+//                                       fail unless the release's two zips carry package.json's version
 //   node scripts/version.mjs --tag v0.2.0
 //                                       fail unless the tag is v + package.json's version (release job)
 
@@ -14,7 +16,7 @@ import { execFileSync } from 'node:child_process'
 import { readFileSync, writeFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { checkPackaging } from './skill-package.mjs'
+import { checkPackaging, skillVersion } from './skill-package.mjs'
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..')
 const PACKAGE = 'app/package.json'
@@ -56,6 +58,16 @@ export function regenerateSkills(run = (cmd, args) => execFileSync(cmd, args, { 
   run('make', ['skills'])
 }
 
+// What a release's two zips say about themselves must be the app's version (release job, --zips).
+export function zipProblems(want, pluginJson, skillMd) {
+  const problems = []
+  const plugin = JSON.parse(pluginJson).version
+  if (plugin !== want) problems.push(`oversay-plugin.zip's plugin.json has ${plugin}, the release is ${want}`)
+  const skill = skillVersion(skillMd)
+  if (skill !== want) problems.push(`oversay-skill.zip's SKILL.md has ${skill}, the release is ${want}`)
+  return problems
+}
+
 export function checkTag(tag, version) {
   return tag === `v${version}` ? null : `tag ${tag} doesn't match package.json's version ${version}: expected v${version}`
 }
@@ -85,6 +97,11 @@ function main([arg, value]) {
     const drift = checkPackaging(root)
     if (drift.length) fail(drift.join('\n'))
     console.log(`version: ${value} matches package.json, the skill and everything made from it`)
+  } else if (arg === '--zips') {
+    const unzip = (zip, file) => execFileSync('unzip', ['-p', join(value, zip), file], { encoding: 'utf8' })
+    const bad = zipProblems(packageVersion(), unzip('oversay-plugin.zip', '.claude-plugin/plugin.json'), unzip('oversay-skill.zip', 'oversay/SKILL.md'))
+    if (bad.length) fail(bad.join('\n'))
+    console.log(`version: the zips in ${value} carry ${packageVersion()}`)
   } else if (arg && !arg.startsWith('-')) {
     const bad = validVersion(arg)
     if (bad) fail(bad)
@@ -100,7 +117,7 @@ function main([arg, value]) {
     console.log(`version: set to ${arg} in ${PACKAGE}, ${LOCK}, ${CARGO} and ${CARGO_LOCK}`)
     regenerateSkills()
   } else {
-    fail('usage: node scripts/version.mjs X.Y.Z | --check | --tag vX.Y.Z')
+    fail('usage: node scripts/version.mjs X.Y.Z | --check | --tag vX.Y.Z | --zips <dir>')
   }
 }
 
