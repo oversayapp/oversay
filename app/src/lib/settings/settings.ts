@@ -45,6 +45,8 @@ export interface Settings {
   keepRecordings?: boolean
   /** Every deck records the person's voice from Start (Settings › Recordings); off (the default), the deck widget's record button starts it. */
   autoRecord?: boolean
+  /** A person's own saved views on Sessions: named sets of filters, after the ready-made tabs (ADR 0048; lib/sessions/views.ts). */
+  sessionViews?: unknown
   /** Decks' `project:` lines have been moved into workspaces once. */
   projectLinesMoved?: boolean
   /** The overlays have been moved to the Waveform style once. */

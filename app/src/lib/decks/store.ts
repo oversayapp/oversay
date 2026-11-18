@@ -10,7 +10,7 @@ import { createQuickFile, listQuickFiles, quickName, readQuickFile, renameQuickF
 import { parseNoteDoc, writeNoteDoc } from '../notes/format'
 import { followDecks, forgetQuickPath, listedQuickFiles, renameQuickPath } from '../settings/store'
 import { forgetDeck } from '../workspaces/store'
-import { asNewDeck, deckAudience, deckCards, deckId, deckOptions, deckProject, deckSeconds, deckTags, deckTitle, setDeckTitle } from './deck'
+import { asNewDeck, deckAudience, deckCards, deckId, deckOptions, deckProject, deckSeconds, deckTags, deckTitle, setDeckOption, setDeckTitle, type RecordOnStart } from './deck'
 
 export interface DeckEntry {
   /** The deck's file: `deck.md` in its folder, or a lone `.md` from before. */
@@ -30,6 +30,8 @@ export interface DeckEntry {
   seconds: number
   /** Runs untimed though its cards have times (`timing: off`). */
   timingOff: boolean
+  /** Its `record-on-start` (ADR 0047): `global` follows Settings › Recordings › Auto record. */
+  recordOnStart: RecordOnStart
   /** Each card's kind and time (null untimed), for the list's mini timeline. */
   bar: { kind: SegmentKind; seconds: number | null }[]
   /** Set when the file could not be read. */
@@ -57,6 +59,7 @@ export function summariseDeck(path: string, fallbackName: string, modifiedMs: nu
     cards: cards.length,
     seconds: deckSeconds(cards),
     timingOff: !deckOptions(doc).timing,
+    recordOnStart: deckOptions(doc).recordOnStart,
     bar: cards.map((c) => ({ kind: c.kind, seconds: c.seconds })),
   }
 }
@@ -70,7 +73,7 @@ export async function loadDecks(): Promise<void> {
         return summariseDeck(f.path, f.name, f.modifiedMs, await readQuickFile('decks', f.path))
       } catch (e) {
         logProblem('deck not read', `${f.path}: ${String(e)}`)
-        return { path: f.path, id: '', name: f.name, modifiedMs: f.modifiedMs, audience: '', project: '', tags: [], cards: 0, seconds: 0, timingOff: false, bar: [], unreadable: true }
+        return { path: f.path, id: '', name: f.name, modifiedMs: f.modifiedMs, audience: '', project: '', tags: [], cards: 0, seconds: 0, timingOff: false, recordOnStart: 'global' as const, bar: [], unreadable: true }
       }
     }),
   )
@@ -120,6 +123,16 @@ export async function writeDeckTitle(path: string, title: string): Promise<void>
   const text = await readQuickFile('decks', path)
   const doc = parseNoteDoc(text)
   if (deckTitle(doc) !== title.trim()) await writeQuickFile('decks', path, writeNoteDoc(setDeckTitle(doc, title)))
+}
+
+/** Sets a deck's Record on start (ADR 0047) in its `deck.md`, leaving every other line, and lists the decks again. */
+export async function setDeckRecordOnStart(path: string, value: RecordOnStart): Promise<void> {
+  const text = await readQuickFile('decks', path)
+  const doc = parseNoteDoc(text)
+  if (deckOptions(doc).recordOnStart === value) return
+  logAction('deck option', `recordOnStart ${value} (${listedName(path)})`)
+  await writeQuickFile('decks', path, writeNoteDoc(setDeckOption(doc, 'recordOnStart', value)))
+  await loadDecks()
 }
 
 /** The listed deck with this id, or null: how a deck is found again after its folder moved. */

@@ -27,7 +27,9 @@
   import { workspaces } from '../lib/workspaces/store'
   import { workspacesWith } from '../lib/workspaces/workspaces'
   import { showBack } from './back'
-  import { settings } from '../lib/settings/store'
+  import { sessionsPage } from '../lib/sessions/page-state'
+  import { tabFor } from '../lib/sessions/views'
+  import { sessionViews, settings } from '../lib/settings/store'
   import ConfirmDelete from './ConfirmDelete.svelte'
   import { attempt } from './errors'
   import Icon from './Icon.svelte'
@@ -35,7 +37,9 @@
 
   let { path, startedAt }: { path: string; startedAt: string } = $props()
 
-  $effect(() => showBack({ label: 'Sessions', go: goSessions, width: 900 }))
+  // The way back names the view the person came from: its tab (a saved view's name), else Sessions.
+  const backName = $derived(tabFor($sessionsPage.filters, $sessionViews)?.name)
+  $effect(() => showBack({ label: backName && backName !== 'All' ? backName : 'Sessions', go: goSessions, width: 900 }))
 
   const deck = $derived(($decks ?? []).find((d) => d.path === path) ?? null)
   const runs = $derived($deckSessions?.get(path) ?? null)

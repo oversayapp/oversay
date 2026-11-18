@@ -1,219 +1,288 @@
 <script lang="ts">
-  // Sessions on the rail (ADR 0041): every run of
-  // every deck, newest first, grouped by the day it started as Decks is. Each row: when it started,
-  // the deck and its workspaces, how long it ran against the plan, a bar of each card's time, and
-  // what has been written about it. Filter narrows by workspace, deck and dates; the app's one search
-  // bar finds sessions by their deck.
-  import { formatDuration } from '../lib/project/duration'
+  // Sessions on the rail (ADR 0041, 0048; spec §11): every run of every deck as one list, newest first, narrowed by
+  // tabs (All, This week, Needs a review, then a person's own saved views) and by chips (Workspace, Deck, Status,
+  // When), and grouped as chosen. With one deck chosen, its Record on start, stats and trend sit above the list;
+  // with one workspace, a summary line. The app's one search bar finds sessions by deck, workspace and note.
   import { count } from '../lib/words'
   import { decks } from '../lib/decks/store'
   import { deckSessions } from '../lib/sessions/store'
-  import { sessionName } from '../lib/decks/sessions'
+  import { settings, sessionViews, changeSessionViews } from '../lib/settings/store'
   import {
-    NO_SESSION_FILTERS,
-    RUN_RANGES,
-    deckKey,
-    difference,
-    everyRun,
-    filterRuns,
-    groupRunsByDay,
-    runTimes,
-    sessionFilterCount,
-    type Run,
-    type RunRange,
-    type SessionFilters,
-  } from '../lib/sessions/runs'
+    GROUPS,
+    NO_BROWSE,
+    PAGE_RUNS,
+    STATUSES,
+    WHENS,
+    browseFilterCount,
+    deckChoices,
+    decksInScope,
+    filterMarked,
+    groupMarked,
+    markRuns,
+    type BrowseFilters,
+    type DeckChoice,
+    type GroupMode,
+    type StatusKey,
+    type WhenKey,
+  } from '../lib/sessions/browse'
+  import { everyRun } from '../lib/sessions/runs'
+  import { sessionsPage } from '../lib/sessions/page-state'
+  import { BUILT_IN_VIEWS, canSaveView, suggestedName, tabFor, withView, withoutView } from '../lib/sessions/views'
   import { workspaces } from '../lib/workspaces/store'
   import { findWorkspace, workspacesWith } from '../lib/workspaces/workspaces'
   import Icon from './Icon.svelte'
-  import RunBar from './RunBar.svelte'
-  import { goLibrary, goSession } from './route'
+  import SessionRow from './SessionRow.svelte'
+  import SessionsDeckHead from './SessionsDeckHead.svelte'
+  import { goLibrary } from './route'
 
-  const runs = $derived(
-    everyRun(
-      ($decks ?? [])
-        .filter((d) => !d.unreadable)
-        .map((d) => ({
-          deck: { path: d.path, id: d.id, name: d.name, audience: d.audience, workspaces: workspacesWith($workspaces ?? [], d.id).map((w) => w.id) },
+  const entries = $derived(($decks ?? []).filter((d) => !d.unreadable))
+  const workspaceName = (id: string) => findWorkspace($workspaces ?? [], id)?.name ?? id
+  const memberOf = (id: string) => workspacesWith($workspaces ?? [], id).map((w) => w.id)
+
+  const everything = $derived(
+    markRuns(
+      everyRun(
+        entries.map((d) => ({
+          deck: { path: d.path, id: d.id, name: d.name, audience: d.audience, workspaces: memberOf(d.id) },
           sessions: $deckSessions?.get(d.path)?.sessions ?? [],
         })),
+      ),
+      (path) => $deckSessions?.get(path),
     ),
   )
 
-  let filters = $state<SessionFilters>({ ...NO_SESSION_FILTERS })
-  let filterOpen = $state(false)
-  const filterCount = $derived(sessionFilterCount(filters))
-  const shown = $derived(filterRuns(runs, filters, Date.now()))
-  const groups = $derived(groupRunsByDay(shown, Date.now()))
+  const filters = $derived($sessionsPage.filters)
+  const group = $derived($sessionsPage.group)
+  const limit = $derived($sessionsPage.limit)
+  const nFilters = $derived(browseFilterCount(filters))
+  const setFilters = (next: BrowseFilters) => sessionsPage.update((s) => ({ ...s, filters: next, limit: PAGE_RUNS }))
+  const setGroup = (g: GroupMode) => sessionsPage.update((s) => ({ ...s, group: g, limit: PAGE_RUNS }))
+  const toggle = <T extends string>(list: readonly T[], v: T): T[] => (list.includes(v) ? list.filter((x) => x !== v) : [...list, v])
 
-  /** The filters' choices: the workspaces and decks that have runs, by name. */
+  const keyOf = (d: { id: string; path: string }) => d.id || d.path
+  const choices = $derived<DeckChoice[]>(
+    entries.map((d) => ({ key: keyOf(d), name: d.name, workspaces: memberOf(d.id), runs: everything.filter((r) => r.deck.path === d.path).length })),
+  )
+  const deckName = (key: string) => choices.find((d) => d.key === key)?.name ?? key
   const workspaceChoices = $derived(
-    [...new Set(runs.flatMap((r) => r.deck.workspaces))]
-      .map((id) => ({ id, name: findWorkspace($workspaces ?? [], id)?.name ?? id }))
-      .sort((a, b) => a.name.localeCompare(b.name)),
+    ($workspaces ?? []).filter((w) => w.id).sort((a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: 'base' })),
   )
-  const deckChoices = $derived(
-    [...new Map(runs.map((r) => [deckKey(r.deck), r.deck.name])).entries()].map(([key, name]) => ({ key, name })).sort((a, b) => a.name.localeCompare(b.name)),
-  )
-  const workspaceName = (id: string) => findWorkspace($workspaces ?? [], id)?.name ?? id
-  const deckName = (key: string) => deckChoices.find((d) => d.key === key)?.name ?? key
-  const rangeLabel = (r: RunRange) => (r === 'dates' ? datesLabel() : (RUN_RANGES.find((x) => x.id === r)?.label ?? ''))
-  const datesLabel = () => [filters.from && `From ${filters.from}`, filters.to && `to ${filters.to}`].filter(Boolean).join(' ') || 'Between dates'
-  const toggle = (list: readonly string[], v: string) => (list.includes(v) ? list.filter((x) => x !== v) : [...list, v])
+  const runsIn = (id: string) => everything.filter((r) => r.deck.workspaces.includes(id)).length
 
-  const clock = (ms: number) => new Date(ms).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })
-  const day = (ms: number) => new Date(ms).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })
+  const shown = $derived(filterMarked(everything, filters, Date.now()))
+  const page = $derived(groupMarked(shown, group, Date.now(), limit))
 
-  /** What has been written about a run: its note, transcript, recording waiting and review. */
-  function marks(r: Run): { note: boolean; transcript: boolean; recording: boolean; review: boolean } {
-    const runs = $deckSessions?.get(r.deck.path)
-    const name = sessionName(runs?.sessions ?? [], r.session)
-    const has = (list: string[] | undefined) => !!list?.includes(name)
-    return { note: !!r.session.note, transcript: has(runs?.files.transcripts), recording: has(runs?.files.recordings), review: has(runs?.files.reviews) }
+  const tab = $derived(tabFor(filters, $sessionViews))
+  const saveable = $derived(canSaveView(filters, $sessionViews))
+
+  const one = $derived(filters.decks.length === 1 ? (entries.find((d) => keyOf(d) === filters.decks[0]) ?? null) : null)
+  const oneRuns = $derived(one ? everything.filter((r) => r.deck.path === one.path) : [])
+  const oneWorkspace = $derived(!one && filters.workspaces.length === 1 ? findWorkspace($workspaces ?? [], filters.workspaces[0]) : null)
+  const recordsOnStart = (path: string) => {
+    const d = entries.find((x) => x.path === path)
+    return !!d && (d.recordOnStart === 'on' || (d.recordOnStart === 'global' && !!$settings.autoRecord))
   }
 
-  /** How long it ran, any pause, and its plan, under the deck's name. */
-  function about(r: Run): string {
-    const t = runTimes(r.session)
-    const plan = t.planned ? `planned ${formatDuration(t.planned)}${t.untimed ? ' + untimed' : ''}` : 'untimed'
-    const paused = r.session.pausedSeconds ? `, paused ${formatDuration(r.session.pausedSeconds)}` : ''
-    return [r.deck.audience && `for ${r.deck.audience}`, `ran ${formatDuration(t.ran)}${paused}`, plan].filter(Boolean).join(' · ')
+  // Which chip's menu is open, the Deck menu's search, and the name being given to a view to save.
+  let pop = $state<null | 'ws' | 'deck' | 'status' | 'when' | 'group'>(null)
+  let deckQuery = $state('')
+  let naming = $state<string | null>(null)
+  const deckMenu = $derived(deckChoices(choices, filters.workspaces, deckQuery))
+
+  const toggleWorkspace = (id: string) => {
+    const workspaces = toggle(filters.workspaces, id)
+    setFilters({ ...filters, workspaces, decks: decksInScope(filters.decks, choices, workspaces) })
   }
+
+  function saveView() {
+    if (naming === null) return
+    const name = naming
+    naming = null
+    void changeSessionViews((views) => withView(views, name, filters, `v_${Date.now().toString(36)}`), `save ${name.trim()}`)
+  }
+
+  const chips = $derived([
+    ...filters.workspaces.map((id) => ({ label: `Workspace: ${workspaceName(id)}`, off: () => toggleWorkspace(id) })),
+    ...filters.decks.map((key) => ({ label: `Deck: ${deckName(key)}`, off: () => setFilters({ ...filters, decks: filters.decks.filter((k) => k !== key) }) })),
+    ...filters.status.map((k) => ({ label: STATUSES.find((s) => s.id === k)?.label ?? k, off: () => setFilters({ ...filters, status: filters.status.filter((x) => x !== k) }) })),
+    ...(filters.when !== 'any' ? [{ label: WHENS.find((w) => w.id === filters.when)?.label ?? '', off: () => setFilters({ ...filters, when: 'any' }) }] : []),
+  ])
+
+  const loaded = $derived($decks !== null && $deckSessions !== null)
 </script>
 
 <svelte:window
   onkeydown={(e) => {
-    if (filterOpen && e.key === 'Escape') filterOpen = false
+    if (e.key === 'Escape') {
+      pop = null
+      naming = null
+    }
   }}
   onclick={(e) => {
-    if (filterOpen && !(e.target as HTMLElement).closest('.fwrap')) filterOpen = false
+    if (pop && !(e.target as HTMLElement).closest('.pw')) pop = null
   }}
 />
 
 <div class="page">
   <header class="phead">
     <h1>Sessions</h1>
-    {#if runs.length > 0}
-      <div class="fwrap">
-        <button
-          class="ftoggle"
-          class:on={filterCount > 0}
-          aria-haspopup="dialog"
-          aria-expanded={filterOpen}
-          title="Filter"
-          aria-label="Filter sessions{filterCount ? `, ${filterCount} on` : ''}"
-          onclick={() => (filterOpen = !filterOpen)}
-          ><Icon name="filter" size={16} /> Filter{#if filterCount}<span class="badge">{filterCount}</span>{/if}</button
+    {#if everything.length > 0}<span class="muted cnt">{count(shown.length, 'run')}{nFilters ? ` of ${everything.length}` : ''}</span>{/if}
+  </header>
+
+  {#if loaded && everything.length === 0 && !one}
+    <div class="empty">
+      <p><b>No sessions yet.</b> Every time you Start a deck, the run is kept here: each card's planned and actual time, your note, a transcript and a review.</p>
+      <ol>
+        <li>Open a deck in the Library.</li>
+        <li>Press <b>Show</b>, then <b>Start</b> in the widget.</li>
+        <li>When you stop, the run's page opens here.</li>
+      </ol>
+      <button class="primary" onclick={() => goLibrary()}><Icon name="deck" size={16} /> Open the Library</button>
+    </div>
+  {:else}
+    <div class="tabs" role="tablist" aria-label="Views">
+      {#each [...BUILT_IN_VIEWS, ...$sessionViews] as v (v.id)}
+        {@const on = tab?.id === v.id}
+        <span class="tabwrap" class:on>
+          <button role="tab" aria-selected={on} onclick={() => setFilters(v.filters)}>{v.name}</button>
+          {#if on && !BUILT_IN_VIEWS.some((b) => b.id === v.id)}
+            <button class="x" title="Remove this saved view" aria-label="Remove the view {v.name}" onclick={() => void changeSessionViews((views) => withoutView(views, v.id), `remove ${v.name}`)}
+              ><Icon name="close" size={12} /></button
+            >
+          {/if}
+        </span>
+      {/each}
+      {#if saveable && naming === null}
+        <button class="add" onclick={() => (naming = suggestedName(filters, { workspace: workspaceName, deck: deckName }))}>+ Save this view</button>
+      {/if}
+    </div>
+    {#if naming !== null}
+      <form class="naming" onsubmit={(e) => (e.preventDefault(), saveView())}>
+        <!-- svelte-ignore a11y_autofocus -->
+        <input aria-label="Name for this view" maxlength="60" bind:value={naming} autofocus />
+        <button class="primary" type="submit" disabled={!naming.trim()}>Save view</button>
+        <button type="button" onclick={() => (naming = null)}>Cancel</button>
+      </form>
+    {/if}
+
+    <div class="frow">
+      <div class="pw">
+        <button class="fbtn" class:on={filters.workspaces.length > 0} aria-haspopup="true" aria-expanded={pop === 'ws'} onclick={() => (pop = pop === 'ws' ? null : 'ws')}
+          >Workspace{filters.workspaces.length ? ` · ${filters.workspaces.length}` : ''} <Icon name="chevron" size={12} /></button
         >
-        {#if filterOpen}
-          <div class="fpanel" role="dialog" aria-label="Filter sessions">
-            {#if workspaceChoices.length}
-              <h4>Workspace</h4>
-              <div class="opts">
-                {#each workspaceChoices as w (w.id)}
-                  {@const on = filters.workspaces.includes(w.id)}
-                  <button class="fchip" class:on aria-pressed={on} onclick={() => (filters = { ...filters, workspaces: toggle(filters.workspaces, w.id) })}>{w.name}</button>
-                {/each}
-              </div>
-            {/if}
-            <h4>Deck</h4>
-            <div class="opts">
-              {#each deckChoices as d (d.key)}
-                {@const on = filters.decks.includes(d.key)}
-                <button class="fchip" class:on aria-pressed={on} onclick={() => (filters = { ...filters, decks: toggle(filters.decks, d.key) })}>{d.name}</button>
-              {/each}
-            </div>
-            <h4>When it ran</h4>
-            <div class="opts">
-              {#each RUN_RANGES as r (r.id)}
-                {@const on = filters.range === r.id}
-                <button class="fchip" class:on aria-pressed={on} onclick={() => (filters = { ...filters, range: r.id })}>{r.label}</button>
-              {/each}
-            </div>
-            {#if filters.range === 'dates'}
-              <div class="dates">
-                <label>From <input type="date" aria-label="From" bind:value={filters.from} /></label>
-                <label>to <input type="date" aria-label="To" bind:value={filters.to} /></label>
-              </div>
-            {/if}
-            <div class="ffoot">
-              <span class="fcount">{shown.length} of {count(runs.length, 'session')}</span>
-              <button class="link" disabled={filterCount === 0} onclick={() => (filters = { ...NO_SESSION_FILTERS })}>Clear all</button>
-            </div>
+        {#if pop === 'ws'}
+          <div class="pop" role="group" aria-label="Workspace">
+            {#each workspaceChoices as w (w.id)}
+              <label><input type="checkbox" checked={filters.workspaces.includes(w.id)} onchange={() => toggleWorkspace(w.id)} />{w.name}<small>{count(runsIn(w.id), 'run')}</small></label>
+            {:else}
+              <span class="none">No workspaces yet.</span>
+            {/each}
           </div>
         {/if}
       </div>
-    {/if}
-  </header>
-  <p class="muted">Every time a deck was started. Each card's time against its plan, newest first.</p>
+      <div class="pw">
+        <button class="fbtn" class:on={filters.decks.length > 0} aria-haspopup="true" aria-expanded={pop === 'deck'} onclick={() => (pop = pop === 'deck' ? null : 'deck')}
+          >Deck{filters.decks.length ? ` · ${filters.decks.length}` : ''} <Icon name="chevron" size={12} /></button
+        >
+        {#if pop === 'deck'}
+          <div class="pop wide" role="group" aria-label="Deck">
+            <!-- svelte-ignore a11y_autofocus -->
+            <input type="search" placeholder="Find a deck" aria-label="Find a deck" bind:value={deckQuery} autofocus />
+            {#if filters.workspaces.length}<h6>Decks in the chosen workspaces</h6>{/if}
+            {#each deckMenu.shown as d (d.key)}
+              <label
+                ><input type="checkbox" checked={filters.decks.includes(d.key)} onchange={() => setFilters({ ...filters, decks: toggle(filters.decks, d.key) })} />{d.name}<small>{d.runs ? count(d.runs, 'run') : 'never run'}</small></label
+              >
+            {:else}
+              <span class="none">No deck found.</span>
+            {/each}
+            {#if deckMenu.total > deckMenu.shown.length}<span class="none">{deckMenu.total - deckMenu.shown.length} more: type to find one.</span>{/if}
+          </div>
+        {/if}
+      </div>
+      <div class="pw">
+        <button class="fbtn" class:on={filters.status.length > 0} aria-haspopup="true" aria-expanded={pop === 'status'} onclick={() => (pop = pop === 'status' ? null : 'status')}
+          >Status{filters.status.length ? ` · ${filters.status.length}` : ''} <Icon name="chevron" size={12} /></button
+        >
+        {#if pop === 'status'}
+          <div class="pop" role="group" aria-label="Status">
+            {#each STATUSES as s (s.id)}
+              <label><input type="checkbox" checked={filters.status.includes(s.id)} onchange={() => setFilters({ ...filters, status: toggle<StatusKey>(filters.status, s.id) })} />{s.label}</label>
+            {/each}
+          </div>
+        {/if}
+      </div>
+      <div class="pw">
+        <button class="fbtn" class:on={filters.when !== 'any'} aria-haspopup="true" aria-expanded={pop === 'when'} onclick={() => (pop = pop === 'when' ? null : 'when')}
+          >{filters.when === 'any' ? 'When' : WHENS.find((w) => w.id === filters.when)?.label} <Icon name="chevron" size={12} /></button
+        >
+        {#if pop === 'when'}
+          <div class="pop" role="radiogroup" aria-label="When">
+            {#each WHENS as w (w.id)}
+              <label><input type="radio" name="when" checked={filters.when === w.id} onchange={() => (setFilters({ ...filters, when: w.id as WhenKey }), (pop = null))} />{w.label}</label>
+            {/each}
+          </div>
+        {/if}
+      </div>
+      <span class="grow"></span>
+      <span class="muted small">Group by</span>
+      <div class="pw right">
+        <button class="fbtn" aria-haspopup="true" aria-expanded={pop === 'group'} onclick={() => (pop = pop === 'group' ? null : 'group')}
+          >{GROUPS.find((g) => g.id === group)?.label} <Icon name="chevron" size={12} /></button
+        >
+        {#if pop === 'group'}
+          <div class="pop" role="radiogroup" aria-label="Group by">
+            {#each GROUPS as g (g.id)}
+              <label><input type="radio" name="group" checked={group === g.id} onchange={() => (setGroup(g.id), (pop = null))} />{g.label}</label>
+            {/each}
+          </div>
+        {/if}
+      </div>
+    </div>
 
-  {#if filterCount > 0}
-    <!-- The filters that are on, each with × to take it off. -->
-    <div class="active" role="group" aria-label="Filters on">
-      <span class="fcount">{shown.length} of {runs.length}</span>
-      {#each filters.workspaces as id (id)}
-        <button class="token" aria-label="Remove workspace {workspaceName(id)}" onclick={() => (filters = { ...filters, workspaces: toggle(filters.workspaces, id) })}
-          >{workspaceName(id)} <Icon name="close" size={12} /></button
-        >
+    {#if chips.length}
+      <div class="active" role="group" aria-label="Filters on">
+        {#each chips as c (c.label)}
+          <span class="token">{c.label}<button aria-label="Remove {c.label}" title="Take this filter off" onclick={c.off}><Icon name="close" size={12} /></button></span>
+        {/each}
+        <button class="link" onclick={() => setFilters(NO_BROWSE)}>Clear all</button>
+      </div>
+    {/if}
+
+    {#if one}
+      <SessionsDeckHead deck={one} runs={oneRuns} workspaces={memberOf(one.id).map(workspaceName)} />
+    {:else if oneWorkspace}
+      <p class="summary">
+        <b>{oneWorkspace.name}</b>
+        <span>{count(oneWorkspace.decks.length, 'deck')}</span>
+        <span>{count(runsIn(oneWorkspace.id), 'run')}</span>
+        <span><b>{everything.filter((r) => r.needsReview && r.deck.workspaces.includes(oneWorkspace.id)).length}</b> to review</span>
+      </p>
+    {/if}
+
+    {#if one && oneRuns.length === 0}
+      <!-- A deck never run: its head says so. -->
+    {:else if shown.length === 0}
+      <div class="empty small">
+        <p>No runs match these filters.</p>
+        <button onclick={() => setFilters(NO_BROWSE)}>Clear all</button>
+      </div>
+    {:else}
+      {#each page.groups as g (g.label)}
+        {#if g.label}<h3 class="sec">{g.label} <span class="cnt">{count(g.total, 'run')}</span></h3>{/if}
+        <ul class="runs" class:ungrouped={!g.label}>
+          {#each g.runs as r (r.deck.path + r.session.startedAt)}
+            <li><SessionRow run={r} {workspaceName} records={recordsOnStart(r.deck.path)} /></li>
+          {/each}
+        </ul>
       {/each}
-      {#each filters.decks as key (key)}
-        <button class="token" aria-label="Remove deck {deckName(key)}" onclick={() => (filters = { ...filters, decks: toggle(filters.decks, key) })}
-          >{deckName(key)} <Icon name="close" size={12} /></button
-        >
-      {/each}
-      {#if filters.range !== 'all'}
-        <button class="token" aria-label="Remove {rangeLabel(filters.range)}" onclick={() => (filters = { ...filters, range: 'all', from: '', to: '' })}
-          >{rangeLabel(filters.range)} <Icon name="close" size={12} /></button
+      {#if page.hidden > 0}
+        <button class="more" onclick={() => sessionsPage.update((s) => ({ ...s, limit: s.limit + PAGE_RUNS }))}
+          >Show {Math.min(PAGE_RUNS, page.hidden)} more <span class="muted">{page.hidden} left</span></button
         >
       {/if}
-      <button class="link" onclick={() => (filters = { ...NO_SESSION_FILTERS })}>Clear</button>
-    </div>
-  {/if}
-
-  {#if $decks && $deckSessions && runs.length === 0}
-    <div class="empty">
-      <p><b>No sessions yet.</b> Show a deck and press Start: each run is kept here, card by card, to look back on.</p>
-      <button class="primary" onclick={() => goLibrary()}><Icon name="deck" size={16} /> Go to the Library</button>
-    </div>
-  {:else}
-    {#each groups as g (g.label)}
-      <h3 class="sec">{g.label} <span class="cnt">{g.runs.length}</span></h3>
-      <ul class="runs">
-        {#each g.runs as r (r.deck.path + r.session.startedAt)}
-          {@const t = runTimes(r.session)}
-          {@const d = difference(t.planned, t.timed)}
-          {@const m = marks(r)}
-          <li>
-            <button class="open" aria-label="{r.deck.name}, {day(r.startedMs)} {clock(r.startedMs)}" onclick={() => goSession(r.deck.path, r.session.startedAt)}>
-              <span class="at num">{clock(r.startedMs)}<small>{day(r.startedMs)}</small></span>
-              <span class="what">
-                <span class="line">
-                  <span class="t">{r.deck.name}</span>
-                  {#each r.deck.workspaces as id (id)}<span class="chip">{workspaceName(id)}</span>{/each}
-                </span>
-                <span class="p">{about(r)}</span>
-                {#if m.note || m.transcript || m.recording || m.review}
-                  <span class="marks">
-                    {#if m.note}<span class="mark">✎ Note</span>{/if}
-                    {#if m.transcript}<span class="mark">≡ Transcript</span>{/if}
-                    {#if m.recording && !m.transcript}<span class="mark"><span class="rec"></span> Recording</span>{/if}
-                    {#if m.review}<span class="mark review">✦ Review</span>{/if}
-                  </span>
-                {/if}
-              </span>
-              <span class="plan">
-                <RunBar cards={r.session.cards} />
-                <span class="tot num" class:over={d.over === true} class:under={d.over === false}>{d.text}</span>
-              </span>
-            </button>
-          </li>
-        {/each}
-      </ul>
-    {/each}
-    {#if runs.length > 0 && shown.length === 0}
-      <p class="muted">No sessions match these filters.</p>
     {/if}
-    {#if runs.length > 0}
+    {#if everything.length > 0}
       <p class="keep">A deck keeps its newest 20 sessions, and any you've written a note on, transcribed or reviewed.</p>
     {/if}
   {/if}
@@ -221,137 +290,183 @@
 
 <style>
   .page {
-    max-width: 960px;
+    max-width: 980px;
     margin: 0 auto;
     padding: 26px 32px 48px;
   }
 
   .phead {
     display: flex;
+    align-items: baseline;
+    gap: 12px;
+  }
+
+  .cnt {
+    font-size: 13px;
+  }
+
+  .small {
+    font-size: 12.5px;
+  }
+
+  .grow {
+    flex: 1;
+  }
+
+  /* Tabs: three ready-made, then the person's own. Scroll sideways rather than wrap, on a narrow window. */
+  .tabs {
+    display: flex;
     align-items: center;
-    gap: 10px;
-    flex-wrap: wrap;
+    gap: 2px;
+    margin-top: 12px;
+    border-bottom: 1px solid var(--line);
+    overflow-x: auto;
+    scrollbar-width: none;
   }
 
-  .phead h1 {
-    margin-right: auto;
-  }
-
-  .phead button {
+  .tabwrap {
     display: inline-flex;
     align-items: center;
-    gap: 6px;
+    border-bottom: 2px solid transparent;
+    margin-bottom: -1px;
     white-space: nowrap;
   }
 
-  .fwrap {
-    position: relative;
+  .tabwrap.on {
+    border-bottom-color: var(--accent);
   }
 
-  .ftoggle {
-    position: relative;
+  .tabwrap button,
+  .add {
+    border: 0;
+    background: none;
+    padding: 8px 12px;
+    font-size: 13.5px;
+    font-weight: 600;
+    color: var(--muted);
+    white-space: nowrap;
   }
 
-  .ftoggle[aria-expanded='true'] {
-    background: var(--hover);
-  }
-
-  .ftoggle.on {
+  .tabwrap.on button[role='tab'] {
     color: var(--accent-text);
-    border-color: color-mix(in srgb, var(--accent) 45%, transparent);
   }
 
-  .badge {
-    position: absolute;
-    top: -3px;
-    right: -3px;
-    min-width: 15px;
-    height: 15px;
-    padding: 0 4px;
-    border-radius: 99px;
-    background: var(--accent);
-    color: var(--on-accent);
-    font-size: 10px;
-    font-weight: 700;
-    line-height: 15px;
-    text-align: center;
+  .tabwrap .x {
+    padding: 4px;
+    margin-left: -8px;
+    border-radius: 6px;
+    line-height: 0;
   }
 
-  .fpanel {
-    position: absolute;
-    top: calc(100% + 8px);
-    right: 0;
-    z-index: 30;
-    width: min(360px, calc(100vw - 32px));
-    padding: 6px 16px 12px;
-    background: var(--card);
-    border: 1px solid var(--line-strong);
-    border-radius: 12px;
-    box-shadow: 0 12px 34px rgba(0, 0, 0, 0.18);
+  .add {
+    color: var(--accent-text);
   }
 
-  .fpanel h4 {
-    margin: 12px 0 7px;
-    font-size: 11.5px;
-    letter-spacing: 0.07em;
-    text-transform: uppercase;
-    color: var(--faint);
-  }
-
-  .opts {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 6px;
-  }
-
-  .dates {
+  .naming {
     display: flex;
     flex-wrap: wrap;
     gap: 8px;
-    margin-top: 8px;
-    font-size: 12.5px;
-    color: var(--muted);
+    margin-top: 10px;
   }
 
-  .dates label {
+  .naming input {
+    flex: 1;
+    min-width: 200px;
+  }
+
+  .frow {
+    position: relative;
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-top: 12px;
+  }
+
+  .pw {
+    position: relative;
+  }
+
+  .fbtn {
     display: inline-flex;
     align-items: center;
     gap: 6px;
-  }
-
-  .dates input {
-    padding: 3px 6px;
-    font-size: 12.5px;
-  }
-
-  .ffoot {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    margin-top: 14px;
-    padding-top: 10px;
-    border-top: 1px solid var(--line);
-  }
-
-  .fchip {
-    padding: 3px 11px;
+    padding: 4px 11px;
     border-radius: 99px;
     border: 1px solid var(--line-strong);
     background: var(--card);
     color: var(--muted);
     font-size: 13px;
     font-weight: 600;
+    white-space: nowrap;
   }
 
-  .fchip.on {
+  .fbtn.on {
     background: var(--accent-soft);
     border-color: color-mix(in srgb, var(--accent) 45%, transparent);
     color: var(--accent-text);
   }
 
-  .fcount {
+  .pop {
+    position: absolute;
+    top: calc(100% + 6px);
+    left: 0;
+    z-index: 30;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    width: 250px;
+    max-height: 340px;
+    overflow: auto;
+    padding: 8px;
+    background: var(--card);
+    border: 1px solid var(--line-strong);
+    border-radius: 12px;
+    box-shadow: 0 12px 34px rgba(0, 0, 0, 0.18);
+  }
+
+  .pop.wide {
+    width: 290px;
+  }
+
+  .pw.right .pop {
+    left: auto;
+    right: 0;
+  }
+
+  .pop label {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 5px 6px;
+    border-radius: 7px;
+    font-size: 13px;
+    cursor: pointer;
+  }
+
+  .pop label:hover {
+    background: var(--hover);
+  }
+
+  .pop label small {
+    margin-left: auto;
+    color: var(--faint);
+    font-size: 11.5px;
+    white-space: nowrap;
+  }
+
+  .pop h6 {
+    margin: 6px 6px 2px;
+    font-size: 11px;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--faint);
+  }
+
+  .none {
+    padding: 6px;
     font-size: 12.5px;
-    color: var(--muted);
+    color: var(--faint);
   }
 
   .active {
@@ -359,20 +474,28 @@
     flex-wrap: wrap;
     align-items: center;
     gap: 6px 8px;
-    margin: 14px 0 4px;
+    margin: 12px 0 0;
   }
 
   .token {
     display: inline-flex;
     align-items: center;
-    gap: 5px;
-    padding: 3px 8px 3px 11px;
+    gap: 4px;
+    padding: 2px 4px 2px 11px;
     border-radius: 99px;
     border: 1px solid color-mix(in srgb, var(--accent) 45%, transparent);
     background: var(--accent-soft);
     color: var(--accent-text);
     font-size: 13px;
     font-weight: 600;
+  }
+
+  .token button {
+    border: 0;
+    background: none;
+    padding: 3px;
+    line-height: 0;
+    color: inherit;
   }
 
   .link {
@@ -384,8 +507,17 @@
     padding: 2px 4px;
   }
 
-  .link:disabled {
-    color: var(--faint);
+  .summary {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px 18px;
+    margin: 14px 0 0;
+    font-size: 13px;
+    color: var(--muted);
+  }
+
+  .summary b {
+    color: var(--text);
   }
 
   .sec {
@@ -396,10 +528,9 @@
     color: var(--faint);
   }
 
-  .cnt {
+  .sec .cnt {
     font-weight: 500;
     letter-spacing: 0;
-    color: var(--faint);
   }
 
   .runs {
@@ -411,135 +542,13 @@
     gap: 8px;
   }
 
-  /* Each run a card, as a deck is on Decks: when, the deck, and its cards as a bar. */
-  .open {
-    display: grid;
-    grid-template-columns: 56px minmax(0, 1fr) minmax(140px, 220px);
-    gap: 14px;
-    align-items: center;
-    width: 100%;
-    padding: 11px 14px;
-    border: 1px solid var(--line);
-    border-radius: 14px;
-    background: var(--card);
-    text-align: left;
-    font-weight: 400;
+  .runs.ungrouped {
+    margin-top: 16px;
   }
 
-  .open:hover {
-    border-color: var(--line-strong);
-    background: var(--card);
-  }
-
-  .at {
-    display: flex;
-    flex-direction: column;
-    font-weight: 650;
-  }
-
-  .at small {
-    font-weight: 400;
-    font-size: 12px;
-    color: var(--faint);
-  }
-
-  .what {
-    display: flex;
-    flex-direction: column;
-    min-width: 0;
-    gap: 2px;
-  }
-
-  .line {
-    display: flex;
-    align-items: center;
-    flex-wrap: wrap;
-    gap: 4px 6px;
-    min-width: 0;
-  }
-
-  .t {
-    font-weight: 650;
-    font-size: 15px;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
-
-  .chip {
-    padding: 0 7px;
-    border-radius: 99px;
-    background: var(--accent-soft);
-    color: var(--accent-text);
-    font-size: 11.5px;
-    font-weight: 600;
-    line-height: 18px;
-    white-space: nowrap;
-  }
-
-  .p {
-    font-size: 12.5px;
-    color: var(--muted);
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
-
-  .marks {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 4px;
-    margin-top: 4px;
-  }
-
-  .mark {
-    display: inline-flex;
-    align-items: center;
-    gap: 4px;
-    padding: 1px 6px;
-    border-radius: 6px;
-    background: var(--rail);
-    color: var(--muted);
-    font-size: 11px;
-    font-weight: 650;
-    white-space: nowrap;
-  }
-
-  .mark.review {
-    background: var(--accent-soft);
-    color: var(--accent-text);
-  }
-
-  .rec {
-    width: 7px;
-    height: 7px;
-    border-radius: 50%;
-    background: var(--danger);
-  }
-
-  .plan {
-    display: flex;
-    flex-direction: column;
-    gap: 5px;
-  }
-
-  .tot {
-    font-size: 12.5px;
-    font-weight: 650;
-    text-align: right;
-    color: var(--muted);
-  }
-
-  .tot.over {
-    color: var(--danger);
-  }
-
-  .tot.under {
-    color: var(--ok);
-  }
-
-  .num {
-    font-variant-numeric: tabular-nums;
+  .more {
+    display: block;
+    margin: 14px auto 0;
   }
 
   .keep {
@@ -557,20 +566,29 @@
     color: var(--muted);
   }
 
+  .empty ol {
+    display: inline-block;
+    margin: 6px 0 14px;
+    text-align: left;
+  }
+
+  .empty.small {
+    padding: 18px;
+  }
+
+  .empty p {
+    margin: 0 0 8px;
+  }
+
   .empty button {
     display: inline-flex;
     align-items: center;
     gap: 6px;
   }
 
-  /* Narrow: the bar goes under the deck's name. Last, so it wins over the rules above. */
   @media (max-width: 760px) {
-    .open {
-      grid-template-columns: 50px minmax(0, 1fr);
-    }
-
-    .plan {
-      grid-column: 1 / -1;
+    .page {
+      padding: 20px 16px 40px;
     }
   }
 </style>

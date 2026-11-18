@@ -34,6 +34,7 @@ import { effectiveShortcuts, isMac, type Shortcuts } from '../session/shortcuts'
 import { parseLinkPermission, type LinkPermission } from '../links'
 import { DEFAULT_SETTINGS, isReadable, parseSettings, serializeSettings, type Appearance, type Settings } from './settings'
 import { addedVersions, type ChatApp } from '../skill/page'
+import { parseSessionViews, type SavedView } from '../sessions/views'
 import { parseWorkspaceNav, type WorkspaceNav } from '../workspaces/navigation'
 
 const FILE = 'settings.json'
@@ -443,6 +444,18 @@ export function setKeepRecordings(keep: boolean): Promise<void> {
   logAction('keep recordings', String(keep))
   return inTurn(async () => {
     await save({ ...get(settings), keepRecordings: keep })
+  })
+}
+
+// ---- Sessions' saved views (ADR 0048)
+
+export const sessionViews = derived(settings, (s) => parseSessionViews(s.sessionViews))
+
+/** Changes the saved views: the new list is made from the current one, so two quick changes don't lose one. */
+export function changeSessionViews(change: (views: SavedView[]) => SavedView[], what: string): Promise<void> {
+  logAction('sessions view', what)
+  return inTurn(async () => {
+    await save({ ...get(settings), sessionViews: change(parseSessionViews(get(settings).sessionViews)) })
   })
 }
 
