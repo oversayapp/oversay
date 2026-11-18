@@ -190,8 +190,9 @@
         onblur={() => ((focused = false), (making = false))}
         onkeydown={onInputKey}
       />
-      <!-- Centred while empty, as Zoom's is; it moves aside once you type. -->
-      <span class="hint" aria-hidden="true">Search or type a command (⌘K)</span>
+      <!-- Left-aligned while empty with its shortcut at the right; both go once you type. -->
+      <span class="hint" aria-hidden="true">Search or type a command</span>
+      <kbd class="key" aria-hidden="true">⌘K</kbd>
     </label>
     {#if open}
       <!-- mousedown keeps the focus in the bar, so a click lands before it closes. -->
@@ -320,6 +321,7 @@
 
   .find:hover {
     background: color-mix(in srgb, var(--hover) 60%, var(--line));
+    border-color: var(--line);
   }
 
   .find:focus-within {
@@ -332,7 +334,7 @@
     display: flex;
     align-items: center;
     gap: 7px;
-    padding: 0 11px;
+    padding: 3px 9px 3px 11px;
     color: var(--muted);
   }
 
@@ -356,19 +358,31 @@
     pointer-events: none;
   }
 
-  /* Empty and not focused: the icon and "Search (⌘F)" sit in the middle of the bar. */
-  .search.idle:not(:focus-within) {
-    justify-content: center;
-  }
-
+  /* Empty and not focused: the icon and the prompt at the left, the shortcut as a key at the right. */
   .search.idle:not(:focus-within) input {
     position: absolute;
     inset: 0;
     width: 100%;
-    padding-left: 11px;
+    padding-left: 32px;
   }
 
   .search.idle:not(:focus-within) .hint {
+    display: inline;
+    flex: 1;
+  }
+
+  .key {
+    display: none;
+    pointer-events: none;
+    padding: 1px 6px;
+    border: 1px solid var(--line-strong);
+    border-radius: 5px;
+    font: inherit;
+    font-size: 11.5px;
+    color: var(--faint);
+  }
+
+  .search.idle:not(:focus-within) .key {
     display: inline;
   }
 
