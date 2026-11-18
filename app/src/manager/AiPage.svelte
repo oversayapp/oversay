@@ -24,6 +24,7 @@
     sharing,
     skillState,
     skillTargets,
+    SKILL_TARGETS,
     TARGET_LABELS,
     type SkillTarget,
     type SkillTargets,
@@ -93,7 +94,6 @@
       works: 'ChatGPT on the web, the desktop app and phones.',
     },
   }
-  const CHAT_ORDER: ChatApp[] = ['claude-app', 'gemini-app', 'chatgpt']
 
   const GET_AI = [
     { name: 'Claude', abbr: 'C', cls: 'claude-app', url: 'https://claude.ai/download' },
@@ -473,27 +473,26 @@
     {/if}
 
     {#snippet tools()}
-      <h3 class="sec">{plan!.here.length ? 'On this computer' : 'Terminal and coding tools'}</h3>
+      <h3 class="sec">Terminal and coding tools</h3>
       <div class="rows">
-        {#each plan!.here as id (id)}{@render targetRow(id)}{/each}
-        {#if showAway}
-          {#each plan!.away as id (id)}{@render targetRow(id)}{/each}
-        {:else if plan!.away.length}
-          {@const names = plan!.away.map((id) => TARGET_LABELS[id].name).join(', ')}
+        {#if plan!.showTools || showAway}
+          {#each [...plan!.here, ...plan!.away] as id (id)}{@render targetRow(id)}{/each}
+        {:else}
+          {@const names = SKILL_TARGETS.map((id) => TARGET_LABELS[id].name).join(', ')}
           <button class="arow folded" onclick={() => (showAway = true)}>
-            <span class="grow">{plan!.here.length ? `${names} ${plan!.away.length === 1 ? 'isn’t' : 'aren’t'} on this computer` : `${names}: for people who work in a terminal`}</span>
+            <span class="grow">{names}: for people who work in a terminal</span>
             <span class="faint">Show</span>
           </button>
         {/if}
       </div>
     {/snippet}
     {#snippet chats()}
-      <h3 class="sec">{plan!.chatFirst ? 'Start with a chat app' : 'Chat and desktop apps'}</h3>
+      <h3 class="sec">Chat and desktop apps</h3>
       <div class="rows">
-        {#each CHAT_ORDER as app (app)}{@render chatRow(app)}{/each}
+        {#each plan!.chatApps as app (app)}{@render chatRow(app)}{/each}
       </div>
     {/snippet}
-    {#if plan.chatFirst}{@render chats()}{@render tools()}{:else}{@render tools()}{@render chats()}{/if}
+    {@render chats()}{@render tools()}
 
     {#if !tryApp}
       <h3 class="sec">Try it</h3>

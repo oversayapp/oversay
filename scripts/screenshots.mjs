@@ -404,7 +404,7 @@ const SCREENS = [
   // Code, then a note arrives; the Claude app's plugin saved; Home's card once installed.
   ['ai-none', `(async () => { window.__noAi(); [...document.querySelectorAll('nav.rail button')].find((b) => b.textContent.includes('AI')).click(); await new Promise((r) => setTimeout(r, 300)) })()`],
   ['ai', `(async () => { const wait = () => new Promise((r) => setTimeout(r, 200)); window.__noAi(false); [...document.querySelectorAll('nav.rail button')].find((b) => b.textContent.includes('Home')).click(); await wait(); [...document.querySelectorAll('nav.rail button')].find((b) => b.textContent.includes('AI')).click(); await wait() })()`],
-  ['ai-details', `(async () => { [...document.querySelectorAll('main button.toggle')].find((b) => b.textContent.includes('Codex')).click(); await new Promise((r) => setTimeout(r, 200)) })()`],
+  ['ai-details', `(async () => { [...document.querySelectorAll('main button.folded')].forEach((b) => b.click()); await new Promise((r) => setTimeout(r, 200)); [...document.querySelectorAll('main button.toggle')].find((b) => b.textContent.includes('Codex')).click(); await new Promise((r) => setTimeout(r, 200)) })()`],
   ['ai-installed', `(async () => { [...document.querySelectorAll('main button')].find((b) => b.textContent.trim() === 'Install').click(); await new Promise((r) => setTimeout(r, 300)) })()`],
   ['ai-arrived', `(async () => { window.__outside('decks', 'Board prep', '## Numbers [10m]\\n- Q3 revenue\\n'); await new Promise((r) => setTimeout(r, 400)) })()`],
   ['ai-claude-app', `(async () => { [...document.querySelectorAll('main button.toggle')].find((b) => b.textContent.includes('Claude app')).click(); await new Promise((r) => setTimeout(r, 300)) })()`],
