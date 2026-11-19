@@ -16,7 +16,7 @@ The skill's version is the app's (`app/package.json`). Every deck the skill make
 This repository is a Claude Code and Codex plugin marketplace (ADR 0049). `.claude-plugin/marketplace.json` lists one plugin, `plugins/oversay/`, which `make skills` makes from this folder; never edit it, `make check` fails if it differs.
 
 - **Claude Code**: `claude plugin marketplace add oversayapp/oversay`, then `claude plugin install oversay@oversay`, then start a new session. Or paste the install prompt from Oversay's AI page. Auto-update is off for a marketplace that isn't Anthropic's: turn it on in `/plugin` › Marketplaces, or run `claude plugin update oversay@oversay`. The skill is `/oversay:oversay`.
-- **Claude app and Cowork**: **Customize › Plugins › Add › Add marketplace**, enter `oversayapp/oversay`, install Oversay. A prompt in chat can't do it (*not tried*). Whether a plugin added here reaches Claude Code as `oversay@synced` is *not verified*; treat each app as its own install.
+- **Claude app and Cowork**: **sidebar › Plugins › Add › Add marketplace**, enter `oversayapp/oversay`, install Oversay (menu names seen on the Claude desktop app on 2026-11-19; Plugins is a top-level sidebar item, and Add also offers Upload plugin, Add custom connector, Create a plugin and Create with Claude). A prompt in chat can't do it (*not tried*). Whether a plugin added here reaches Claude Code as `oversay@synced` is *not verified*; treat each app as its own install.
 - **Codex**: `codex plugin marketplace add oversayapp/oversay`, then `codex plugin add oversay@oversay`; update with `codex plugin marketplace upgrade`. Both installed and listed the skill from a local checkout (2026-11-18). Layout matters: Codex skips a skill that sits at the plugin's root, so the plugin is a generated folder with `skills/oversay/` inside.
 - **Gemini CLI**: not tested here, so no command is given. Use Install from Oversay.
 - **Gemini app, ChatGPT**: take an upload only. Each release page has `oversay-skill.zip` and `oversay-plugin.zip`.
@@ -67,7 +67,7 @@ Google replaced Gemini CLI with Antigravity CLI (`agy`) for personal Google acco
 ### Claude app (claude.ai, the desktop app, Cowork)
 
 1. In Oversay, AI › Claude app and Cowork › **Save plugin…** saves `oversay-plugin.zip`: `.claude-plugin/plugin.json` and the skill (`claude plugin validate` passes on the same layout).
-2. In Claude, **Customize › Plugins › Add › Upload plugin**, and choose the zip. It stays on your own account.
+2. In Claude, **sidebar › Plugins › Add › Upload plugin**, and choose the zip. It stays on your own account.
 3. **Chat** runs the skill in Anthropic's sandbox: it can make the note but not put it on your computer, so it gives you the file. Drop it on Oversay's window.
 4. **Cowork** writes the note straight into Oversay when the task may work in `Documents/Oversay`. Whether it can open `oversay://` links is unverified.
 5. The plugin also syncs to Claude Code as `oversay@synced`. If you installed the skill for Claude Code from Oversay too, turn one off with `/plugin`.
