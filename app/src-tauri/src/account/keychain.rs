@@ -42,8 +42,4 @@ impl super::SecretStore for Keychain {
             Err(e) => Err(e.to_string()),
         }
     }
-
-    fn kind(&self) -> &'static str {
-        "keychain"
-    }
 }

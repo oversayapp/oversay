@@ -94,9 +94,6 @@ impl SecretStore for FakeKeychain {
         calls.deletes += 1;
         Ok(())
     }
-    fn kind(&self) -> &'static str {
-        "keychain"
-    }
 }
 
 struct FakeApi(Shared);
@@ -119,7 +116,7 @@ fn account() -> (Account, Shared) {
     test_log::start();
     let calls = Shared::default();
     let account = Account::new(
-        DEV.clone(),
+        DEV,
         Box::new(FakeCognito(calls.clone())),
         Box::new(FakeKeychain(calls.clone())),
         Box::new(FakeApi(calls.clone())),
@@ -141,7 +138,11 @@ fn auth_link(code: &str, state: &str) -> String {
 
 /// Starts a sign-in and returns the state the hosted page would send back.
 fn started(account: &Account, now: Instant) -> String {
-    query(&account.start_sign_in(Screen::SignIn, now), "state").unwrap()
+    query(
+        &account.start_sign_in(Screen::SignIn, now).unwrap(),
+        "state",
+    )
+    .unwrap()
 }
 
 fn signed_in(account: &Account, now: Instant) {
@@ -179,7 +180,9 @@ fn signed_out_makes_no_api_calls() {
 #[test]
 fn the_hosted_page_is_asked_for_a_code_with_pkce_and_state() {
     let (account, _) = account();
-    let url = account.start_sign_in(Screen::SignIn, Instant::now());
+    let url = account
+        .start_sign_in(Screen::SignIn, Instant::now())
+        .unwrap();
     assert!(
         url.starts_with("https://oversay-dev.auth.eu-west-1.amazoncognito.com/oauth2/authorize?"),
         "{url}"
@@ -198,7 +201,9 @@ fn the_hosted_page_is_asked_for_a_code_with_pkce_and_state() {
     assert!(query(&url, "state").unwrap().len() >= 43);
     assert_eq!(account.status(), Status::SigningIn);
     // Create account opens the same page on its sign-up form.
-    let signup = account.start_sign_in(Screen::SignUp, Instant::now());
+    let signup = account
+        .start_sign_in(Screen::SignUp, Instant::now())
+        .unwrap();
     assert!(
         signup.starts_with("https://oversay-dev.auth.eu-west-1.amazoncognito.com/signup?"),
         "{signup}"
@@ -210,7 +215,7 @@ fn the_hosted_page_is_asked_for_a_code_with_pkce_and_state() {
 fn a_link_matching_the_sign_in_stores_the_refresh_token_in_the_keychain_and_signs_in() {
     let (account, calls) = account();
     let now = Instant::now();
-    let url = account.start_sign_in(Screen::SignIn, now);
+    let url = account.start_sign_in(Screen::SignIn, now).unwrap();
     let state = query(&url, "state").unwrap();
     assert_eq!(
         account.handle_link(&auth_link("code-1", &state), now),
@@ -251,7 +256,9 @@ fn the_log_never_holds_a_token_code_state_or_email() {
     account.handle_link(&auth_link("code-1", &state), now);
     account.handle_link(&auth_link("code-2", "other"), now);
     account.call_api(now).unwrap();
-    account.sign_out();
+    if let Some((_, r)) = account.sign_out() {
+        account.revoke(r);
+    }
     for line in test_log::lines() {
         for secret in [
             "code-1",
@@ -402,7 +409,7 @@ fn relaunch_restores_the_account_from_the_keychain_without_the_network() {
     let now = Instant::now();
     signed_in(&first, now);
     let second = Account::new(
-        DEV.clone(),
+        DEV,
         Box::new(FakeCognito(calls.clone())),
         Box::new(FakeKeychain(calls.clone())),
         Box::new(FakeApi(calls.clone())),
@@ -443,7 +450,11 @@ fn sign_out_deletes_the_stored_tokens_and_revokes_them() {
     let (account, calls) = account();
     let now = Instant::now();
     signed_in(&account, now);
-    let logout = account.sign_out().unwrap();
+    let (logout, revocation) = account.sign_out().unwrap();
+    // The keychain item goes at once; the revoke, a network call, comes after.
+    assert!(calls.lock().unwrap().stored.is_none());
+    assert!(calls.lock().unwrap().revoked.is_empty());
+    account.revoke(revocation);
     assert!(
         logout.starts_with("https://oversay-dev.auth.eu-west-1.amazoncognito.com/logout?"),
         "{logout}"
@@ -469,7 +480,7 @@ fn sign_out_deletes_the_stored_tokens_and_revokes_them() {
 #[test]
 fn signing_out_when_signed_out_does_nothing() {
     let (account, calls) = account();
-    assert_eq!(account.sign_out(), None);
+    assert!(account.sign_out().is_none());
     assert!(calls.lock().unwrap().revoked.is_empty());
 }
 
@@ -558,7 +569,7 @@ fn a_sign_in_replaced_while_its_code_is_traded_leaves_the_new_one_waiting() {
     let state = started(&account, now);
     let during = account.clone();
     calls.lock().unwrap().during_exchange = Some(Box::new(move || {
-        during.start_sign_in(Screen::SignIn, now);
+        during.start_sign_in(Screen::SignIn, now).unwrap();
     }));
     assert_eq!(
         account.handle_link(&auth_link("code-1", &state), now),
@@ -574,7 +585,7 @@ fn a_sign_in_past_its_ten_minutes_shows_as_not_finished() {
     let long_ago = Instant::now()
         .checked_sub(Duration::from_secs(11 * 60))
         .unwrap();
-    account.start_sign_in(Screen::SignIn, long_ago);
+    account.start_sign_in(Screen::SignIn, long_ago).unwrap();
     assert_eq!(
         account.status(),
         Status::SignedOut {
@@ -627,4 +638,54 @@ fn the_status_has_the_shape_the_manager_reads() {
 #[test]
 fn the_account_event_has_the_frontends_name() {
     assert_eq!(super::commands::ACCOUNT_EVENT, "oversay-account");
+}
+
+#[test]
+fn signing_in_while_signed_in_is_refused() {
+    let (account, _) = account();
+    let now = Instant::now();
+    signed_in(&account, now);
+    assert_eq!(
+        account.start_sign_in(Screen::SignIn, now),
+        Err(AccountError::SignedIn)
+    );
+    assert_eq!(
+        account.status(),
+        Status::SignedIn {
+            email: "john@example.com".into()
+        }
+    );
+}
+
+#[test]
+fn the_manager_is_told_of_changes_it_did_not_ask_for() {
+    let (account, calls) = account();
+    let told = Arc::new(Mutex::new(0));
+    let count = told.clone();
+    account.on_change(move || *count.lock().unwrap() += 1);
+    let now = Instant::now();
+    signed_in(&account, now);
+    assert_eq!(*told.lock().unwrap(), 1);
+    account.handle_link(&auth_link("x", "y"), now);
+    assert_eq!(*told.lock().unwrap(), 2);
+    calls.lock().unwrap().refresh_fails = true;
+    let _ = account.access_token(now + Duration::from_secs(7200));
+    assert_eq!(*told.lock().unwrap(), 3);
+}
+
+#[test]
+fn a_restore_finishing_after_a_sign_in_keeps_the_sign_in() {
+    let (account, calls) = account();
+    calls.lock().unwrap().stored =
+        Some(r#"{"refreshToken":"old","email":"old@example.com"}"#.into());
+    let now = Instant::now();
+    signed_in(&account, now);
+    account.restore();
+    assert_eq!(account.access_token(now), Ok("access-1".into()));
+    assert_eq!(
+        account.status(),
+        Status::SignedIn {
+            email: "john@example.com".into()
+        }
+    );
 }

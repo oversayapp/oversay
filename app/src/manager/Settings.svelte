@@ -27,7 +27,7 @@
   import { library, restoreStarters } from '../lib/templates/library-store'
   import { onMount, tick, untrack } from 'svelte'
   import { nav as screen } from './route'
-  import { visibleSections, atScrollEnd, currentSection, type SettingsSectionId } from '../lib/settings/sections'
+  import { SETTINGS_SECTIONS, visibleSections, atScrollEnd, currentSection, type SettingsSectionId } from '../lib/settings/sections'
   import { logAction } from '../lib/log'
   import { installExampleDecks, missingExampleDecks } from '../lib/decks/examples'
 
@@ -65,7 +65,7 @@
   let root: HTMLElement
   let toc = $state<HTMLElement>()
   const sections = $derived(visibleSections($supported))
-  let current = $state<SettingsSectionId>('account')
+  let current = $state<SettingsSectionId>(SETTINGS_SECTIONS[0].id)
   let menuOpen = $state(false)
   let devOpen = $state(false)
   // About's third-party licences are a page of their own, in place of the sections (013/03).

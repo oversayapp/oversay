@@ -5,7 +5,8 @@ use std::time::Duration;
 
 use super::{AuthError, REDIRECT, Stage, Tokens};
 
-fn agent() -> ureq::Agent {
+/// One agent for Cognito and the API (an agent is shared state inside: clones share its pool).
+pub fn agent() -> ureq::Agent {
     ureq::Agent::config_builder()
         .timeout_global(Some(Duration::from_secs(20)))
         // A 400 from Cognito is an answer to read (`invalid_grant`), not a failed request.
@@ -13,6 +14,22 @@ fn agent() -> ureq::Agent {
         .https_only(true)
         .build()
         .into()
+}
+
+/// A response's status and its body, up to `limit` bytes.
+fn read(
+    mut response: ureq::http::Response<ureq::Body>,
+    limit: u64,
+    from: &str,
+) -> Result<(u16, String), String> {
+    let status = response.status().as_u16();
+    let body = response
+        .body_mut()
+        .with_config()
+        .limit(limit)
+        .read_to_string()
+        .map_err(|e| format!("{from}'s answer couldn't be read: {e}"))?;
+    Ok((status, body))
 }
 
 pub struct Cognito {
@@ -23,31 +40,22 @@ pub struct Cognito {
 }
 
 impl Cognito {
-    pub fn new(stage: &Stage) -> Self {
+    pub fn new(stage: &Stage, agent: ureq::Agent) -> Self {
         Cognito {
             token_url: format!("{}/oauth2/token", stage.hosted_page),
             revoke_url: format!("{}/oauth2/revoke", stage.hosted_page),
             client_id: stage.client_id,
-            agent: agent(),
+            agent,
         }
     }
 
     fn post(&self, url: &str, form: &[(&str, &str)]) -> Result<(u16, String), AuthError> {
-        let mut response = self
+        let response = self
             .agent
             .post(url)
             .send_form(form.iter().copied())
             .map_err(|e| AuthError::Unreachable(format!("Cognito couldn't be reached: {e}")))?;
-        let status = response.status().as_u16();
-        let body = response
-            .body_mut()
-            .with_config()
-            .limit(64 * 1024)
-            .read_to_string()
-            .map_err(|e| {
-                AuthError::Unreachable(format!("Cognito's answer couldn't be read: {e}"))
-            })?;
-        Ok((status, body))
+        read(response, 64 * 1024, "Cognito").map_err(AuthError::Unreachable)
     }
 
     fn tokens(&self, form: &[(&str, &str)]) -> Result<Tokens, AuthError> {
@@ -113,29 +121,22 @@ pub struct HttpApi {
 }
 
 impl HttpApi {
-    pub fn new(stage: &Stage) -> Self {
+    pub fn new(stage: &Stage, agent: ureq::Agent) -> Self {
         HttpApi {
             base: stage.api,
-            agent: agent(),
+            agent,
         }
     }
 }
 
 impl super::Api for HttpApi {
     fn get(&self, path: &str, access_token: &str) -> Result<(u16, String), String> {
-        let mut response = self
+        let response = self
             .agent
             .get(format!("{}{path}", self.base))
             .header("Authorization", format!("Bearer {access_token}"))
             .call()
             .map_err(|e| format!("The API couldn't be reached: {e}"))?;
-        let status = response.status().as_u16();
-        let body = response
-            .body_mut()
-            .with_config()
-            .limit(4 * 1024 * 1024)
-            .read_to_string()
-            .map_err(|e| format!("The API's answer couldn't be read: {e}"))?;
-        Ok((status, body))
+        read(response, 4 * 1024 * 1024, "The API")
     }
 }

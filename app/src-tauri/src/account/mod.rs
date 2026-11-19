@@ -14,7 +14,7 @@ mod keychain;
 mod tests;
 
 use std::fmt;
-use std::sync::Mutex;
+use std::sync::{Mutex, MutexGuard, OnceLock};
 use std::time::{Duration, Instant};
 
 use base64::Engine;
@@ -24,7 +24,7 @@ use sha2::Digest;
 
 /// One deployed stage of oversayapp/web-api: its hosted sign-in page, the desktop app client and
 /// the API. Public identifiers, not secrets (a public client has no secret).
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Copy, Debug, PartialEq)]
 pub struct Stage {
     pub name: &'static str,
     pub hosted_page: &'static str,
@@ -97,7 +97,7 @@ pub enum LinkOutcome {
     Refused(Refusal),
     /// The link was the one expected, but the code couldn't be traded or kept.
     Failed,
-    /// The sign-in was cancelled or started again while its code was being traded.
+    /// The sign-in was cancelled, or signed out, while its code was being traded.
     Abandoned,
 }
 
@@ -128,6 +128,8 @@ impl Refusal {
 #[derive(Debug, PartialEq)]
 pub enum AccountError {
     SignedOut,
+    /// Sign in while signed in: sign out first.
+    SignedIn,
     /// Cognito or the API couldn't be reached or answered oddly.
     Unreachable(String),
 }
@@ -136,6 +138,7 @@ impl fmt::Display for AccountError {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
             AccountError::SignedOut => write!(f, "Not signed in."),
+            AccountError::SignedIn => write!(f, "Already signed in. Sign out first."),
             AccountError::Unreachable(why) => write!(f, "{why}"),
         }
     }
@@ -147,6 +150,15 @@ pub enum AuthError {
     Rejected,
     /// Cognito couldn't be reached or its answer couldn't be read.
     Unreachable(String),
+}
+
+impl fmt::Display for AuthError {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            AuthError::Rejected => write!(f, "rejected"),
+            AuthError::Unreachable(why) => write!(f, "{why}"),
+        }
+    }
 }
 
 /// What Cognito's token endpoint gives back.
@@ -170,8 +182,6 @@ pub trait SecretStore: Send + Sync {
     fn load(&self) -> Result<Option<String>, String>;
     fn save(&self, value: &str) -> Result<(), String>;
     fn delete(&self) -> Result<(), String>;
-    /// For the log: `keychain`.
-    fn kind(&self) -> &'static str;
 }
 
 /// The stage's API: a GET with the access token, giving the status and body.
@@ -203,9 +213,8 @@ struct SignIn {
     state: Secret,
     verifier: Secret,
     started: Instant,
-    /// `Inner::generation` when it started: if that has moved on by the time its code is traded,
-    /// it was cancelled or replaced meanwhile.
-    generation: u64,
+    /// Its link came and its code is being traded: a second link with the same state is refused.
+    exchanging: bool,
 }
 
 struct SignedIn {
@@ -214,34 +223,50 @@ struct SignedIn {
     access: Option<(Secret, Instant)>,
 }
 
-#[derive(Default)]
-struct Inner {
-    sign_in: Option<SignIn>,
-    /// Goes up on every start, cancel and sign-out.
-    generation: u64,
-    signed_in: Option<SignedIn>,
-    problem: Option<String>,
+/// Where the account is: one of three, so no two can be true at once.
+enum State {
+    SignedOut { problem: Option<String> },
+    SigningIn(SignIn),
+    SignedIn(SignedIn),
 }
+
+impl State {
+    fn signed_out() -> Self {
+        State::SignedOut { problem: None }
+    }
+
+    fn did_not_finish() -> Self {
+        State::SignedOut {
+            problem: Some(SIGN_IN_DID_NOT_FINISH.into()),
+        }
+    }
+
+    /// Whether this is the sign-in whose link carried `state` and is being traded.
+    fn is_exchanging(&self, state: &Secret) -> bool {
+        matches!(self, State::SigningIn(s) if s.exchanging && s.state == *state)
+    }
+}
+
+/// Signing out hands back the refresh token to revoke, which `revoke` does later: it is a network
+/// call, and signing out mustn't wait for it.
+pub struct Revocation(Secret);
 
 pub struct Account {
     stage: Stage,
     tokens: Box<dyn TokenEndpoint>,
     store: Box<dyn SecretStore>,
     api: Box<dyn Api>,
-    inner: Mutex<Inner>,
+    state: Mutex<State>,
+    /// Told when the account changes by itself (a link, a refused refresh, a restore), not when a
+    /// caller changed it and has the status back already.
+    on_change: OnceLock<Box<dyn Fn() + Send + Sync>>,
 }
 
 /// Whether `url` is an `oversay://auth` link (the sign-in's return), which only this module reads.
 pub fn is_auth_link(url: &str) -> bool {
-    let Some(rest) = url
-        .get(..10)
-        .filter(|s| s.eq_ignore_ascii_case("oversay://"))
-        .map(|_| &url[10..])
-    else {
-        return false;
-    };
-    let host = rest.split(['/', '?', '#']).next().unwrap_or("");
-    host.eq_ignore_ascii_case("auth")
+    url::Url::parse(url).is_ok_and(|u| {
+        u.scheme() == "oversay" && u.host_str().is_some_and(|h| h.eq_ignore_ascii_case("auth"))
+    })
 }
 
 /// 32 random bytes, base64url: a `state` or a PKCE verifier (43 characters, RFC 7636).
@@ -263,8 +288,7 @@ fn same(a: &str, b: &str) -> bool {
 /// The `email` claim of an ID token that came straight from Cognito's token endpoint over TLS
 /// (OpenID Connect Core §3.1.3.7: its signature needn't be checked then).
 fn email_from_id_token(id_token: &str) -> Option<String> {
-    let mut parts = id_token.split('.');
-    let payload = parts.nth(1)?;
+    let payload = id_token.split('.').nth(1)?;
     let bytes = URL_SAFE_NO_PAD.decode(payload.trim_end_matches('=')).ok()?;
     let claims: serde_json::Value = serde_json::from_slice(&bytes).ok()?;
     claims
@@ -286,125 +310,140 @@ impl Account {
             tokens,
             store,
             api,
-            inner: Mutex::new(Inner::default()),
+            state: Mutex::new(State::signed_out()),
+            on_change: OnceLock::new(),
         }
     }
 
     /// The real Cognito, keychain and API for `stage`.
     pub fn for_stage(stage: Stage) -> Self {
-        let tokens = cognito::Cognito::new(&stage);
-        let api = cognito::HttpApi::new(&stage);
+        let agent = cognito::agent();
+        let tokens = cognito::Cognito::new(&stage, agent.clone());
+        let api = cognito::HttpApi::new(&stage, agent);
         let store = keychain::Keychain::new(&stage);
         Account::new(stage, Box::new(tokens), Box::new(store), Box::new(api))
     }
 
-    fn inner(&self) -> std::sync::MutexGuard<'_, Inner> {
-        self.inner.lock().unwrap_or_else(|e| e.into_inner())
+    /// What to call when the account changes by itself (see `on_change`). Set once.
+    pub fn on_change(&self, f: impl Fn() + Send + Sync + 'static) {
+        let _ = self.on_change.set(Box::new(f));
+    }
+
+    fn changed(&self) {
+        if let Some(f) = self.on_change.get() {
+            f();
+        }
+    }
+
+    fn state(&self) -> MutexGuard<'_, State> {
+        self.state.lock().unwrap_or_else(|e| e.into_inner())
+    }
+
+    /// The hosted page at `path`, for the stage's desktop client.
+    fn hosted(&self, path: &str) -> url::Url {
+        let mut url =
+            url::Url::parse(self.stage.hosted_page).expect("the stage's hosted page is a URL");
+        url.set_path(path);
+        url.query_pairs_mut()
+            .append_pair("client_id", self.stage.client_id);
+        url
     }
 
     /// At launch: signed in again from the keychain, with no request made.
     pub fn restore(&self) {
-        let loaded = match self.store.load() {
-            Ok(loaded) => loaded,
+        let text = match self.store.load() {
+            Ok(Some(text)) => text,
+            Ok(None) => {
+                log::debug!("account.none_stored");
+                return;
+            }
             Err(e) => {
-                log::warn!(
-                    "account.restore_failed store={} error={e}",
-                    self.store.kind()
-                );
+                log::warn!("account.restore_failed store=keychain error={e}");
                 return;
             }
         };
-        let Some(text) = loaded else {
-            log::debug!("account.none_stored");
+        let Ok(stored) = serde_json::from_str::<Stored>(&text) else {
+            log::warn!("account.stored_unreadable removed=true");
+            let _ = self.store.delete();
             return;
         };
-        match serde_json::from_str::<Stored>(&text) {
-            Ok(stored) => {
-                self.inner().signed_in = Some(SignedIn {
-                    email: stored.email,
-                    refresh_token: Secret(stored.refresh_token),
-                    access: None,
-                });
-                log::debug!(
-                    "account.restored check=epic-036/V4 stage={}",
-                    self.stage.name
-                );
+        {
+            let mut state = self.state();
+            // A sign-in finished while the keychain was read: it is the newer one.
+            if !matches!(*state, State::SignedOut { .. }) {
+                return;
             }
-            Err(_) => {
-                log::warn!("account.stored_unreadable removed=true");
-                let _ = self.store.delete();
-            }
+            *state = State::SignedIn(SignedIn {
+                email: stored.email,
+                refresh_token: Secret(stored.refresh_token),
+                access: None,
+            });
         }
+        log::debug!(
+            "account.restored check=epic-036/V4 stage={}",
+            self.stage.name
+        );
+        self.changed();
     }
 
     pub fn status(&self) -> Status {
-        let inner = self.inner();
-        if let Some(s) = &inner.signed_in {
-            Status::SignedIn {
+        match &*self.state() {
+            State::SignedIn(s) => Status::SignedIn {
                 email: s.email.clone(),
-            }
-        } else if inner
-            .sign_in
-            .as_ref()
-            .is_some_and(|s| s.started.elapsed() <= SIGN_IN_LIFETIME)
-        {
-            Status::SigningIn
-        } else if inner.sign_in.is_some() {
+            },
+            State::SigningIn(s) if s.started.elapsed() <= SIGN_IN_LIFETIME => Status::SigningIn,
             // Its link can only be refused now (follow).
-            Status::SignedOut {
+            State::SigningIn(_) => Status::SignedOut {
                 problem: Some(SIGN_IN_DID_NOT_FINISH.into()),
-            }
-        } else {
-            Status::SignedOut {
-                problem: inner.problem.clone(),
-            }
+            },
+            State::SignedOut { problem } => Status::SignedOut {
+                problem: problem.clone(),
+            },
         }
     }
 
     /// Starts a sign-in and gives the hosted page's address to open in the browser. A sign-in
     /// already waiting is replaced, so only the newest page's link is accepted.
-    pub fn start_sign_in(&self, screen: Screen, now: Instant) -> String {
+    pub fn start_sign_in(&self, screen: Screen, now: Instant) -> Result<String, AccountError> {
         let state = random_token();
         let verifier = random_token();
         let challenge = URL_SAFE_NO_PAD.encode(sha2::Sha256::digest(verifier.as_bytes()));
-        let path = match screen {
+        let mut url = self.hosted(match screen {
             Screen::SignIn => "/oauth2/authorize",
             Screen::SignUp => "/signup",
-        };
-        let mut url =
-            url::Url::parse(self.stage.hosted_page).expect("the stage's hosted page is a URL");
-        url.set_path(path);
+        });
         url.query_pairs_mut()
             .append_pair("response_type", "code")
-            .append_pair("client_id", self.stage.client_id)
             .append_pair("redirect_uri", REDIRECT)
             .append_pair("scope", "openid email")
             .append_pair("state", &state)
             .append_pair("code_challenge", &challenge)
             .append_pair("code_challenge_method", "S256");
-        let mut inner = self.inner();
-        inner.problem = None;
-        inner.generation += 1;
-        inner.sign_in = Some(SignIn {
+        let mut current = self.state();
+        if matches!(*current, State::SignedIn(_)) {
+            return Err(AccountError::SignedIn);
+        }
+        *current = State::SigningIn(SignIn {
             state: Secret(state),
             verifier: Secret(verifier),
             started: now,
-            generation: inner.generation,
+            exchanging: false,
         });
         log::debug!(
             "account.sign_in_started screen={screen:?} stage={}",
             self.stage.name
         );
-        url.into()
+        Ok(url.into())
     }
 
     pub fn cancel_sign_in(&self) {
-        let mut inner = self.inner();
-        inner.generation += 1;
-        if inner.sign_in.take().is_some() {
-            log::debug!("account.sign_in_cancelled");
+        let mut state = self.state();
+        if !matches!(*state, State::SignedIn(_)) {
+            if matches!(*state, State::SigningIn(_)) {
+                log::debug!("account.sign_in_cancelled");
+            }
+            *state = State::signed_out();
         }
-        inner.problem = None;
     }
 
     /// An `oversay://auth` link: accepted only when it carries the `state` of the sign-in in
@@ -414,8 +453,15 @@ impl Account {
         if let LinkOutcome::Refused(why) = &outcome {
             // The link's query holds the code and state, so only the reason is logged.
             log::warn!("account.link_refused reason={}", why.code());
-            // Shown only when signed out with no sign-in waiting (spec §14).
-            self.inner().problem = Some(SIGN_IN_DID_NOT_FINISH.into());
+            // Spec §14: the manager says sign-in did not finish, unless a sign-in is still
+            // waiting or the account is signed in.
+            let mut state = self.state();
+            if let State::SignedOut { problem } = &mut *state {
+                *problem = Some(SIGN_IN_DID_NOT_FINISH.into());
+            }
+        }
+        if outcome != LinkOutcome::SignedOutReturn {
+            self.changed();
         }
         outcome
     }
@@ -437,128 +483,130 @@ impl Account {
                 .find(|(k, _)| k == key)
                 .map(|(_, v)| v.into_owned())
         };
-        let sign_in = {
-            let mut inner = self.inner();
-            let Some(pending) = &inner.sign_in else {
+        let (state, verifier) = {
+            let mut current = self.state();
+            let State::SigningIn(pending) = &mut *current else {
                 return LinkOutcome::Refused(Refusal::NoSignIn);
             };
+            if pending.exchanging {
+                return LinkOutcome::Refused(Refusal::NoSignIn);
+            }
             if now.saturating_duration_since(pending.started) > SIGN_IN_LIFETIME {
-                inner.sign_in = None;
+                *current = State::did_not_finish();
                 return LinkOutcome::Refused(Refusal::Expired);
             }
             // Another state is someone else's link: it doesn't end this sign-in.
             if !param("state").is_some_and(|s| same(&s, &pending.state.0)) {
                 return LinkOutcome::Refused(Refusal::WrongState);
             }
-            let sign_in = inner.sign_in.take().expect("checked above");
             if param("error").is_some() {
+                *current = State::did_not_finish();
                 return LinkOutcome::Refused(Refusal::HostedPageError);
             }
-            sign_in
+            if param("code").is_none() {
+                *current = State::did_not_finish();
+                return LinkOutcome::Refused(Refusal::NoCode);
+            }
+            pending.exchanging = true;
+            (pending.state.clone(), pending.verifier.clone())
         };
-        let Some(code) = param("code") else {
-            return LinkOutcome::Refused(Refusal::NoCode);
-        };
-        match self.finish(&code, &sign_in, now) {
-            Ok(true) => LinkOutcome::SignedIn,
-            Ok(false) => LinkOutcome::Abandoned,
-            Err(problem) => {
-                self.inner().problem = Some(problem);
-                LinkOutcome::Failed
+        let code = param("code").expect("checked above");
+        let outcome = self.finish(&code, &state, &verifier, now);
+        if outcome != LinkOutcome::SignedIn {
+            let mut current = self.state();
+            if current.is_exchanging(&state) {
+                *current = State::did_not_finish();
             }
         }
+        outcome
     }
 
-    /// Trades the code for tokens, keeps the refresh token in the keychain, and signs in. False
-    /// when the sign-in was cancelled or replaced while the code was being traded.
-    fn finish(&self, code: &str, sign_in: &SignIn, now: Instant) -> Result<bool, String> {
-        let tokens = self
-            .tokens
-            .exchange_code(code, &sign_in.verifier.0)
-            .map_err(|e| {
-                log::warn!(
-                    "account.sign_in_failed step=exchange error={}",
-                    describe(&e)
-                );
-                SIGN_IN_DID_NOT_FINISH.to_string()
-            })?;
+    /// Trades the code for tokens, keeps the refresh token in the keychain, and signs in, unless
+    /// the sign-in was cancelled or signed out of meanwhile. The lock isn't held while Cognito or
+    /// the keychain is busy, so the manager never waits on them.
+    fn finish(&self, code: &str, state: &Secret, verifier: &Secret, now: Instant) -> LinkOutcome {
+        let tokens = match self.tokens.exchange_code(code, &verifier.0) {
+            Ok(tokens) => tokens,
+            Err(e) => {
+                log::warn!("account.sign_in_failed step=exchange error={e}");
+                return LinkOutcome::Failed;
+            }
+        };
         let email = tokens.id_token.as_deref().and_then(email_from_id_token);
         let (Some(refresh_token), Some(email)) = (tokens.refresh_token, email) else {
             log::warn!("account.sign_in_failed step=tokens error=missing_refresh_token_or_email");
-            return Err(SIGN_IN_DID_NOT_FINISH.into());
+            return LinkOutcome::Failed;
         };
+        let abandoned = |account: &Account| {
+            log::debug!("account.sign_in_abandoned");
+            let _ = account.tokens.revoke(&refresh_token);
+            LinkOutcome::Abandoned
+        };
+        if !self.state().is_exchanging(state) {
+            return abandoned(self);
+        }
         let stored = serde_json::to_string(&Stored {
             refresh_token: refresh_token.clone(),
             email: email.clone(),
         })
         .expect("two strings serialize");
-        // Held while the keychain is written, so a cancel can't slip in between the check and it.
-        let mut inner = self.inner();
-        if inner.generation != sign_in.generation {
-            drop(inner);
-            log::debug!("account.sign_in_abandoned");
-            let _ = self.tokens.revoke(&refresh_token);
-            return Ok(false);
-        }
         if let Err(e) = self.store.save(&stored) {
-            log::warn!(
-                "account.sign_in_failed step=store store={} error={e}",
-                self.store.kind()
-            );
-            drop(inner);
+            log::warn!("account.sign_in_failed step=store store=keychain error={e}");
             let _ = self.tokens.revoke(&refresh_token);
-            return Err(KEYCHAIN_FAILED.into());
+            let mut current = self.state();
+            if current.is_exchanging(state) {
+                *current = State::SignedOut {
+                    problem: Some(KEYCHAIN_FAILED.into()),
+                };
+            }
+            return LinkOutcome::Failed;
         }
-        log::debug!(
-            "account.token_stored store={} check=epic-036/V7",
-            self.store.kind()
-        );
-        inner.problem = None;
-        inner.signed_in = Some(SignedIn {
-            email,
-            refresh_token: Secret(refresh_token),
-            access: Some((
-                Secret(tokens.access_token),
-                now + Duration::from_secs(tokens.expires_in),
-            )),
-        });
+        log::debug!("account.token_stored store=keychain check=epic-036/V7");
+        {
+            let mut current = self.state();
+            if !current.is_exchanging(state) {
+                drop(current);
+                let _ = self.store.delete();
+                return abandoned(self);
+            }
+            *current = State::SignedIn(SignedIn {
+                email,
+                refresh_token: Secret(refresh_token),
+                access: Some((
+                    Secret(tokens.access_token),
+                    now + Duration::from_secs(tokens.expires_in),
+                )),
+            });
+        }
         log::debug!(
             "account.signed_in check=epic-036/V4 stage={}",
             self.stage.name
         );
-        Ok(true)
+        LinkOutcome::SignedIn
     }
 
-    /// Signs out: the keychain item is deleted and the refresh token revoked. Local decks are not
-    /// touched. Gives the hosted page's sign-out address, so the browser forgets the sign-in too.
-    pub fn sign_out(&self) -> Option<String> {
-        let signed_in = {
-            let mut inner = self.inner();
-            inner.sign_in = None;
-            inner.problem = None;
-            inner.generation += 1;
-            inner.signed_in.take()
-        }?;
-        self.forget(&signed_in);
-        log::debug!("account.signed_out check=epic-036/V6");
-        let mut url =
-            url::Url::parse(self.stage.hosted_page).expect("the stage's hosted page is a URL");
-        url.set_path("/logout");
-        url.query_pairs_mut()
-            .append_pair("client_id", self.stage.client_id)
-            .append_pair("logout_uri", SIGNED_OUT_REDIRECT);
-        Some(url.into())
-    }
-
-    fn forget(&self, signed_in: &SignedIn) {
+    /// Signs out: the keychain item is deleted at once; local decks are not touched. Gives the
+    /// hosted page's sign-out address, so the browser forgets the sign-in too, and the refresh
+    /// token for `revoke`.
+    pub fn sign_out(&self) -> Option<(String, Revocation)> {
+        let signed_in = match std::mem::replace(&mut *self.state(), State::signed_out()) {
+            State::SignedIn(s) => s,
+            _ => return None,
+        };
         if let Err(e) = self.store.delete() {
-            log::warn!(
-                "account.token_not_deleted store={} error={e}",
-                self.store.kind()
-            );
+            log::warn!("account.token_not_deleted store=keychain error={e}");
         }
-        if let Err(e) = self.tokens.revoke(&signed_in.refresh_token.0) {
-            log::warn!("account.revoke_failed error={}", describe(&e));
+        log::debug!("account.signed_out check=epic-036/V6");
+        let mut url = self.hosted("/logout");
+        url.query_pairs_mut()
+            .append_pair("logout_uri", SIGNED_OUT_REDIRECT);
+        Some((url.into(), Revocation(signed_in.refresh_token)))
+    }
+
+    /// Tells Cognito a signed-out refresh token is no longer good.
+    pub fn revoke(&self, revocation: Revocation) {
+        if let Err(e) = self.tokens.revoke(&revocation.0.0) {
+            log::warn!("account.revoke_failed error={e}");
         }
     }
 
@@ -566,8 +614,9 @@ impl Account {
     /// `SignedOut` with no request made (V5).
     pub fn access_token(&self, now: Instant) -> Result<String, AccountError> {
         let refresh_token = {
-            let inner = self.inner();
-            let signed_in = inner.signed_in.as_ref().ok_or(AccountError::SignedOut)?;
+            let State::SignedIn(signed_in) = &*self.state() else {
+                return Err(AccountError::SignedOut);
+            };
             if let Some((token, until)) = &signed_in.access
                 && now + ACCESS_MARGIN < *until
             {
@@ -575,15 +624,17 @@ impl Account {
             }
             signed_in.refresh_token.clone()
         };
-        match self.tokens.refresh(&refresh_token.0) {
+        let refreshed = self.tokens.refresh(&refresh_token.0);
+        let mut state = self.state();
+        // Signed out, or in again as someone else, while the refresh was in flight.
+        let State::SignedIn(signed_in) = &mut *state else {
+            return Err(AccountError::SignedOut);
+        };
+        if signed_in.refresh_token != refresh_token {
+            return Err(AccountError::SignedOut);
+        }
+        match refreshed {
             Ok(tokens) => {
-                let mut inner = self.inner();
-                // Signed out, or in again as someone else, while the refresh was in flight.
-                let signed_in = inner
-                    .signed_in
-                    .as_mut()
-                    .filter(|s| s.refresh_token == refresh_token)
-                    .ok_or(AccountError::SignedOut)?;
                 signed_in.access = Some((
                     Secret(tokens.access_token.clone()),
                     now + Duration::from_secs(tokens.expires_in),
@@ -593,21 +644,13 @@ impl Account {
             }
             Err(AuthError::Rejected) => {
                 // Revoked, expired, or the account deleted: there is no sign-in left to keep.
-                let signed_in = {
-                    let mut inner = self.inner();
-                    let taken = inner
-                        .signed_in
-                        .take_if(|s| s.refresh_token == refresh_token);
-                    if taken.is_some() {
-                        inner.problem = Some(SIGNED_OUT_ELSEWHERE.into());
-                        inner.generation += 1;
-                    }
-                    taken
+                *state = State::SignedOut {
+                    problem: Some(SIGNED_OUT_ELSEWHERE.into()),
                 };
-                if signed_in.is_some() {
-                    let _ = self.store.delete();
-                }
+                drop(state);
+                let _ = self.store.delete();
                 log::warn!("account.expired reason=refresh_rejected");
+                self.changed();
                 Err(AccountError::SignedOut)
             }
             Err(AuthError::Unreachable(why)) => Err(AccountError::Unreachable(why)),
@@ -632,12 +675,5 @@ impl Account {
             ),
             None => format!("GET /decks: {status}"),
         })
-    }
-}
-
-fn describe(e: &AuthError) -> String {
-    match e {
-        AuthError::Rejected => "rejected".into(),
-        AuthError::Unreachable(why) => why.clone(),
     }
 }

@@ -2,9 +2,8 @@
   // Settings › Account (ADR 0050, spec §14): the only place Oversay offers an account. Signed out,
   // Sign in and Create account open Cognito's page in the browser; signed in, the email and Sign out.
   // Tokens stay in Rust: this only shows the status it gives.
-  import { listen } from '@tauri-apps/api/event'
   import { onMount } from 'svelte'
-  import { ACCOUNT_EVENT, account, cancelSignIn, loadAccount, signIn, signOut } from '../lib/account/account'
+  import { account, cancelSignIn, loadAccount, signIn, signOut } from '../lib/account/account'
   import { attempt } from './errors'
 
   let busy = $state(false)
@@ -18,12 +17,8 @@
       }
     })
 
-  onMount(() => {
-    void attempt(loadAccount)
-    // A sign-in coming back through the browser, or a sign-out because the token was refused.
-    const unlisten = listen(ACCOUNT_EVENT, () => attempt(loadAccount))
-    return () => void unlisten.then((u) => u())
-  })
+  // Manager.svelte keeps it current from then on (ACCOUNT_EVENT).
+  onMount(() => void attempt(loadAccount))
 </script>
 
 {#if $account === null}
