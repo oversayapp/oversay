@@ -30,12 +30,22 @@ fn receive(app: &AppHandle, url: String) {
     }
     // The link itself names a note, so it isn't logged; the manager logs what it does.
     log::info!("link received");
+    // A sign-in coming back (ADR 0050) goes to the account, never to the manager: it holds a code.
+    if crate::account::is_auth_link(&url) {
+        crate::account::commands::receive_link(app, url);
+        return;
+    }
     app.state::<PendingLinks>().0.lock().unwrap().push(url);
-    // Not over someone's slides: during a session the manager stays where it is.
+    bring_manager_forward(app);
+    let _ = app.emit_to(crate::MANAGER_LABEL, LINK_EVENT, ());
+}
+
+/// Shows the manager for a link, but not over someone's slides: during a session it stays where
+/// it is.
+pub fn bring_manager_forward(app: &AppHandle) {
     if !crate::session::holds_keys(app) {
         crate::tray::show_manager(app);
     }
-    let _ = app.emit_to(crate::MANAGER_LABEL, LINK_EVENT, ());
 }
 
 /// Listens for links, and takes the one this launch was started with.

@@ -2,6 +2,7 @@
 // current while the page scrolls (013/02).
 
 export const SETTINGS_SECTIONS = [
+  { id: 'account', label: 'Account' },
   { id: 'appearance', label: 'Appearance' },
   { id: 'overlays', label: 'Overlays' },
   { id: 'screen-sharing', label: 'Screen sharing' },
