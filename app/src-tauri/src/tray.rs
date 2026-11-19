@@ -217,10 +217,12 @@ fn chosen(app: &AppHandle, id: &str) {
             Some(action) => crate::session::act(app, action),
             None => Ok(()),
         },
-        Choice::Opacity(p) => look_change(app, "opacity", serde_json::json!(p)),
+        Choice::Opacity(p) => {
+            crate::control_panel::look_change(app, "opacity", serde_json::json!(p))
+        }
         Choice::SeeThrough => crate::overlay::change_opacity(app, "see-through"),
         Choice::Solid => crate::overlay::change_opacity(app, "solid"),
-        Choice::Panel { light } => look_change(
+        Choice::Panel { light } => crate::control_panel::look_change(
             app,
             "panel",
             serde_json::json!(if light { "light" } else { "dark" }),
@@ -245,16 +247,6 @@ fn chosen(app: &AppHandle, id: &str) {
     // true, even when nothing changed (Solid chosen while solid).
     SHOWN.lock().unwrap().take();
     refresh(app);
-}
-
-/// A change to the look: the manager owns the saved settings, as for the Look card.
-fn look_change(app: &AppHandle, key: &str, value: serde_json::Value) -> Result<(), String> {
-    app.emit_to(
-        crate::MANAGER_LABEL,
-        crate::control_panel::LOOK_EVENT,
-        serde_json::json!({ "key": key, "value": value }),
-    )
-    .map_err(|e| e.to_string())
 }
 
 /// Something only the main window can do: it comes forward and does it.
@@ -380,14 +372,23 @@ pub fn show_manager(app: &AppHandle) {
 pub async fn set_tray_title(app: AppHandle, title: String) -> Result<(), String> {
     *TITLE.lock().unwrap() = title.clone();
     let handle = app.clone();
+    // Only the title and the tooltip change with the clock: the menu and icon follow the run's
+    // own changes (`refresh`), not every second.
     app.run_on_main_thread(move || {
-        if let Some(tray) = handle.tray_by_id(TRAY_ID) {
-            crate::platform::set_tray_title(&tray, &title);
+        let Some(tray) = handle.tray_by_id(TRAY_ID) else {
+            return;
+        };
+        crate::platform::set_tray_title(&tray, &title);
+        let (run, _) = crate::session::menu_run(&handle);
+        let hidden = crate::overlay::hidden_from_capture(&handle.state::<crate::state::StateHub>());
+        let tooltip = tray_menu::tooltip(run.as_ref(), &title, hidden);
+        let mut shown = SHOWN.lock().unwrap();
+        if let Some(s) = shown.as_mut().filter(|s| s.tooltip != tooltip) {
+            let _ = tray.set_tooltip(Some(&tooltip));
+            s.tooltip = tooltip;
         }
     })
-    .map_err(|e| e.to_string())?;
-    refresh(&app);
-    Ok(())
+    .map_err(|e| e.to_string())
 }
 
 /// The pinned decks for Show a deck ▸, newest pin first; the manager sends them when they change.

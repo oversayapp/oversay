@@ -3,12 +3,8 @@
 // seen against a slide before a meeting. It is never recorded, and ends when the card closes.
 
 import bees from '../decks/examples/Why bees matter.md?raw'
-import { deckOptions, deckTalk, type DeckOptions } from '../decks/deck'
+import { talkOf } from '../decks/show'
 import { parseNoteDoc } from '../notes/format'
-import type { Talk } from '../project/types'
 
 /** The sample deck as the talk its preview session runs. */
-export function sampleDeckTalk(): Talk & { deck: DeckOptions } {
-  const doc = parseNoteDoc(bees)
-  return { ...deckTalk(doc, 'Why bees matter'), deck: deckOptions(doc) }
-}
+export const sampleDeckTalk = () => talkOf(parseNoteDoc(bees), 'Why bees matter')

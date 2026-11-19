@@ -39,7 +39,7 @@ export interface OverlayWindowSize {
   minWidth?: number
   minHeight?: number
   /** Where it opens when it has no remembered place (`Place` in src-tauri/src/overlay.rs); the middle when missing. */
-  place?: 'centre' | 'bottom-centre' | 'bottom-right' | 'top-right' | 'top-left' | 'upper-left'
+  place?: 'centre' | 'bottom-centre' | 'top-left' | 'upper-left'
   /**
    * Names the overlay's layout (a deck widget view, ADR 0042): each layout keeps its own size and place,
    * and `setOverlayLayout` switches an open overlay between them.

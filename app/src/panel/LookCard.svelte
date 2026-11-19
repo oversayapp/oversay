@@ -59,7 +59,13 @@
   let card: HTMLElement | undefined = $state()
   $effect(() => {
     if (!card) return
-    const fit = () => void invoke('control_panel_fit', { height: Math.ceil(card!.getBoundingClientRect().height) }).catch(() => {})
+    let sent = 0
+    const fit = () => {
+      const height = Math.ceil(card!.getBoundingClientRect().height)
+      if (height === sent) return
+      sent = height
+      void invoke('control_panel_fit', { height }).catch(() => {})
+    }
     const watch = new ResizeObserver(fit)
     watch.observe(card)
     return () => watch.disconnect()

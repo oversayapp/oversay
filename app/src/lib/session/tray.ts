@@ -3,6 +3,8 @@
 // menu items that need the main window.
 import { invoke } from '@tauri-apps/api/core'
 import type { Pin } from '../settings/quick'
+import type { DeckEntry } from '../decks/store'
+import { libraryGroups } from '../library/groups'
 import { formatElapsed, segmentReadout, sessionClock, type SessionState } from './clock'
 import type { Readable } from 'svelte/store'
 import { session } from './store'
@@ -59,18 +61,12 @@ export interface PinnedDeck {
   name: string
 }
 
-/** The pinned decks, newest pin first, found by id where the deck has one (it may have moved), else by path. */
-export function pinnedDecks(pins: readonly Pin[], decks: readonly { path: string; id: string; name: string }[] | null): PinnedDeck[] {
+/** The pinned decks as the Library's Pinned lists them (newest pin first, skipping any it can't read): the menu's Show a deck ▸. */
+export function pinnedDecks(pins: readonly Pin[], decks: readonly DeckEntry[] | null): PinnedDeck[] {
   if (!decks) return []
-  const byId = new Map(decks.filter((d) => d.id).map((d) => [d.id, d]))
-  const byPath = new Map(decks.map((d) => [d.path, d]))
-  return pins
-    .filter((p) => p.kind === 'deck')
-    .sort((a, b) => (Date.parse(b.at) || 0) - (Date.parse(a.at) || 0))
-    .flatMap((p) => {
-      const deck = (p.id && byId.get(p.id)) || byPath.get(p.path)
-      return deck ? [{ id: deck.path, name: deck.name }] : []
-    })
+  return libraryGroups({ decks, workspaces: [], pins, opened: [], workspaceNav: { pins: [], opened: [] }, now: 0 }).pinned.flatMap((r) =>
+    r.kind === 'deck' ? [{ id: r.deck.path, name: r.deck.name }] : [],
+  )
 }
 
 /** Sends the pinned decks to the menu whenever they change; returns a function that stops. */

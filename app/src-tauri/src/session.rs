@@ -414,7 +414,7 @@ pub enum Action {
     /// because it owns the saved settings (`overlay::OPACITY_EVENT`).
     Darker,
     Lighter,
-    /// Opens or closes the control panel (ADR 0028); the session is untouched.
+    /// Opens or closes the Look card (ADR 0051); the session is untouched.
     TogglePanel,
 }
 
@@ -441,7 +441,7 @@ pub fn act(app: &AppHandle, action: Action) -> Result<(), String> {
         let app = app.clone();
         tauri::async_runtime::spawn(async move {
             if let Err(e) = crate::control_panel::toggle(&app) {
-                log::warn!("control panel: {e}");
+                log::warn!("Look card: {e}");
             }
         });
         return Ok(());
@@ -479,7 +479,7 @@ pub fn overlay_closed(app: &AppHandle, label: &str) {
 }
 
 /// Whether closing the overlay `label` ends `session`: a note's only overlay, or a deck's flashcard
-/// widget. Closing a deck's timeline widget leaves the deck running.
+/// widget. Closing any other overlay leaves the deck running.
 fn ends_with(session: &Session, label: &str) -> bool {
     session.note || (session.deck && label == FLASHCARD_LABEL)
 }
@@ -733,11 +733,11 @@ mod tests {
     }
 
     #[test]
-    fn closing_a_decks_timeline_leaves_the_deck_running() {
+    fn closing_another_overlay_leaves_the_deck_running() {
         let mut deck = Session::new_plan(plan(2));
         deck.deck = true;
         assert!(ends_with(&deck, "overlay-flashcard"));
-        assert!(!ends_with(&deck, "overlay-deck-timeline"));
+        assert!(!ends_with(&deck, "overlay-talking-points"));
         let mut note = Session::new_plan(plan(2));
         note.note = true;
         assert!(ends_with(&note, "overlay-talking-points"));

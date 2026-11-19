@@ -72,7 +72,7 @@
       <p class="error">Unknown plugin “{pluginId}”</p>
     </div>
   {/if}
-  {#if $session?.preview}<span class="pvtag" title="The control panel's preview: nothing is running">Preview</span>{/if}
+  {#if $session?.preview}<span class="pvtag" title="A preview: nothing is running">Preview</span>{/if}
   <div class="corner">
     <button class="close" type="button" aria-label="Close overlay" onclick={() => appWindow.close()}>×</button>
   </div>
@@ -117,8 +117,6 @@
   .host:hover .corner {
     opacity: 1;
   }
-
-  /* Over the slide rather than a panel (the edge strip): a backing so it reads on a light slide. */
 
   .close {
     border: 0;

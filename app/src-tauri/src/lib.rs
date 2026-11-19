@@ -75,7 +75,7 @@ pub fn run() {
             }
             platform::log_native_exceptions();
             settings::apply_saved_appearance(app.handle());
-            // The icon is there from the start, for the control panel (ADR 0028).
+            // The icon is there from the start, with its menu and the Look card (ADR 0051).
             tray::refresh(app.handle());
             platform::install_dock_menu(app.handle());
             platform::install_jump_list(app.handle());
@@ -111,14 +111,14 @@ pub fn run() {
                 // A shown note's only overlay, or a deck's card: closing it closes the note or deck.
                 session::overlay_closed(window.app_handle(), window.label());
             }
-            // The control panel is hidden, never closed, like an overlay.
+            // The Look card is hidden, never closed, like an overlay.
             WindowEvent::CloseRequested { api, .. } if window.label() == control_panel::LABEL => {
                 api.prevent_close();
                 if let Err(e) = control_panel::close(window.app_handle()) {
-                    log::warn!("control panel not hidden: {e}");
+                    log::warn!("Look card not hidden: {e}");
                 }
             }
-            // A strip stays against the bottom edge once it stops moving; a layout's place is kept.
+            // A layout's place is kept once it stops moving.
             WindowEvent::Moved(_) | WindowEvent::Resized(_)
                 if window.label().starts_with(overlay::LABEL_PREFIX) =>
             {

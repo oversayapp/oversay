@@ -61,10 +61,10 @@ pub fn register(app: &AppHandle, shortcuts: &BTreeMap<String, String>) -> Vec<St
     unavailable
 }
 
-/// The control panel's key, kept while no session is open so the panel opens any time (ADR 0028).
+/// The Look card's key, kept while no session is open so the card opens any time (ADR 0028, ADR 0051).
 static PANEL_KEY: Mutex<Option<String>> = Mutex::new(None);
 
-/// The control panel's key, for the icon's menu while no session is open.
+/// The Look card's key, for the menu while no session is open.
 pub fn panel_key() -> Option<String> {
     PANEL_KEY.lock().unwrap().clone()
 }
@@ -93,7 +93,7 @@ pub fn register_idle(app: &AppHandle) {
     *IDLE_TAKEN.lock().unwrap() = taken;
 }
 
-/// The manager says which key opens the control panel (settings.json, or the default); it is
+/// The manager says which key opens the Look card (settings.json, or the default); it is
 /// registered now unless a session (not the panel's preview) has registered its own keys, this
 /// one among them.
 #[tauri::command]
@@ -106,7 +106,7 @@ pub async fn set_panel_shortcut(app: AppHandle, accelerator: String) -> Result<(
     Ok(())
 }
 
-/// The control panel's key, shown on the panel.
+/// The Look card's key, shown on the card.
 #[tauri::command]
 pub async fn panel_shortcut() -> Option<String> {
     panel_key()

@@ -5,6 +5,7 @@ vi.mock('@tauri-apps/api/core', () => ({ invoke }))
 vi.mock('@tauri-apps/api/event', () => ({ listen: async () => () => {} }))
 const { TRAY_EVENT, checkTrayChoice, pinnedDecks, syncTrayTitle, trayTitle } = await import('./tray')
 import type { SessionState } from './clock'
+import type { DeckEntry } from '../decks/store'
 
 const base: SessionState = {
   status: 'running',
@@ -70,15 +71,16 @@ describe('syncTrayTitle when the run ends', () => {
 })
 
 describe('the pinned decks for Show a deck ▸ (ADR 0051)', () => {
-  const deck = (path: string, id: string, name: string) => ({ path, id, name })
-  const decks = [deck('a/deck.md', 'd_a', 'Alpha'), deck('b/deck.md', 'd_b', 'Beta'), deck('c/deck.md', '', 'Gamma')]
+  const deck = (path: string, id: string, name: string, unreadable = false) => ({ path, id, name, unreadable }) as unknown as DeckEntry
+  const decks = [deck('a/deck.md', 'd_a', 'Alpha'), deck('b/deck.md', 'd_b', 'Beta'), deck('c/deck.md', '', 'Gamma'), deck('u/deck.md', 'd_u', 'Broken', true)]
 
-  it('lists the pinned decks newest pin first, by path, skipping workspaces and decks that have gone', () => {
+  it('lists the pinned decks newest pin first, by path, skipping notes and decks that have gone or can\'t be read', () => {
     const pins = [
       { kind: 'deck' as const, path: 'a/deck.md', id: 'd_a', at: '2026-11-01T10:00:00Z' },
       { kind: 'deck' as const, path: 'moved/deck.md', id: 'd_b', at: '2026-11-03T10:00:00Z' },
       { kind: 'deck' as const, path: 'c/deck.md', at: '2026-11-02T10:00:00Z' },
       { kind: 'deck' as const, path: 'gone/deck.md', at: '2026-11-04T10:00:00Z' },
+      { kind: 'deck' as const, path: 'u/deck.md', id: 'd_u', at: '2026-11-06T10:00:00Z' },
       { kind: 'note' as const, path: 'n.md', at: '2026-11-05T10:00:00Z' },
     ]
     expect(pinnedDecks(pins, decks)).toEqual([

@@ -7,7 +7,7 @@ import { TAB_HEIGHT } from './fit'
 
 /** The window each of the deck widget's views has; each view remembers its own place and size (ADR 0042). */
 export function deckWidgetWindow(view: DeckView): OverlayWindowSize {
-  // The Agenda view: the Blocks timeline's place along the bottom, wider so every card's title fits.
+  // The Agenda view: along the bottom, wide enough for every card's title.
   // Each has room under its panel for the tab of buttons.
   // The Agenda view is no shorter than its bars and titles need.
   if (view === 'agenda') return { width: 960, height: 136 + TAB_HEIGHT, minWidth: 480, minHeight: 136 + TAB_HEIGHT, place: 'bottom-centre', layout: 'deck-agenda' }

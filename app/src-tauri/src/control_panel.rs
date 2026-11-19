@@ -142,7 +142,9 @@ pub async fn control_panel_fit(app: AppHandle, height: f64) -> Result<(), String
     if !height.is_finite() {
         return Err("Not a height.".into());
     }
-    *HEIGHT.lock().unwrap() = height;
+    if std::mem::replace(&mut *HEIGHT.lock().unwrap(), height) == height {
+        return Ok(());
+    }
     let Some(window) = app.get_webview_window(LABEL) else {
         return Ok(());
     };
@@ -163,6 +165,11 @@ pub async fn control_panel_look(
     key: String,
     value: serde_json::Value,
 ) -> Result<(), String> {
+    look_change(&app, &key, value)
+}
+
+/// One change to the look, from the card or the menu: the manager owns the saved settings.
+pub fn look_change(app: &AppHandle, key: &str, value: serde_json::Value) -> Result<(), String> {
     app.emit_to(
         crate::MANAGER_LABEL,
         LOOK_EVENT,

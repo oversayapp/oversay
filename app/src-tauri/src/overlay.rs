@@ -114,10 +114,6 @@ pub enum Place {
     /// The middle of the display.
     #[default]
     Centre,
-    /// A card in the bottom right corner.
-    BottomRight,
-    /// A card in the top right corner.
-    TopRight,
     /// A card in the top left corner (Talking Points).
     TopLeft,
     /// A card in the upper left of the display, in from its corner (the flashcard widget, ADR 0036).
@@ -170,18 +166,6 @@ pub fn place_in(area: Area, place: Place, width: f64, height: f64) -> Frame {
                 height,
             }
         }
-        Place::BottomRight => Frame {
-            x: area.x + area.width - width - MARGIN,
-            y: area.y + area.height - height - MARGIN,
-            width,
-            height,
-        },
-        Place::TopRight => Frame {
-            x: area.x + area.width - width - MARGIN,
-            y: area.y + TOP_MARGIN,
-            width,
-            height,
-        },
         Place::TopLeft => Frame {
             x: area.x + MARGIN,
             y: area.y + TOP_MARGIN,
@@ -749,8 +733,6 @@ mod tests {
         // Same values as `OverlayWindowSize.place` in src/lib/windows.ts.
         let places = [
             ("centre", Place::Centre),
-            ("bottom-right", Place::BottomRight),
-            ("top-right", Place::TopRight),
             ("top-left", Place::TopLeft),
             ("upper-left", Place::UpperLeft),
             ("bottom-centre", Place::BottomCentre),
@@ -806,11 +788,7 @@ mod tests {
 
     #[test]
     fn a_corner_card_sits_in_its_corner_inside_the_display() {
-        let f = place_in(display(), Place::BottomRight, 300.0, 290.0);
-        assert_eq!((f.x, f.y, f.width, f.height), (1216.0, 636.0, 300.0, 290.0));
-        let f = place_in(display(), Place::TopRight, 400.0, 470.0);
-        assert_eq!((f.x, f.y), (1116.0, 98.0));
-        // Talking Points: the top left, as far down as the top-right card.
+        // Talking Points: the top left, clear of a menu bar.
         let f = place_in(display(), Place::TopLeft, 360.0, 290.0);
         assert_eq!((f.x, f.y, f.width, f.height), (124.0, 98.0, 360.0, 290.0));
         // The flashcard widget: the upper left, in from the corner.

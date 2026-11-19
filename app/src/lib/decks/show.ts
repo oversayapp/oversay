@@ -15,7 +15,8 @@ import type { NoteDoc } from '../notes/format'
 import type { SessionState } from '../session/clock'
 import { deckOptions, deckTalk } from './deck'
 
-const talkOf = (doc: NoteDoc, name: string) => ({ ...deckTalk(doc, name), deck: deckOptions(doc) })
+/** The deck as the talk its session runs, with its options for the widget. */
+export const talkOf = (doc: NoteDoc, name: string) => ({ ...deckTalk(doc, name), deck: deckOptions(doc) })
 
 /**
  * Opens the deck widget in the Card view, at its place: a deck always starts on its card (John,
