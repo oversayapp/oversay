@@ -12,6 +12,7 @@ import { overlayWindow } from '../../plugins/registry'
 import { setOverlaySetting, settings } from '../settings/store'
 import { parseOverlaySettings } from '../settings/overlays'
 import type { NoteDoc } from '../notes/format'
+import type { SessionState } from '../session/clock'
 import { deckOptions, deckTalk } from './deck'
 
 const talkOf = (doc: NoteDoc, name: string) => ({ ...deckTalk(doc, name), deck: deckOptions(doc) })
@@ -63,6 +64,10 @@ export async function previewDeckOnScreen(doc: NoteDoc, name: string, index: num
     throw e
   }
 }
+
+/** Whether `session` is the deck editor's preview on screen: a deck preview that isn't the Look card's sample deck. */
+export const isEditorPreview = (session: Pick<SessionState, 'status' | 'deck' | 'preview' | 'lookPreview'> | null): boolean =>
+  !!session?.preview && !!session.deck && !session.lookPreview && session.status !== 'finished'
 
 /** The preview follows the deck as it is edited, and the card being edited. */
 export function updateDeckPreview(doc: NoteDoc, name: string, index: number): Promise<void> {

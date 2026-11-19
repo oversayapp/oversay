@@ -86,9 +86,9 @@ pub struct Session {
     /// hotkeys of its own, is never recorded, and a real deck replaces it.
     pub preview: bool,
     /// The Look card's sample deck, on screen while the card is open with nothing running so the
-    /// look can be set against a slide (ADR 0051); it ends when the card closes. Not broadcast:
-    /// to the windows it is a preview like the editor's.
-    #[serde(skip)]
+    /// look can be set against a slide (ADR 0051); it ends when the card closes. Broadcast, so
+    /// the deck editor never takes it for its own preview.
+    #[serde(rename = "lookPreview")]
     pub look_preview: bool,
 }
 
@@ -152,7 +152,12 @@ impl Session {
     /// The deck editor's preview shows the deck as it is now, on card `index`. Only a deck preview
     /// changes: anything else is left alone.
     pub fn preview_deck(&mut self, plan: Vec<PlannedSegment>, talk: Value, index: usize) -> bool {
-        if !self.preview || !self.deck || self.status != Status::Running || plan.is_empty() {
+        if !self.preview
+            || !self.deck
+            || self.look_preview
+            || self.status != Status::Running
+            || plan.is_empty()
+        {
             return false;
         }
         self.index = index.min(plan.len() - 1);
@@ -296,6 +301,28 @@ fn run_of(s: &Session) -> crate::tray_menu::Run {
             paused: s.paused,
         },
     }
+}
+
+/// What `session_open` is opening, as far as what it may replace goes.
+#[derive(Clone, Copy, PartialEq)]
+enum Opening {
+    /// A deck, a talk or a note.
+    Run,
+    /// The deck editor's preview.
+    Preview,
+    /// The Look card's sample deck.
+    LookPreview,
+}
+
+/// Whether `current` stops `opening` from opening. A run gives way to nothing that is running;
+/// a preview gives way to anything; the Look card's sample deck never replaces anything but itself
+/// (the deck editor's preview stays, ADR 0051).
+fn blocks(current: Option<&Session>, opening: Opening) -> bool {
+    current.is_some_and(|s| match opening {
+        Opening::Run => s.status == Status::Running && !s.preview,
+        Opening::Preview => s.status != Status::Finished && !s.preview,
+        Opening::LookPreview => s.status != Status::Finished && !s.look_preview,
+    })
 }
 
 /// Over: no session, or a finished one. Hotkeys and overlays belong to a session that isn't.
@@ -495,16 +522,14 @@ pub async fn session_open(
     let look_preview = mode.as_deref() == Some("preview");
     let preview = look_preview || mode.as_deref() == Some("deck-preview");
     let deck = preview || mode.as_deref() == Some("deck");
-    // A preview gives way to anything, and opens only when nothing else is open.
-    let running = |s: &Option<Session>| {
-        s.as_ref().is_some_and(|s| {
-            if preview {
-                s.status != Status::Finished && !s.preview
-            } else {
-                s.status == Status::Running && !s.preview
-            }
-        })
+    let opening = if look_preview {
+        Opening::LookPreview
+    } else if preview {
+        Opening::Preview
+    } else {
+        Opening::Run
     };
+    let running = |s: &Option<Session>| blocks(s.as_ref(), opening);
     const REFUSED: &str = "A session is already running. End it first.";
     // The sample deck is the open card's: none once it has closed (it may close while the card's
     // page is still asking for one).
@@ -742,6 +767,37 @@ mod tests {
             !shown.preview_deck(plan(2), Value::Null, 1),
             "a deck being shown is left alone"
         );
+        // The Look card's sample deck is not the editor's to change (ADR 0051).
+        let mut sample = Session::new_plan(plan(3));
+        sample.deck = true;
+        sample.preview = true;
+        sample.look_preview = true;
+        sample.next("t0");
+        assert!(!sample.preview_deck(plan(2), Value::Null, 1));
+    }
+
+    #[test]
+    fn the_look_cards_sample_deck_never_replaces_another_preview_and_is_broadcast() {
+        let mut editor = Session::new_plan(plan(3));
+        editor.deck = true;
+        editor.preview = true;
+        assert!(
+            blocks(Some(&editor), Opening::LookPreview),
+            "the editor's preview stays"
+        );
+        assert!(
+            !blocks(Some(&editor), Opening::Preview),
+            "the editor's own preview replaces it"
+        );
+        let mut sample = editor.clone();
+        sample.look_preview = true;
+        assert!(
+            !blocks(Some(&sample), Opening::Preview),
+            "the editor's preview replaces the sample"
+        );
+        assert!(!blocks(None, Opening::LookPreview));
+        let json = serde_json::to_value(&sample).unwrap();
+        assert_eq!(json["lookPreview"], true);
     }
 
     fn kinds(s: &Session) -> Vec<EventType> {
@@ -912,7 +968,7 @@ mod tests {
         s.next("2026-10-20T14:02:30.000Z");
         assert_eq!(
             serde_json::to_string(&s).unwrap(),
-            r#"{"status":"running","index":1,"paused":false,"plan":[{"segmentId":"s_1","name":"Intro","plannedSeconds":120,"openEnded":false},{"segmentId":"s_2","name":"Topic","plannedSeconds":300,"openEnded":false}],"events":[{"at":"2026-10-20T14:00:00.000Z","type":"start"},{"at":"2026-10-20T14:02:30.000Z","type":"next"}],"talk":{"id":"t_1","name":"Launch"},"shortcuts":{"next":"Control+Alt+ArrowRight"},"unavailable":["end"],"note":false,"deck":false,"preview":false}"#
+            r#"{"status":"running","index":1,"paused":false,"plan":[{"segmentId":"s_1","name":"Intro","plannedSeconds":120,"openEnded":false},{"segmentId":"s_2","name":"Topic","plannedSeconds":300,"openEnded":false}],"events":[{"at":"2026-10-20T14:00:00.000Z","type":"start"},{"at":"2026-10-20T14:02:30.000Z","type":"next"}],"talk":{"id":"t_1","name":"Launch"},"shortcuts":{"next":"Control+Alt+ArrowRight"},"unavailable":["end"],"note":false,"deck":false,"preview":false,"lookPreview":false}"#
         );
     }
 }

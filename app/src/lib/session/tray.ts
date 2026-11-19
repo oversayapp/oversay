@@ -66,7 +66,7 @@ export function pinnedDecks(pins: readonly Pin[], decks: readonly { path: string
   const byPath = new Map(decks.map((d) => [d.path, d]))
   return pins
     .filter((p) => p.kind === 'deck')
-    .toSorted((a, b) => (Date.parse(b.at) || 0) - (Date.parse(a.at) || 0))
+    .sort((a, b) => (Date.parse(b.at) || 0) - (Date.parse(a.at) || 0))
     .flatMap((p) => {
       const deck = (p.id && byId.get(p.id)) || byPath.get(p.path)
       return deck ? [{ id: deck.path, name: deck.name }] : []

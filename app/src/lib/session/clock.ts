@@ -27,6 +27,8 @@ export interface SessionState {
   deck?: boolean
   /** A deck on screen only to be looked at: the Look card's sample deck (ADR 0051) or the deck editor's preview; never recorded. */
   preview?: boolean
+  /** The preview is the Look card's sample deck, not the deck editor's (ADR 0051). */
+  lookPreview?: boolean
 }
 
 export interface SessionClock {

@@ -675,8 +675,8 @@ pub async fn set_overlay_settings(
     settings: Value,
 ) -> Result<(), String> {
     hub.update(&app, SETTINGS_CHANNEL, |_| settings);
-    // The menu ticks the look (ADR 0051).
-    crate::tray::refresh(&app);
+    // The menu ticks the look (ADR 0051), once the slider has settled.
+    crate::tray::refresh_soon(&app);
     Ok(())
 }
 

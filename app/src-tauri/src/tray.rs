@@ -35,8 +35,27 @@ static SHOWN: Mutex<Option<Shown>> = Mutex::new(None);
 struct Shown {
     menu: Vec<Entry>,
     marks: Marks,
+    /// The glyph's colour: the menu bar's appearance on a Mac (only read when a dot needs it), the
+    /// taskbar's on Windows, so the icon follows a change of either.
     dark: bool,
     tooltip: String,
+}
+
+/// A refresh is waiting (`refresh_soon`).
+static SOON: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
+/// Refreshes once things have settled: the look changes many times a second while a slider
+/// moves, and the menu (whose See-through item carries the opacity) needn't be rebuilt each time.
+pub fn refresh_soon(app: &AppHandle) {
+    if SOON.swap(true, std::sync::atomic::Ordering::SeqCst) {
+        return;
+    }
+    let app = app.clone();
+    std::thread::spawn(move || {
+        std::thread::sleep(std::time::Duration::from_millis(250));
+        SOON.store(false, std::sync::atomic::Ordering::SeqCst);
+        refresh(&app);
+    });
 }
 
 /// Everything the menu shows, read now.
@@ -61,10 +80,11 @@ pub fn refresh(app: &AppHandle) {
     let handle = app.clone();
     let _ = app.run_on_main_thread(move || {
         let s = state(&handle);
+        let marks = tray_menu::marks(s.run.as_ref(), s.hidden, cfg!(windows));
         let shown = Shown {
             menu: tray_menu::menu(&s),
-            marks: tray_menu::marks(s.run.as_ref(), s.hidden, cfg!(windows)),
-            dark: menu_bar_is_dark(&handle),
+            marks,
+            dark: crate::platform::tray_glyph_is_white(marks != Marks::default()),
             tooltip: tray_menu::tooltip(s.run.as_ref(), &TITLE.lock().unwrap(), s.hidden),
         };
         let mut last = SHOWN.lock().unwrap();
@@ -312,6 +332,10 @@ fn set_icon(tray: &tauri::tray::TrayIcon, marks: Marks, dark: bool) {
         Ok(icon) => icon,
         Err(e) => {
             log::warn!("one-colour icon not loaded: {e}");
+            if let Some(icon) = tray.app_handle().default_window_icon() {
+                let _ = tray.set_icon(Some(icon.clone()));
+                let _ = tray.set_icon_as_template(false);
+            }
             return;
         }
     };
@@ -333,13 +357,6 @@ fn set_icon(tray: &tauri::tray::TrayIcon, marks: Marks, dark: bool) {
         log::warn!("icon not set: {e}");
     }
     let _ = tray.set_icon_as_template(plain);
-}
-
-/// Whether the menu bar is dark: it follows the system's appearance, as the main window does.
-fn menu_bar_is_dark(app: &AppHandle) -> bool {
-    app.get_webview_window(crate::MANAGER_LABEL)
-        .and_then(|w| w.theme().ok())
-        .is_some_and(|t| t == tauri::Theme::Dark)
 }
 
 /// Brings the main window back, large, from minimised or hidden; the user can minimise it again.

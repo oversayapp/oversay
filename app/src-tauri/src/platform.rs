@@ -223,6 +223,42 @@ pub fn tray_icon() -> tauri::Result<tauri::image::Image<'static>> {
     tauri::image::Image::from_bytes(include_bytes!("../icons/tray-black.png"))
 }
 
+/// Whether the icon's glyph should be white. A Mac's plain icon is a template image macOS colours
+/// itself; with a dot it is drawn in colour, white on a dark menu bar, which follows the system's
+/// appearance (not Oversay's own, which `set_theme` may override), so it is read only then
+/// (`coloured`). On Windows the icon is white on a dark taskbar, read every time so the icon
+/// follows a change of taskbar theme.
+#[cfg(target_os = "macos")]
+pub fn tray_glyph_is_white(coloured: bool) -> bool {
+    coloured && system_is_dark()
+}
+
+#[cfg(windows)]
+pub fn tray_glyph_is_white(_coloured: bool) -> bool {
+    !taskbar_is_light()
+}
+
+#[cfg(not(any(target_os = "macos", windows)))]
+pub fn tray_glyph_is_white(_coloured: bool) -> bool {
+    false
+}
+
+/// Whether macOS is in Dark Mode: the global `AppleInterfaceStyle` default is "Dark".
+#[cfg(target_os = "macos")]
+fn system_is_dark() -> bool {
+    use objc2::runtime::AnyObject;
+    use objc2::{class, msg_send};
+    use objc2_foundation::NSString;
+    let key = NSString::from_str("AppleInterfaceStyle");
+    let dark = NSString::from_str("Dark");
+    // SAFETY: plain NSUserDefaults reads; `stringForKey:` returns nil when the key is unset (Light).
+    unsafe {
+        let defaults: *mut AnyObject = msg_send![class!(NSUserDefaults), standardUserDefaults];
+        let value: *mut AnyObject = msg_send![defaults, stringForKey: &*key];
+        !value.is_null() && msg_send![value, isEqualToString: &*dark]
+    }
+}
+
 /// Whether the taskbar is light: Settings › Personalisation › Colours › "Choose your default
 /// Windows mode", which can differ from the apps' mode. Dark when it can't be read.
 #[cfg(windows)]

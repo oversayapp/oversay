@@ -22,7 +22,7 @@
     type DeckOptions,
     type DeckPart,
   } from '../lib/decks/deck'
-  import { previewDeckOnScreen, showDeckOnScreen, updateDeckPreview } from '../lib/decks/show'
+  import { isEditorPreview, previewDeckOnScreen, showDeckOnScreen, updateDeckPreview } from '../lib/decks/show'
   import { logAction } from '../lib/log'
   import { showBlockedBy } from '../lib/notes/show'
   import { session, sessionCommands } from '../lib/session/store'
@@ -151,7 +151,7 @@
 
   // The preview in the page, and the real widget on screen in preview, never
   // recorded, following the card being edited and the deck as it changes.
-  const previewing = $derived(!!$session?.preview && !!$session.deck && $session.status !== 'finished')
+  const previewing = $derived(isEditorPreview($session))
 
   function previewOnScreen() {
     attempt(async () => {
