@@ -12,33 +12,30 @@ const info = (targets: TargetInfo[], desktop = { claude: false, chatgpt: false, 
 })
 
 describe('the AI page plan', () => {
-  it('puts apps on this computer first, and folds the ones not found', () => {
-    const plan = planAiPage(info([target('claude-code', true), target('codex', false), target('gemini-cli', false)]), [])
-    expect(plan.chatFirst).toBe(false)
-    expect(plan.here).toEqual(['claude-code'])
-    expect(plan.away).toEqual(['codex', 'gemini-cli'])
-    expect(plan.noAiFound).toBe(false)
-    expect(plan.ready).toEqual([])
+  it('always puts the chat and desktop apps first, with the ones found here at the top', () => {
+    const none = planAiPage(info([target('claude-code', true), target('codex', false)]), [])
+    expect(none.chatApps).toEqual(['claude-app', 'gemini-app', 'chatgpt'])
+    const found = planAiPage(info([target('claude-code', false)], { claude: false, chatgpt: true, gemini: false }), [])
+    expect(found.chatApps).toEqual(['chatgpt', 'claude-app', 'gemini-app'])
+    const two = planAiPage(info([], { claude: true, chatgpt: true, gemini: false }), [])
+    expect(two.chatApps).toEqual(['claude-app', 'chatgpt', 'gemini-app'])
   })
 
-  it('says no AI app was found, and puts the chat apps first, when nothing is here', () => {
+  it('says no AI app was found when nothing is here', () => {
     const plan = planAiPage(info([target('claude-code', false), target('codex', false), target('gemini-cli', false)]), [])
     expect(plan.noAiFound).toBe(true)
-    expect(plan.chatFirst).toBe(true)
     expect(plan.away).toEqual(['claude-code', 'codex', 'gemini-cli'])
   })
 
-  it('puts the chat apps first for someone with only a desktop chat app, without the notice', () => {
+  it('has no notice for someone with only a desktop chat app', () => {
     const plan = planAiPage(info([target('claude-code', false), target('codex', false)], { claude: true, chatgpt: false, gemini: false }), [])
     expect(plan.noAiFound).toBe(false)
-    expect(plan.chatFirst).toBe(true)
   })
 
   it('counts a copy of the skill as here, even where the app looks gone', () => {
     const plan = planAiPage(info([target('claude-code', false, '0.1.0'), target('codex', false)]), [])
     expect(plan.here).toEqual(['claude-code'])
     expect(plan.ready).toEqual(['claude-code'])
-    expect(plan.chatFirst).toBe(false)
   })
 
   it('leaves an app out of Codex’s copy when it isn’t here', () => {

@@ -30,6 +30,7 @@
     type ZipKind,
   } from '../lib/skill/targets'
   import { chatInstructions } from '../lib/skill/chatgpt'
+  import { claudeCodeInstallPrompt, codexInstallPrompt, marketplaceAddress } from '../lib/skill/install'
   import { attempt } from './errors'
   import Icon from './Icon.svelte'
   import { goDeck } from './route'
@@ -38,7 +39,6 @@
   /** Rows showing their details. */
   let open = $state<Partial<Record<AiApp, boolean>>>({})
   /** Command-line apps not on this computer, shown after "Show". */
-  let showAway = $state(false)
   let showAllPrompts = $state(false)
   /** A row asking before it replaces or removes a copy. */
   let confirming = $state<{ target: SkillTarget; action: 'replace' | 'remove' } | null>(null)
@@ -92,7 +92,6 @@
       works: 'ChatGPT on the web, the desktop app and phones.',
     },
   }
-  const CHAT_ORDER: ChatApp[] = ['claude-app', 'gemini-app', 'chatgpt']
 
   const GET_AI = [
     { name: 'Claude', abbr: 'C', cls: 'claude-app', url: 'https://claude.ai/download' },
@@ -181,6 +180,19 @@
       started = { ...started, [app]: path.split(/[/\\]/).pop() ?? name }
       open = { ...open, [app]: true }
     })
+  }
+
+  /** The Claude app takes a marketplace address, so there is no file to save (ADR 0049). */
+  function copyMarketplace() {
+    const address = marketplaceAddress()
+    copy(address)
+    started = { ...started, 'claude-app': address }
+    open = { ...open, 'claude-app': true }
+  }
+
+  function copyInstallPrompt(id: 'claude-code' | 'codex') {
+    logAction('copy install prompt', id)
+    copy(id === 'codex' ? codexInstallPrompt() : claudeCodeInstallPrompt())
   }
 
   function copyInstructions() {
@@ -290,10 +302,14 @@
           <p>Install copies the skill to <code>{t.dir}</code>. Start a new {label.name} session afterwards.</p>
         {/if}
         {#if id === 'claude-code'}
-          <p>If you also add the Claude plugin to your Claude account, keep one of the two in Claude Code (<code>/plugin</code>).</p>
+          <p>Or have Claude Code install it from the plugin marketplace, which can update with each release: <button class="link" onclick={() => copyInstallPrompt('claude-code')}>{copied === claudeCodeInstallPrompt() ? 'Copied' : 'Copy the install prompt'}</button>, and paste it into Claude Code.</p>
+          <p>If you also add the plugin to your Claude account or from the marketplace, you will have it twice in Claude Code: keep one (<code>/plugin</code>).</p>
         {/if}
         {#if sharing(info!.targets, id).length}
           <p>{sharing(info!.targets, id).map((o) => TARGET_LABELS[o].name).join(' and ')} reads the same copy, so installing for one installs for both.</p>
+        {/if}
+        {#if id === 'codex'}
+          <p>Or have Codex install it from the plugin marketplace: <button class="link" onclick={() => copyInstallPrompt('codex')}>{copied === codexInstallPrompt() ? 'Copied' : 'Copy the install prompt'}</button>, and paste it into Codex. It is a second copy beside this one: keep one.</p>
         {/if}
         {#if id === 'gemini-cli'}
           <p>Antigravity CLI reads <code>.agents/skills</code> in a project; whether it reads this copy in your home folder isn’t confirmed yet.</p>
@@ -305,8 +321,8 @@
 
 {#snippet stepText(app: ChatApp, i: number)}
   {#if app === 'claude-app'}
-    {#if i === 0}{#if started[app]}Saved <code>{started[app]}</code>; it’s shown in Finder.{:else}Save the plugin.{/if}
-    {:else if i === 1}In Claude, open <b>Customize › Plugins › Add › Upload plugin</b> and choose it. (Customize › Skills won’t take a plugin.)
+    {#if i === 0}{#if started[app]}Copied <code>{started[app]}</code>.{:else}Copy the marketplace address.{/if}
+    {:else if i === 1}In Claude, open <b>Customize › Plugins › Add › Add marketplace</b>, paste it, and install Oversay.
     {:else}For Cowork, let the task work in <code>Documents/Oversay</code>.{/if}
   {:else if app === 'gemini-app'}
     {#if i === 0}{#if started[app]}Saved <code>{started[app]}</code>; it’s shown in Finder.{:else}Save the skill.{/if}
@@ -348,7 +364,7 @@
         {:else if app === 'gemini-app'}
           <button onclick={() => saveZip('skill', app)}><Icon name={started[app] ? 'check' : 'saveas'} size={15} /> {started[app] ? 'Saved' : 'Save skill…'}</button>
         {:else if app === 'claude-app'}
-          <button onclick={() => saveZip('claude-plugin', app)}><Icon name={started[app] ? 'check' : 'saveas'} size={15} /> {started[app] ? 'Saved' : 'Save plugin…'}</button>
+          <button onclick={copyMarketplace}><Icon name={started[app] ? 'check' : 'copy'} size={15} /> {started[app] ? 'Copied' : 'Copy marketplace address'}</button>
         {:else}
           <button onclick={copyInstructions}><Icon name={started[app] ? 'check' : 'copy'} size={15} /> {started[app] ? 'Copied' : 'Copy instructions'}</button>
         {/if}
@@ -363,7 +379,7 @@
           <ul>
             <li>The plugin is kept on your Claude account, so it reaches chat, Cowork and Claude Code.</li>
             <li>Chat runs away from your computer: it gives you the note to download. Drop it on Oversay’s window.</li>
-            <li>Or <button class="link" onclick={() => saveZip('skill', app)}>save the skill alone</button> for Customize › Skills.</li>
+            <li>No marketplace? <button class="link" onclick={() => saveZip('claude-plugin', app)}>Save the plugin as a file</button> for Add › Upload plugin, or <button class="link" onclick={() => saveZip('skill', app)}>the skill alone</button> for Customize › Skills.</li>
           </ul>
         {:else if app === 'gemini-app'}
           {@render steps(app)}
@@ -455,27 +471,18 @@
     {/if}
 
     {#snippet tools()}
-      <h3 class="sec">{plan!.here.length ? 'On this computer' : 'Terminal and coding tools'}</h3>
+      <h3 class="sec">Terminal and coding tools</h3>
       <div class="rows">
-        {#each plan!.here as id (id)}{@render targetRow(id)}{/each}
-        {#if showAway}
-          {#each plan!.away as id (id)}{@render targetRow(id)}{/each}
-        {:else if plan!.away.length}
-          {@const names = plan!.away.map((id) => TARGET_LABELS[id].name).join(', ')}
-          <button class="arow folded" onclick={() => (showAway = true)}>
-            <span class="grow">{plan!.here.length ? `${names} ${plan!.away.length === 1 ? 'isn’t' : 'aren’t'} on this computer` : `${names}: for people who work in a terminal`}</span>
-            <span class="faint">Show</span>
-          </button>
-        {/if}
+        {#each [...plan!.here, ...plan!.away] as id (id)}{@render targetRow(id)}{/each}
       </div>
     {/snippet}
     {#snippet chats()}
-      <h3 class="sec">{plan!.chatFirst ? 'Start with a chat app' : 'Chat and desktop apps'}</h3>
+      <h3 class="sec">Chat and desktop apps</h3>
       <div class="rows">
-        {#each CHAT_ORDER as app (app)}{@render chatRow(app)}{/each}
+        {#each plan!.chatApps as app (app)}{@render chatRow(app)}{/each}
       </div>
     {/snippet}
-    {#if plan.chatFirst}{@render chats()}{@render tools()}{:else}{@render tools()}{@render chats()}{/if}
+    {@render chats()}{@render tools()}
 
     {#if !tryApp}
       <h3 class="sec">Try it</h3>
@@ -649,27 +656,6 @@
 
   .chev.open :global(svg) {
     transform: none;
-  }
-
-  .arow.folded {
-    display: flex;
-    width: 100%;
-    gap: 8px;
-    border: 0;
-    border-radius: 0;
-    background: none;
-    text-align: left;
-    color: var(--muted);
-    font-weight: 400;
-    padding: 12px 16px 12px 66px;
-  }
-
-  .arow.folded:not(:first-child) {
-    border-top: 1px solid var(--line);
-  }
-
-  .arow.folded:hover {
-    background: var(--hover);
   }
 
   .arow-b {
@@ -960,8 +946,7 @@
   }
 
   @container (max-width: 560px) {
-    .arow-b,
-    .arow.folded {
+    .arow-b {
       padding-left: 16px;
     }
   }

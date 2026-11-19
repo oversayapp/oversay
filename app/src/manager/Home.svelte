@@ -42,6 +42,8 @@
     <button class="sc" onclick={() => goLibrary()}><span class="c"><Icon name="deck" size={22} /></span>Library</button>
   </div>
 
+  <AiCard show="ready" />
+
   {#if sections.pickUp && sections.pickUp.kind === 'deck'}
     {@const d = sections.pickUp.deck}
     <h3 class="sec">Pick up where you left off</h3>
@@ -67,7 +69,7 @@
     <p class="nudge muted">When you have a few decks for one project, put them in a workspace. <button class="link" onclick={() => openWorkspaceDialog()}>New workspace</button></p>
   {/if}
 
-  <AiCard />
+  <AiCard show="setup" />
 </div>
 
 {#snippet tile(r: LibraryRef)}

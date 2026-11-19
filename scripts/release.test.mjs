@@ -2,7 +2,7 @@
 
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { validVersion, cargoVersion, setCargoVersion, setCargoLockVersion, checkTag, regenerateSkills } from './version.mjs'
+import { validVersion, cargoVersion, setCargoVersion, setCargoLockVersion, checkTag, regenerateSkills, zipProblems } from './version.mjs'
 import { latestJson } from './latest-json.mjs'
 import { buildConfig, describe } from './build-config.mjs'
 
@@ -123,4 +123,11 @@ test('a version bump regenerates the skill files, which embed the version', () =
   const calls = []
   regenerateSkills((cmd, args) => calls.push([cmd, ...args]))
   assert.deepEqual(calls, [['make', 'skills']])
+})
+
+test('a release\'s zips must carry the app\'s version (ADR 0049)', () => {
+  const skill = (v) => `---\nname: oversay\nmetadata:\n  version: ${v}\n---\n`
+  assert.deepEqual(zipProblems('0.5.0', '{"version":"0.5.0"}', skill('0.5.0')), [])
+  assert.match(zipProblems('0.5.0', '{"version":"0.4.0"}', skill('0.5.0'))[0], /plugin\.json has 0\.4\.0/)
+  assert.match(zipProblems('0.5.0', '{"version":"0.5.0"}', skill('0.4.0'))[0], /SKILL\.md has 0\.4\.0/)
 })

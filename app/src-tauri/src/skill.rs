@@ -364,12 +364,12 @@ fn zip_files(
     Ok(match kind {
         ZipKind::Skill => skill_files(skill, &format!("{SKILL_NAME}/"))?,
         ZipKind::ClaudePlugin => {
-            let manifest = serde_json::json!({
-                "name": SKILL_NAME,
-                "version": version,
-                "description": "Make, add to and find Oversay quick notes, and open or show them in Oversay.",
-                "author": { "name": "Oversay" },
-            });
+            // The same file scripts/skill-package.mjs makes the repository's plugin from, so the
+            // two manifests differ only in what this adds: the version.
+            let mut manifest: serde_json::Value =
+                serde_json::from_str(include_str!("../../../skills/plugin-manifest.json"))
+                    .expect("skills/plugin-manifest.json is JSON (a test reads it)");
+            manifest["version"] = serde_json::Value::from(version);
             let mut files = vec![
                 (
                     ".claude-plugin/plugin.json".to_string(),
@@ -399,6 +399,48 @@ fn write_zip(path: &Path, files: &[(String, Vec<u8>)]) -> Result<(), String> {
     }
     zip.finish().map_err(|e| fail(&e))?;
     Ok(())
+}
+
+/// The two files a tagged release carries (ADR 0049), named as the AI page's Save… buttons name them.
+const SKILL_ZIP: &str = "oversay-skill.zip";
+const PLUGIN_ZIP: &str = "oversay-plugin.zip";
+
+/// Writes both zips of the skill folder `skill` into `out`, the same files the app saves.
+fn package_to(skill: &Path, out: &Path, version: &str) -> Result<(), String> {
+    fs::create_dir_all(out).map_err(|e| format!("Could not make {}: {e}", out.display()))?;
+    for (file, kind) in [
+        (SKILL_ZIP, ZipKind::Skill),
+        (PLUGIN_ZIP, ZipKind::ClaudePlugin),
+    ] {
+        let files = zip_files(skill, kind, version)
+            .map_err(|e| format!("Could not read the skill {}: {e}", skill.display()))?;
+        write_zip(&out.join(file), &files)?;
+    }
+    Ok(())
+}
+
+/// Runs `--package-skill <skill folder> <out folder>` when the app was started with it, so the
+/// release job makes its zips with the code that makes the app's: the exit code, or None to go on.
+pub fn package_from_args() -> Option<i32> {
+    let args: Vec<String> = std::env::args().collect();
+    if args.get(1).map(String::as_str) != Some("--package-skill") {
+        return None;
+    }
+    crate::platform::attach_console();
+    let (Some(skill), Some(out)) = (args.get(2), args.get(3)) else {
+        eprintln!("Usage: Oversay --package-skill <skill folder> <out folder>");
+        return Some(2);
+    };
+    match package_to(Path::new(skill), Path::new(out), env!("CARGO_PKG_VERSION")) {
+        Ok(()) => {
+            println!("Wrote {SKILL_ZIP} and {PLUGIN_ZIP} in {out}");
+            Some(0)
+        }
+        Err(e) => {
+            eprintln!("{e}");
+            Some(1)
+        }
+    }
 }
 
 /// Saves the skill as `kind` at `path` (from the save dialog) and shows it in Finder or Explorer.
@@ -579,6 +621,13 @@ mod tests {
                 .unwrap();
         assert_eq!(manifest["name"], "oversay");
         assert_eq!(manifest["version"], "0.2.0");
+        // Everything else is the shared manifest the repository's plugin is made from.
+        let shared: serde_json::Value = serde_json::from_str(
+            &fs::read_to_string(source().join("../plugin-manifest.json")).unwrap(),
+        )
+        .unwrap();
+        assert_eq!(manifest["description"], shared["description"]);
+        assert_eq!(manifest["author"], shared["author"]);
         // A real archive that reads back with the same files.
         let zip = dir.join("out.zip");
         write_zip(
@@ -599,6 +648,43 @@ mod tests {
         assert_eq!(read, want);
         assert!(archive.by_name("skills/oversay/SKILL.md").unwrap().size() > 100);
         fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
+    fn a_release_gets_the_same_two_zips_the_app_saves() {
+        let out = temp_dir("release-zips");
+        package_to(&source(), &out, "0.4.0").unwrap();
+        for (file, kind) in [
+            (SKILL_ZIP, ZipKind::Skill),
+            (PLUGIN_ZIP, ZipKind::ClaudePlugin),
+        ] {
+            let archive = zip::ZipArchive::new(fs::File::open(out.join(file)).unwrap()).unwrap();
+            let mut read: Vec<String> = archive
+                .file_names()
+                .map(|n| n.unwrap().into_owned())
+                .collect();
+            read.sort();
+            let mut want: Vec<String> = zip_files(&source(), kind, "0.4.0")
+                .unwrap()
+                .into_iter()
+                .map(|(n, _)| n)
+                .collect();
+            want.sort();
+            read.dedup();
+            want.dedup();
+            // The plugin's icon is added when the archive is written.
+            read.retain(|n| n != ".claude-plugin/icon.png");
+            want.retain(|n| n != ".claude-plugin/icon.png");
+            assert_eq!(read, want, "{file}");
+        }
+        // What the release job checks again: the plugin zip says the version it was made for.
+        let mut plugin =
+            zip::ZipArchive::new(fs::File::open(out.join(PLUGIN_ZIP)).unwrap()).unwrap();
+        let manifest: serde_json::Value =
+            serde_json::from_reader(plugin.by_name(".claude-plugin/plugin.json").unwrap()).unwrap();
+        assert_eq!(manifest["version"], "0.4.0");
+        assert!(package_to(&out.join("no-such-skill"), &out, "0.4.0").is_err());
+        fs::remove_dir_all(out).unwrap();
     }
 
     #[test]

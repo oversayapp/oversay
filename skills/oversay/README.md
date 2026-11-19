@@ -11,9 +11,21 @@ Lets an AI app make, add to and find Oversay **decks**: cards with points and an
 
 The skill's version is the app's (`app/package.json`). Every deck the skill makes says `made-with: Oversay skill <version>`, so Oversay can tell when a skill in a chat app's account is out of date. Oversay updates the copies it installed itself. `make check` fails when the version or the generated part is stale; `make skills` brings them up to date.
 
+## Install from the marketplace
+
+This repository is a Claude Code and Codex plugin marketplace (ADR 0049). `.claude-plugin/marketplace.json` lists one plugin, `plugins/oversay/`, which `make skills` makes from this folder; never edit it, `make check` fails if it differs.
+
+- **Claude Code**: `claude plugin marketplace add oversayapp/oversay`, then `claude plugin install oversay@oversay`, then start a new session. Or paste the install prompt from Oversay's AI page. Auto-update is off for a marketplace that isn't Anthropic's: turn it on in `/plugin` › Marketplaces, or run `claude plugin update oversay@oversay`. The skill is `/oversay:oversay`.
+- **Claude app and Cowork**: **Customize › Plugins › Add › Add marketplace**, enter `oversayapp/oversay`, install Oversay. A prompt in chat can't do it (*not tried*). Whether a plugin added here reaches Claude Code as `oversay@synced` is *not verified*; treat each app as its own install.
+- **Codex**: `codex plugin marketplace add oversayapp/oversay`, then `codex plugin add oversay@oversay`; update with `codex plugin marketplace upgrade`. Both installed and listed the skill from a local checkout (2026-11-18). Layout matters: Codex skips a skill that sits at the plugin's root, so the plugin is a generated folder with `skills/oversay/` inside.
+- **Gemini CLI**: not tested here, so no command is given. Use Install from Oversay.
+- **Gemini app, ChatGPT**: take an upload only. Each release page has `oversay-skill.zip` and `oversay-plugin.zip`.
+
+Remove: `claude plugin uninstall oversay@oversay`, `codex plugin remove oversay@oversay` (both *not tried*). Your decks are untouched. A skill from the marketplace has no `oversay-local.json`: it uses `Documents/Oversay/Decks`, the only place Oversay keeps decks, and finds the app at its usual path to check a deck. Having the skill from Install and from the marketplace gives two copies in Claude Code (`/oversay` and `/oversay:oversay`): keep one.
+
 ## Install from Oversay
 
-Open **AI** in Oversay's rail. **Install** puts the skill into Claude Code, Codex or Gemini CLI; **Save plugin…** saves it for the Claude app and **Save skill…** for the Gemini app. Nothing is published anywhere (ADR 0030, 0033).
+Open **AI** in Oversay's rail. **Install** puts the skill into Claude Code, Codex or Gemini CLI; **Copy marketplace address** is for the Claude app (the plugin can still be saved as a file), and **Save skill…** is for the Gemini app. Claude Code's and Codex's rows also have **Copy the install prompt**.
 
 ## Install by hand
 
@@ -101,7 +113,9 @@ One row per app, filled in when someone tries it. Each covers: install, "create 
 | Claude Code, headless (`make skill-try`) | 2026-10-21 | Claude Code 2.1.306 | Claude | All four fixtures pass. Open and show were not tried headless |
 | Claude Code, headless (`make skill-try`) | 2026-10-22 | Claude Code 2.1.308 | Claude | All four pass after two fixes: a skill installed for Claude Code was used instead of the one under test (runs now leave user skills out), and a new note had made-up placeholder points (SKILL.md now forbids them; the case caps points). Each note ran `Oversay --check` |
 | Claude Code, headless (`make skill-try`) | 2026-10-25 | Claude Code 2.1.310 | Claude | All six pass with decks as folders (ADR 0037): new decks are dated folders with a title (re-run without ids the same day: the skill leaves them to Oversay); with the title taken it asked add or new and made nothing; it used a deck's `resources/` when asked. Each deck ran `Oversay --check` |
+| Claude Code, marketplace from a local checkout (`claude plugin marketplace add`, `install oversay@oversay`) | 2026-11-18 | Claude Code 2.1.325 | Claude | Installs, `claude plugin validate` passes, the skill loads as `<plugin>:oversay`. Not tried from GitHub, or in a session making a deck |
 | Claude Code, in a session | | | | |
+| Codex, marketplace from a local checkout | 2026-11-18 | codex-cli 0.169.0-alpha | Claude | Reads `.claude-plugin/marketplace.json`; `plugin add` installs; the app-server skill list shows `oversay:oversay`, but only with the generated `plugins/oversay/skills/oversay/` layout (a plugin whose root holds `SKILL.md` installs and lists nothing). No session made a deck |
 | Codex | | | | |
 | Gemini CLI | | | | |
 | Antigravity CLI | | | | |

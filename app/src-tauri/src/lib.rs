@@ -29,9 +29,10 @@ use tauri_plugin_window_state::StateFlags;
 
 pub(crate) const MANAGER_LABEL: &str = "manager";
 
-/// `--check <file>`: see check.rs.
+/// The command-line modes that run and exit: `--check <file>` (check.rs) and `--package-skill`
+/// (skill.rs).
 pub fn check_from_args() -> Option<i32> {
-    check::from_args()
+    check::from_args().or_else(skill::package_from_args)
 }
 
 pub fn run() {

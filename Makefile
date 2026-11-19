@@ -75,8 +75,9 @@ hooks: ## Install the git hooks: every commit is checked for secrets (gitleaks) 
 	git config core.hooksPath .githooks
 	@echo "Hooks installed: each commit is checked for secrets. Emergency skip: git commit --no-verify"
 
-skills: ## Write the Oversay skill's generated parts (format reference, version) from the app's code
+skills: ## Write the Oversay skill's generated parts (format reference, version) and the plugin and marketplace made from it
 	cd app && { [ -d node_modules ] || npm ci; } && UPDATE_SKILL=1 npx vitest run src/lib/notes/skill.test.ts
+	node scripts/skill-package.mjs --write
 
 skill-try: ## Run the skill's prompt fixtures through Claude Code (a paid model run) and check what it made; CASE=<name> for one
 	scripts/skill-try.sh $(CASE)
