@@ -17,7 +17,9 @@ ADR 0033 decided that nothing is hosted, and a deck is a folder on one computer 
   - in Cognito, the account's email address and what Cognito keeps to sign it in.
 - **What is never stored:** audio and recordings. A deck's `transcripts/`, `reviews/` and `resources/` stay on the computer too, as do Settings and `oversay-local.json`. Any of these going to the cloud needs a decision of its own.
 - **The service** is the private repository `oversayapp/web-api`: an Amazon Cognito user pool, an API Gateway HTTP API whose JWT authorizer checks Cognito's tokens before any code runs, AWS Lambda, and Neon Postgres, all as infra as code (SST) with `dev` and `prod` stages. Each row belongs to one Cognito user (`sub`); another user's deck is 404, so its id is never confirmed. Deleting the account removes the Cognito user and every row of theirs.
-- **Signing in** uses Cognito's hosted page in the system browser, with the authorization code flow and PKCE (RFC 8252). Oversay never sees the password. The refresh token is kept only in the OS keychain (Keychain on a Mac, Credential Manager on Windows), never in a file or the settings JSON.
+- **Signing in** uses Cognito's hosted page in the system browser, with the authorization code flow and PKCE (RFC 8252). Oversay never sees a password. The refresh token is kept only in the OS keychain (Keychain on a Mac, Credential Manager on Windows), never in a file or the settings JSON.
+- **The page offers Continue with Google, Apple and Microsoft first, then email and password** (at least 12 characters, no other rules; John, 19 Nov). Google and Apple are Cognito's own identity providers; Microsoft (personal and work accounts) is added as an OpenID Connect provider.
+- **One person is one account, however they sign in.** A Google, Apple or Microsoft sign-in whose verified email matches an existing account is linked to it, so its decks stay under the same `sub`; without linking, the same person signing in two ways would see two empty sets of decks.
 - **Sign-in comes back through `oversay://auth`**, an exception to ADR 0032's "a link never writes". This link stores a sign-in, so it is guarded:
   - When Oversay opens the hosted page it makes a PKCE verifier and a random `state`, kept in memory for that one attempt only, and only for a few minutes.
   - `oversay://auth?code=…&state=…` is accepted only when its `state` matches the attempt in progress. Oversay then trades the code, with the verifier, for tokens, and the attempt is used up.
@@ -28,7 +30,8 @@ ADR 0033 decided that nothing is hosted, and a deck is a folder on one computer 
 
 - **The deck's own files, not a model of them.** Storing `deck.md` and `sessions.json` as they are means the server never has to understand the deck format, the local file stays the truth, and a deck that comes down is the same deck. The revision number is what lets a later sync see that both computers changed a deck and keep both versions.
 - **Only what moving a deck needs.** A deck and its sessions are small and are what a second computer needs to show and run it. Audio is large and holds other people's voices; transcripts and reviews come from it. Keeping them local keeps the account's data small and the privacy question narrow.
-- **A hosted page with PKCE in the system browser** is the current best practice for a desktop app (RFC 8252): the person types their password only to Cognito, in a browser they trust, and nothing secret is built into the app.
+- **A hosted page with PKCE in the system browser** is the current best practice for a desktop app (RFC 8252): the person types their password only to Cognito, Google, Apple or Microsoft, in a browser they trust, and nothing secret is built into the app.
+- **Existing accounts first:** most people would rather not make another password (John, 19 Nov). Apple is also there because the iPhone app will offer Google, and the App Store then requires a privacy-preserving option such as Sign in with Apple.
 - **AWS and Neon:** Cognito is on AWS, so its JWT authorizer, API Gateway and Lambda need no glue, and John had no hosting preference. Neon gives Postgres that costs nothing at rest and a throwaway database branch per test run.
 
 ## Considered options
@@ -45,3 +48,4 @@ ADR 0033 decided that nothing is hosted, and a deck is a folder on one computer 
 - ADR 0032: `oversay://auth` is the one link that writes, guarded as above. ADR 0032 gets a line saying so.
 - Email addresses and deck contents are personal data on a hosted service. Before the account ships, oversay.app needs a privacy policy and the app a line before sign-up; it is on the launch checklist in `operations/`.
 - The iPhone app will read the same decks with its own Cognito app client and redirect.
+- Google, Apple and Microsoft each need an app registered with them (a Google Cloud OAuth client, an Apple Services ID and key, a Microsoft Entra app registration); their secrets live in the service's stage secrets, never in git. Linking by email trusts only emails the provider says are verified.
