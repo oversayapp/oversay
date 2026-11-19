@@ -90,9 +90,17 @@ pub fn account_cancel_sign_in(state: State<'_, AccountState>) -> Result<Status, 
 /// the browser doesn't sign straight back in next time. The token is revoked afterwards, so the
 /// button doesn't wait on the network.
 #[tauri::command]
-pub fn account_sign_out(app: AppHandle, state: State<'_, AccountState>) -> Result<Status, String> {
+pub async fn account_sign_out(
+    app: AppHandle,
+    state: State<'_, AccountState>,
+) -> Result<Status, String> {
     let account = account(&state)?;
-    if let Some((logout, revocation)) = account.sign_out() {
+    // Off the main thread: deleting the keychain item can wait on a keychain prompt.
+    let worker = account.clone();
+    let signed_out = tauri::async_runtime::spawn_blocking(move || worker.sign_out())
+        .await
+        .map_err(|e| e.to_string())?;
+    if let Some((logout, revocation)) = signed_out {
         if let Err(e) = app.opener().open_url(logout, None::<&str>) {
             log::warn!("account.browser_not_opened error={e}");
         }

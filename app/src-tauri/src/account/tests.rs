@@ -23,6 +23,10 @@ struct Calls {
     refresh_fails: bool,
     /// Runs while a code is being traded, as if the person acted in the meantime.
     during_exchange: Option<Box<dyn FnOnce() + Send>>,
+    /// The keychain refuses to save.
+    save_fails: bool,
+    /// Runs while the keychain is being written.
+    during_save: Option<Box<dyn FnOnce() + Send>>,
     /// Runs while a refresh is in flight.
     during_refresh: Option<Box<dyn FnOnce() + Send>>,
 }
@@ -85,7 +89,15 @@ impl SecretStore for FakeKeychain {
         Ok(self.0.lock().unwrap().stored.clone())
     }
     fn save(&self, value: &str) -> Result<(), String> {
-        self.0.lock().unwrap().stored = Some(value.into());
+        let hook = self.0.lock().unwrap().during_save.take();
+        if let Some(hook) = hook {
+            hook();
+        }
+        let mut calls = self.0.lock().unwrap();
+        if calls.save_fails {
+            return Err("denied".into());
+        }
+        calls.stored = Some(value.into());
         Ok(())
     }
     fn delete(&self) -> Result<(), String> {
@@ -688,4 +700,43 @@ fn a_restore_finishing_after_a_sign_in_keeps_the_sign_in() {
             email: "john@example.com".into()
         }
     );
+}
+
+#[test]
+fn a_keychain_that_refuses_the_token_leaves_the_app_signed_out() {
+    let (account, calls) = account();
+    calls.lock().unwrap().save_fails = true;
+    let now = Instant::now();
+    let state = started(&account, now);
+    assert_eq!(
+        account.handle_link(&auth_link("code-1", &state), now),
+        LinkOutcome::Failed
+    );
+    assert_eq!(
+        account.status(),
+        Status::SignedOut {
+            problem: Some(KEYCHAIN_FAILED.into())
+        }
+    );
+    // Nowhere else to keep it (V7), so Cognito is told to forget it.
+    assert_eq!(calls.lock().unwrap().revoked, vec!["refresh-1".to_string()]);
+    assert!(!test_log::logged("account.token_stored"));
+}
+
+#[test]
+fn a_sign_in_cancelled_while_the_keychain_is_written_takes_the_token_out_again() {
+    let (account, calls) = shared_account();
+    let now = Instant::now();
+    let state = started(&account, now);
+    let during = account.clone();
+    calls.lock().unwrap().during_save = Some(Box::new(move || during.cancel_sign_in()));
+    assert_eq!(
+        account.handle_link(&auth_link("code-1", &state), now),
+        LinkOutcome::Abandoned
+    );
+    assert_eq!(account.status(), Status::SignedOut { problem: None });
+    let c = calls.lock().unwrap();
+    assert!(c.stored.is_none());
+    assert_eq!(c.deletes, 1);
+    assert_eq!(c.revoked, vec!["refresh-1".to_string()]);
 }
