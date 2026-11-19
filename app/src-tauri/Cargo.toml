@@ -61,6 +61,11 @@ ureq = "3.5.0"
 # Compares the feed's version with this one for a build that cannot install it (updates.rs).
 semver = "1"
 sha2 = "0.11.1"
+# The account's refresh token, only in the OS keychain: Keychain on a Mac, Credential Manager on
+# Windows (ADR 0050, account/keychain.rs).
+keyring = { version = "3", features = ["apple-native", "windows-native"] }
+# PKCE and state values, and the ID token's claims, are base64url (account/mod.rs).
+base64 = "0.22"
 
 # Dependencies carry no debuginfo in dev builds: it was most of target/ (objc2-app-kit
 # alone was 176M per copy). Our own crate keeps full debuginfo for stepping.

@@ -5,6 +5,7 @@
   import { closeSession, openSession, session, sessionCommands } from '../lib/session/store'
   import type { Talk } from '../lib/project/types'
   import { attempt } from './errors'
+  import { checkApi } from '../lib/account/account'
 
   // Temporary: lets us exercise overlay windows until sessions exist (006).
   // `does-not-exist` checks the unknown-plugin error.
@@ -30,6 +31,13 @@
   }
   const now = ticking()
   const clock = $derived($session ? sessionClock($session, $now) : null)
+  // Shows that the account's token works (ADR 0050). Signed out, Rust makes no request.
+  let apiResult = $state('')
+  const callApi = () =>
+    attempt(async () => {
+      apiResult = ''
+      apiResult = await checkApi()
+    })
 </script>
 
 <section>
@@ -41,6 +49,14 @@
       <button onclick={() => attempt(() => closeOverlay(overlay.id))}>Close</button>
     </div>
   {/each}
+</section>
+
+<section>
+  <h2>Account API</h2>
+  <div class="row">
+    <button onclick={callApi}>Call GET /decks</button>
+    {#if apiResult}<span class="muted" role="status">{apiResult}</span>{/if}
+  </div>
 </section>
 
 <section>
