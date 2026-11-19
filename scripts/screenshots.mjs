@@ -186,8 +186,8 @@ const fakeBridge = `(() => {
   // An overlay window (?overlay=<plugin>&state=<preset>): its label, and a session already in that state.
   const query = new URLSearchParams(location.search);
   const label = query.get('window') ?? (query.get('overlay') ? 'overlay-' + query.get('overlay') : 'manager');
-  // The Timeline's style, talk bar, ring or gauge and its button edge, as the manager would send them (Settings › Overlays, 007/02).
-  const overlaySettings = { timelineStyle: query.get('style') ?? 'waveform', buttons: query.get('buttons') ?? 'always', opacity: Number(query.get('opacity') ?? 78), panel: query.get('panel') ?? 'dark', solid: query.get('solid') === '0' ? false : undefined, textSize: query.get('size') ?? 'm', layout: query.get('layout') ?? 'topic', deckView: query.get('view') ?? 'card' };
+  // The look, as the manager would send it (the Look card, the menu, Settings › Overlays).
+  const overlaySettings = { opacity: Number(query.get('opacity') ?? 78), panel: query.get('panel') ?? 'dark', solid: query.get('solid') === '1', deckView: query.get('view') ?? 'card' };
   // The flashcard widget's deck: four cards, the last untimed, and its options.
   const deckTalk = { id: 'deck', name: 'Stand-up', sessions: [], deckPath: '/Users/demo/Documents/Oversay/Decks/Stand-up/deck.md', deck: { colour: query.get('colour') ?? 'kinds', autoAdvance: query.get('auto') !== 'off', timing: true, hide: (query.get('hide') ?? '').split(',').filter(Boolean) }, segments: [
     { id: 's_deck0', name: 'Intro', kind: 'intro', plannedSeconds: 60, openEnded: false, points: ['Goal for today: ship **Beacon**'], hints: [] },
@@ -242,7 +242,7 @@ const fakeBridge = `(() => {
       if (cmd === 'read_project_file' && args.path.includes('/Quick talks/')) return quick.talks[qname('talks', args.path)].text;
       if (cmd === 'read_project_file') { if (args.path.includes('missing')) throw new Error('not found'); return project; }
       if (cmd === 'plugin:app|version') return '0.1.0';
-      if (cmd === 'plugin:window|get_all_windows') return ['manager', 'overlay-timeline', 'overlay-talking-points'];
+      if (cmd === 'plugin:window|get_all_windows') return ['manager', 'overlay-flashcard'];
       if (cmd === 'plugin:window|is_visible') return true;
       if (cmd === 'take_links') return links.splice(0);
       if (cmd === 'plugin:clipboard-manager|read_text') return clipboard;
@@ -326,17 +326,17 @@ const fakeBridge = `(() => {
       if (cmd === 'plugin:event|listen') { (handlers[args.event] ??= []).push(args.handler); return n++; }
       if (cmd === 'state_get') {
         if (args.channel === 'overlay-settings') return { version: 1, value: overlaySettings };
-        // The Timeline's wave held on a point: ?look=<index>,<seconds>.
-        if (args.channel === 'look-back') return query.get('look') ? { version: 1, value: { index: Number(query.get('look').split(',')[0]), seconds: Number(query.get('look').split(',')[1]) } } : null;
+        // Hidden from screen sharing unless ?capture=0.
+        if (args.channel === 'capture-hidden') return { version: 1, value: query.get('capture') !== '0' };
         return args.channel === 'session' && session ? { version, value: session } : null;
       }
       // A fake session engine: the clock is backdated so the screens show time passing.
       if (cmd === 'panel_shortcut') return 'Control+Alt+KeyP';
       if (cmd === 'session_open') {
-        // A note or the control panel's preview starts at once (session.rs); a preview gives way to anything.
+        // A note or the Look card's sample deck starts at once (session.rs); a preview gives way to anything.
         if (args.mode === 'preview' && session && session.status !== 'finished' && !session.preview) throw new Error('A session is already running.');
         const now = args.mode === 'note' || args.mode === 'preview';
-        session = { status: now ? 'running' : 'ready', index: 0, plan: args.plan, events: now ? [{ at: iso(40), type: 'start' }] : [], talk: args.talk, shortcuts: args.shortcuts, unavailable: [], paused: false, note: args.mode === 'note', preview: args.mode === 'preview' };
+        session = { status: now ? 'running' : 'ready', index: 0, plan: args.plan, events: now ? [{ at: iso(40), type: 'start' }] : [], talk: args.talk, shortcuts: args.shortcuts, unavailable: [], paused: false, note: args.mode === 'note', deck: args.mode === 'preview' || args.mode === 'deck', preview: args.mode === 'preview' };
         broadcast();
       }
       if (cmd === 'session_toggle_pause' && session?.status === 'running') {
@@ -609,99 +609,9 @@ for (const variant of ['empty', 'one', 'many']) {
 
 if (wanted('overlay')) {
 // Overlays: each plugin's window, at the size the plugin asks for, in each session state, over a
-// light and a dark slide. Variants (the Timeline's style, ring or gauge, its button tab on top) are
-// sent as the overlay-settings channel, and checked on the page so a renamed key fails loudly.
-const OVERLAYS = ['timeline']
-const STATES = ['ready', 'running', 'overrun', 'demo', 'paused', 'wrapup', 'talkover', 'finished']
+// light and a dark slide. The look is sent as the overlay-settings channel.
 const SLIDES = { light: '#f4f1ea', dark: '#11151c' }
-const VARIANT_SHOWN = {}
 const evaluate = async (expression) => (await send('Runtime.evaluate', { expression, awaitPromise: true, returnByValue: true })).result?.result?.value
-// The Timeline has two styles since decks replaced the others (ADR 0036), each its own
-// window: the waveform in every state, with the Light panel too, and the edge strip.
-const LIGHT = ['ready', 'running', 'overrun', 'paused', 'finished'].map((s) => [s, 'bar', 'bottom', 'light'])
-const STYLES = {
-  waveform: { variants: LIGHT },
-  strip: { variants: [] },
-}
-for (const id of OVERLAYS) {
-  await send('Page.navigate', { url: `http://localhost:${port}/?overlay=${id}&state=ready` })
-  await sleep(1200)
-  for (const [style, { variants }] of Object.entries(STYLES)) {
-    const size = await evaluate(`import('/src/plugins/registry.ts').then(({ getPlugin }) => getPlugin('${id}').windowFor({ timelineStyle: '${style}' }))`)
-    if (!size?.width) throw new Error(`no window size for overlay ${id} style ${style}`)
-    await send('Emulation.setDeviceMetricsOverride', { width: size.width, height: size.height, deviceScaleFactor: 2, mobile: false })
-    for (const [state, indicator, notch = 'bottom', asked] of [...STATES.map((s) => [s, 'bar']), ...variants]) {
-      const panel = asked ?? 'dark'
-      await send('Page.navigate', { url: `http://localhost:${port}/?overlay=${id}&state=${state}&indicator=${indicator}&notch=${notch}&style=${style}&panel=${panel}` })
-      await sleep(1200)
-      for (const variant of [indicator, notch]) {
-        const selector = VARIANT_SHOWN[variant]
-        if (selector && !(await evaluate(`!!document.querySelector('${selector}')`))) {
-          throw new Error(`overlay ${id} ${style} (${state}): asked for ${variant} but ${selector} isn't on the page; did the overlay-settings channel change?`)
-        }
-      }
-      for (const [slide, colour] of Object.entries(SLIDES)) {
-        await run(`document.documentElement.style.setProperty('background', '${colour}', 'important')`)
-        await sleep(150)
-        const { result } = await send('Page.captureScreenshot', { format: 'png' })
-        const file = join(out, `overlay-${id}${style === 'waveform' ? '' : '-' + style}-${state}${indicator === 'bar' ? '' : '-' + indicator}${notch === 'top' ? '-notch-top' : ''}${asked ? '-' + asked + '-panel' : ''}-${slide}.png`)
-        writeFileSync(file, Buffer.from(result.data, 'base64'))
-        written.push(file)
-      }
-    }
-  }
-}
-
-// The waveform with its buttons hidden (the capsule keeps the talk's name).
-{
-  const size = await evaluate(`import('/src/plugins/registry.ts').then(({ getPlugin }) => getPlugin('timeline').windowFor({ timelineStyle: 'waveform' }))`)
-  await send('Emulation.setDeviceMetricsOverride', { width: size.width, height: size.height, deviceScaleFactor: 2, mobile: false })
-  for (const [name, params] of [['buttons-hidden', 'state=running&buttons=hidden']]) {
-    await send('Page.navigate', { url: `http://localhost:${port}/?overlay=timeline&style=waveform&${params}` })
-    await sleep(1200)
-    for (const [slide, colour] of Object.entries(SLIDES)) {
-      await run(`document.documentElement.style.setProperty('background', '${colour}', 'important')`)
-      await sleep(150)
-      const { result } = await send('Page.captureScreenshot', { format: 'png' })
-      const file = join(out, `overlay-timeline-${name}-${slide}.png`)
-      writeFileSync(file, Buffer.from(result.data, 'base64'))
-      written.push(file)
-    }
-  }
-}
-
-// Looking back: the waveform held on an earlier point, pressed as a person would, and
-// Talking Points showing the segment looked at.
-{
-  const size = await evaluate(`import('/src/plugins/registry.ts').then(({ getPlugin }) => getPlugin('timeline').windowFor({ timelineStyle: 'waveform' }))`)
-  await send('Emulation.setDeviceMetricsOverride', { width: size.width, height: size.height, deviceScaleFactor: 2, mobile: false })
-  await send('Page.navigate', { url: `http://localhost:${port}/?overlay=timeline&style=waveform&state=running` })
-  await sleep(1200)
-  const box = await evaluate(`(() => { const r = document.querySelector('[data-hold]').getBoundingClientRect(); return { x: r.left + r.width * 0.05, y: r.top + r.height / 2 } })()`)
-  await send('Input.dispatchMouseEvent', { type: 'mousePressed', x: box.x, y: box.y, button: 'left', buttons: 1, clickCount: 1 })
-  await sleep(300)
-  for (const [slide, colour] of Object.entries(SLIDES)) {
-    await run(`document.documentElement.style.setProperty('background', '${colour}', 'important')`)
-    await sleep(150)
-    const { result } = await send('Page.captureScreenshot', { format: 'png' })
-    const file = join(out, `overlay-timeline-look-back-${slide}.png`)
-    writeFileSync(file, Buffer.from(result.data, 'base64'))
-    written.push(file)
-  }
-  await send('Input.dispatchMouseEvent', { type: 'mouseReleased', x: box.x, y: box.y, button: 'left', buttons: 0, clickCount: 1 })
-  const tp = await evaluate(`import('/src/plugins/registry.ts').then(({ getPlugin }) => getPlugin('talking-points').window)`)
-  await send('Emulation.setDeviceMetricsOverride', { width: tp.width, height: tp.height, deviceScaleFactor: 2, mobile: false })
-  await send('Page.navigate', { url: `http://localhost:${port}/?overlay=talking-points&state=running&look=0,60` })
-  await sleep(1200)
-  for (const [slide, colour] of Object.entries(SLIDES)) {
-    await run(`document.documentElement.style.setProperty('background', '${colour}', 'important')`)
-    await sleep(150)
-    const { result } = await send('Page.captureScreenshot', { format: 'png' })
-    const file = join(out, `overlay-talking-points-look-back-${slide}.png`)
-    writeFileSync(file, Buffer.from(result.data, 'base64'))
-    written.push(file)
-  }
-}
 
 // Talking Points: one style, at the window its plugin asks for, in each session state.
 {
@@ -722,9 +632,9 @@ for (const id of OVERLAYS) {
       writeFileSync(file, Buffer.from(result.data, 'base64'))
       written.push(file)
     }
-  }  // The look: the dark and light panels, large text, every part with this one open;
-  // and with the waveform (the default) light, and see-through at its lowest, 50%.
-  for (const [name, params] of [['dark', 'style=strip&panel=dark&solid=0'], ['light', 'style=strip&panel=light&solid=0'], ['large', 'size=l'], ['every', 'layout=all'], ['light-every', 'style=wave&panel=light&solid=0&layout=all&size=s'], ['waveform-light', 'panel=light'], ['see-through', 'solid=0&opacity=50']]) {
+  }
+  // The look: the dark and light panels, and solid.
+  for (const [name, params] of [['dark', 'panel=dark'], ['light', 'panel=light'], ['solid', 'solid=1']]) {
     await send('Page.navigate', { url: `http://localhost:${port}/?overlay=${id}&state=running&${params}` })
     await sleep(1200)
     for (const [slide, colour] of Object.entries(SLIDES)) {
@@ -816,16 +726,16 @@ for (const id of OVERLAYS) {
 }
 
 // Every overlay at the lowest opacity, over both slides: the text must still read.
-for (const [id, style] of [['talking-points', null], ['timeline', 'waveform'], ['timeline', 'strip']]) {
-  const size = await evaluate(`import('/src/plugins/registry.ts').then(({ getPlugin }) => { const p = getPlugin('${id}'); return p.windowFor ? p.windowFor({ timelineStyle: '${style}', stripEdge: 'screen' }) : p.window })`)
+for (const [id, state] of [['talking-points', 'running'], ['flashcard', 'deck-running']]) {
+  const size = await evaluate(`import('/src/plugins/registry.ts').then(({ getPlugin }) => getPlugin('${id}').window)`)
   await send('Emulation.setDeviceMetricsOverride', { width: size.width, height: size.height, deviceScaleFactor: 2, mobile: false })
-  await send('Page.navigate', { url: `http://localhost:${port}/?overlay=${id}&state=running&style=${style ?? 'strip'}&opacity=40&solid=0&panel=dark` })
+  await send('Page.navigate', { url: `http://localhost:${port}/?overlay=${id}&state=${state}&opacity=40&panel=dark` })
   await sleep(1200)
   for (const [slide, colour] of Object.entries(SLIDES)) {
     await run(`document.documentElement.style.setProperty('background', '${colour}', 'important')`)
     await sleep(150)
     const { result } = await send('Page.captureScreenshot', { format: 'png' })
-    const file = join(out, `overlay-${id}${style && style !== 'waveform' ? '-' + style : ''}-opacity40-${slide}.png`)
+    const file = join(out, `overlay-${id}-opacity40-${slide}.png`)
     writeFileSync(file, Buffer.from(result.data, 'base64'))
     written.push(file)
   }
@@ -834,16 +744,18 @@ for (const [id, style] of [['talking-points', null], ['timeline', 'waveform'], [
 
 }
 
-// The control panel: docked at the right edge, in each kind of run and with none.
+// The Look card (ADR 0051): with nothing running (the sample deck is on screen), during a run,
+// solid, light, and visible in screen shares. Over a slide-grey page, as it sits over the slides.
 if (wanted('panel')) {
-  await send('Emulation.setDeviceMetricsOverride', { width: 330, height: 860, deviceScaleFactor: 2, mobile: false })
-  for (const state of ['none', 'ready', 'running', 'paused', 'note']) {
+  await send('Emulation.setDeviceMetricsOverride', { width: 286, height: 500, deviceScaleFactor: 2, mobile: false })
+  for (const [name, params] of [['none', ''], ['running', 'state=running'], ['solid', 'state=running&solid=1'], ['light', 'state=running&panel=light'], ['shared', 'state=running&capture=0']]) {
     for (const scheme of SCHEMES) {
       await send('Emulation.setEmulatedMedia', { features: [{ name: 'prefers-color-scheme', value: scheme }] })
-      await send('Page.navigate', { url: `http://localhost:${port}/?window=control-panel${state === 'none' ? '' : '&state=' + state}` })
+      await send('Page.navigate', { url: `http://localhost:${port}/?window=control-panel${params ? '&' + params : ''}` })
       await sleep(1200)
+      await run(`document.documentElement.style.setProperty('background', '#8a8f98', 'important')`)
       const { result } = await send('Page.captureScreenshot', { format: 'png' })
-      const file = join(out, `panel-${state}-${scheme}.png`)
+      const file = join(out, `look-card-${name}-${scheme}.png`)
       writeFileSync(file, Buffer.from(result.data, 'base64'))
       written.push(file)
     }
