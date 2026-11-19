@@ -18,7 +18,7 @@ Oversay helps you deliver a talk or run a meeting on time. You plan a talk as a 
 
 - Slide authoring or controlling slide software.
 - Third-party plugins.
-- Multi-user collaboration or a hosted service.
+- Multi-user collaboration and shared decks. The one hosted part is an optional account that saves a person's own decks to the cloud (§14, ADR 0050); without it nothing leaves the computer.
 - Mobile.
 
 ## 2. Domain model
@@ -327,6 +327,10 @@ One overlay for every deck, with two views of the same run (ADR 0042): the **Car
 
 Every card as a rounded bar as wide as its time (the editor's plan bar, live): done cards faded, a playhead walking across the current one, and each card's title and start minute under its bar, never its points. The top row has the card's kind, name and the next card; its clock in a pill that fills as its time goes (amber in its last 10 seconds, red when over); and the time into the deck out of the whole. An untimed deck, or one with Timing off, has bars of equal width (Timing off keeps the planned widths), no minutes, a clock counting up and the card's position. It follows the deck's colour (by kind, or one colour), Dark or Light.
 
+### Saved to the cloud
+
+With an account and **Save decks to the cloud** on (§14), a deck's `deck.md` and `sessions.json` are also saved to the person's account, under its `id`; the folder stays the source of truth, and its `resources/`, `transcripts/` and `reviews/` stay on the computer (ADR 0050). Signed out, nothing about a deck leaves the computer.
+
 ### Sessions
 
 Every Start is a session: the time on each card is recorded, timed or not, over every visit and without pauses. Nothing about a run is written into the deck file: a deck's sessions are kept in `sessions.json` in its folder: the newest 20, plus any with a note, a transcript or a review (ADR 0036, ADR 0037, ADR 0041), so a rename or move of the folder, in Oversay or outside it, takes them along (a lone deck from before keeps them in `Decks/.sessions/<deck name>.json`). A preview is never recorded.
@@ -536,7 +540,42 @@ What might come after phase 1, and the ideas for later, are kept in the private 
 7. **Displays:** overlays remember their display; first open is on the built-in/primary display.
 8. **Driving a session:** the Timeline has Start, Pause, Next, Previous and End (ADR 0020), and the menu-bar/tray icon has the same in its menu. The Control Panel is a window docked at the right edge, never captured (ADR 0028), for how the overlays look and what is on screen.
 
+### Decided (2026-11-18)
+
+1. **An optional account saves decks to the cloud** (§14, ADR 0050, epic oversayapp/web-api#1). A deck's `deck.md` and `sessions.json` sync, and workspaces' `workspace.json`; audio never does, and transcripts, reviews and resources stay local.
+2. **Sign-in returns through `oversay://auth`**, not a loopback address: the one link that writes, refused unless Oversay started that sign-in (ADR 0032, ADR 0050).
+3. **No phase:** accounts are not tied to a phase.
+
 ### Open
 
 1. How the AI is hooked up for analysis and timing suggestions: for a session's review, the person's own agent through the Oversay skill (ADR 0041, §11); timing suggestions are still open.
 2. ~~Recording format and storage~~: decided by ADR 0041 (§11): audio lives with the session in the deck's folder until it is transcribed.
+
+## 14. Account and cloud decks
+
+ADR 0050; epic oversayapp/web-api#1. An account is optional. Without one, Oversay is as described everywhere else in this spec, makes no request to Oversay's API, and never prompts for an account.
+
+### What it does
+
+- **Settings › Account** has **Sign in** (which also creates an account). It opens the sign-in page in the system browser: **Continue with Google**, **Continue with Apple** and **Continue with Microsoft** first, then email and password (sign-up with email verification; a password of at least 12 characters). Oversay never sees a password. Signing in with a provider whose email matches an existing account reaches that same account and its decks. When it is done, the browser hands back to Oversay through `oversay://auth`, and Settings › Account shows the account's email. Oversay stays signed in after it is quit and reopened.
+- **Save decks to the cloud** (off until turned on): every deck uploads, then each edit, in the editor or by the AI skill writing `deck.md`, is saved within a few seconds. The status reads Saving, Saved or Offline.
+- **A second computer** signed in to the same account brings every deck down into its `Decks/` folder, where it opens and runs as normal. Each computer picks up the other's changes when it starts, when its window comes to the front, and on a timer.
+- **The same deck changed on both computers** while one was offline: both versions are kept, one as a conflict copy, and Oversay names the deck.
+- **A deck moved to the Trash** on one computer is removed from the cloud and from the other computer.
+- **Sign out** removes the stored tokens and stops syncing. Every local deck stays.
+- **Delete account** (asks first) removes the account and everything of its in the cloud. Local decks stay.
+
+### What is saved, and what is not
+
+| Saved to the account | Stays on the computer |
+| --- | --- |
+| Each deck's `deck.md` (with its `id`) and `sessions.json`, byte for byte, with a revision per write | Recordings and all audio |
+| Each workspace's `workspace.json` | A deck's `transcripts/`, `reviews/` and `resources/` |
+| The account's email (in Cognito) | Settings, `oversay-local.json`, templates |
+
+### Signing in safely
+
+- Authorization code flow with PKCE (RFC 8252) on Cognito's hosted page.
+- `oversay://auth` is accepted only for the sign-in Oversay itself started: its `state` must match the attempt in progress, which lasts a few minutes and is used once. Any other `oversay://auth` link is refused, nothing is stored and the manager says sign-in did not finish (ADR 0032's one link that writes).
+- The refresh token is kept only in the OS keychain (Keychain on a Mac, Credential Manager on Windows), never in a file or in settings.
+- On the server, every deck belongs to one account; asking for another account's deck is "not found".
