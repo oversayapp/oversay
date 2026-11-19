@@ -72,8 +72,7 @@
     talk: derived(session, (s) => s?.talk ?? null),
     now: readable(Date.parse(at)),
     session,
-    commands: { next: () => step(1), previous: () => step(-1), togglePause: () => {}, end: () => {}, advance: () => {}, lookBack: () => {} },
-    lookBack: readable(null),
+    commands: { next: () => step(1), previous: () => step(-1), togglePause: () => {}, end: () => {}, advance: () => {} },
     settings: overlaySettings,
   }
 </script>

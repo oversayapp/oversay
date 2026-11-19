@@ -3,16 +3,7 @@
   import { linkPermission, overlaySettings, settings, previewOverlayOpacity, setAppearance, setLinkPermission, setOverlayOpacity, setOverlaySetting } from '../lib/settings/store'
   import type { LinkPermission } from '../lib/links'
   import type { Appearance } from '../lib/settings/settings'
-  import {
-    STRIP_EDGE_OPTIONS,
-    BUTTON_OPTIONS,
-    TIMELINE_STYLE_OPTIONS,
-    PANEL_OPTIONS,
-    TEXT_SIZE_OPTIONS,
-    LAYOUT_OPTIONS,
-    minOpacity,
-    shownOpacity,
-  } from '../lib/settings/overlays'
+  import { MIN_OVERLAY_OPACITY, PANEL_OPTIONS } from '../lib/settings/overlays'
   import { attempt } from './errors'
   import DevTools from './DevTools.svelte'
   import ShortcutsSettings from './ShortcutsSettings.svelte'
@@ -235,39 +226,25 @@
 
   <section id="overlays">
     <h2 tabindex="-1">Overlays</h2>
-    <h3 id="style-label">Timeline style</h3>
-    {@render choice('timeline-style', 'style-label', TIMELINE_STYLE_OPTIONS, $overlaySettings.timelineStyle, (v) => setOverlaySetting('timelineStyle', v))}
-    <p class="muted hint">For a project's talks. A deck shows every card on the deck widget's Agenda view.</p>
-    <h3 id="buttons-label">Buttons</h3>
-    {@render choice('buttons', 'buttons-label', BUTTON_OPTIONS, $overlaySettings.buttons, (v) => setOverlaySetting('buttons', v))}
-    <p class="muted hint">Previous, Pause and Next on the overlay. An open overlay changes straight away.</p>
-    <!-- How solid every overlay's panels are (task 145); the overlays follow as the slider moves. -->
+    <!-- How solid the deck widget's panel is (task 145); it follows as the slider moves. Also on the Look card and in the menu (ADR 0051). -->
     <h3 id="opacity-label">Overlay opacity</h3>
     <div class="opacity-row">
       <input
         type="range"
-        min={minOpacity($overlaySettings)}
+        min={MIN_OVERLAY_OPACITY}
         max="100"
         step="1"
-        value={$overlaySettings.solid ? 100 : shownOpacity($overlaySettings)}
+        value={$overlaySettings.solid ? 100 : $overlaySettings.opacity}
         aria-labelledby="opacity-label"
         oninput={(e) => attempt(() => previewOverlayOpacity(Number(e.currentTarget.value)))}
         onchange={(e) => attempt(() => setOverlayOpacity(Number(e.currentTarget.value)))}
       />
-      <output class="num">{$overlaySettings.solid ? 'Solid' : `${shownOpacity($overlaySettings)}%`}</output>
+      <output class="num">{$overlaySettings.solid ? 'Solid' : `${$overlaySettings.opacity}%`}</output>
     </div>
-    <p class="muted hint">How much of your slide shows through the overlays, {minOpacity($overlaySettings)}% to 100%{$overlaySettings.timelineStyle === 'waveform' ? ' with the waveform' : ''}. Only the panels fade; the text stays solid. Overlays are hidden from screen sharing unless you choose otherwise, so this changes your view, not your audience’s.</p>
-    <!-- Talking Points' look, also on the Get ready page and the control panel. -->
+    <p class="muted hint">How much of your slide shows through the deck widget, {MIN_OVERLAY_OPACITY}% to 100%. Only the panel fades; the text stays solid. The deck widget is hidden from screen sharing unless you choose otherwise, so this changes your view, not your audience’s.</p>
     <h3 id="panel-label">Panel</h3>
     {@render choice('panel', 'panel-label', PANEL_OPTIONS, $overlaySettings.panel, (v) => setOverlaySetting('panel', v))}
-    <h3 id="text-size-label">Talking Points text</h3>
-    {@render choice('text-size', 'text-size-label', TEXT_SIZE_OPTIONS, $overlaySettings.textSize, (v) => setOverlaySetting('textSize', v))}
-    <h3 id="layout-label">Talking Points shows</h3>
-    {@render choice('layout', 'layout-label', LAYOUT_OPTIONS, $overlaySettings.layout, (v) => setOverlaySetting('layout', v))}
-    <p class="muted hint">Talking Points and the waveform each come dark or light; a light panel reads better over a dark slide. With the waveform, Talking Points takes its look too: white on black inside a white frame, or black on white. “Every part” lists the whole talk with the current part open.</p>
-    <h3 id="strip-edge-label">Edge strip sits against</h3>
-    {@render choice('strip-edge', 'strip-edge-label', STRIP_EDGE_OPTIONS, $overlaySettings.stripEdge, (v) => setOverlaySetting('stripEdge', v))}
-    <p class="muted hint">The edge strip always runs along the bottom of the screen; with a full-screen slideshow the Dock is hidden, so the edge of the screen is usually right.</p>
+    <p class="muted hint">Dark, or light for a dark slide.</p>
   </section>
 
   <section id="screen-sharing">
@@ -278,7 +255,7 @@
         checked={$hiddenFromCapture}
         onchange={(e) => attempt(() => setHiddenFromCapture(e.currentTarget.checked))}
       />
-      Hide overlays from screen sharing and recordings
+      Hide the deck widget from screen sharing and recordings
     </label>
   </section>
 

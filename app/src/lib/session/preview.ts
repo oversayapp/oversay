@@ -1,24 +1,14 @@
-// The control panel's preview (ADR 0028): with nothing running, a sample talk is put on screen
-// while the panel is open, so the Timeline style, panel, text size and opacity can be set and
-// seen before a meeting. It is never recorded, and ends when the panel closes.
+// The Look card's sample deck (ADR 0051): with nothing running, the "Why bees matter" example is
+// put on the deck widget while the card is open, so the opacity, panel and sharing can be set and
+// seen against a slide before a meeting. It is never recorded, and ends when the card closes.
 
+import bees from '../decks/examples/Why bees matter.md?raw'
+import { deckOptions, deckTalk, type DeckOptions } from '../decks/deck'
+import { parseNoteDoc } from '../notes/format'
 import type { Talk } from '../project/types'
 
-export const PREVIEW_TALK: Talk = {
-  id: 'preview',
-  name: 'Preview',
-  segments: [
-    { id: 's_prev1', name: 'Welcome', kind: 'intro', plannedSeconds: 120, openEnded: false, points: ['Who I am', 'What you will see'], hints: [] },
-    {
-      id: 's_prev2',
-      name: 'Traction',
-      kind: 'topic',
-      plannedSeconds: 300,
-      openEnded: false,
-      points: ['Signups up **32%** this quarter', 'Two new customers:\n- Acme\n- Globex', 'Retention at 91%'],
-      hints: [],
-    },
-    { id: 's_prev3', name: 'Questions', kind: 'outro', plannedSeconds: 180, openEnded: true, points: ['Anything unclear?'], hints: [] },
-  ],
-  sessions: [],
+/** The sample deck as the talk its preview session runs. */
+export function sampleDeckTalk(): Talk & { deck: DeckOptions } {
+  const doc = parseNoteDoc(bees)
+  return { ...deckTalk(doc, 'Why bees matter'), deck: deckOptions(doc) }
 }

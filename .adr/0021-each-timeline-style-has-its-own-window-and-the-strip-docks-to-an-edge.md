@@ -1,5 +1,5 @@
 ---
-status: accepted
+status: accepted; its edge strip is superseded by 0051 (the Timeline is gone; the deck widget's views keep a window each)
 date: 2026-10-12
 ---
 

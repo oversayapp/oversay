@@ -27,27 +27,17 @@ describe('plugin context', () => {
   })
 
   it('gives plugins the overlay settings, with the defaults until the manager sends them', () => {
-    expect(get(createPluginContext().settings)).toEqual({
-      timelineStyle: 'waveform',
-      buttons: 'always',
-      stripEdge: 'screen',
-      opacity: 75,
-      solid: false,
-      panel: 'dark',
-      textSize: 'm',
-      layout: 'topic',
-      deckView: 'card',
-    })
+    expect(get(createPluginContext().settings)).toEqual({ opacity: 75, solid: false, panel: 'dark', deckView: 'card' })
   })
 
   it('is ready as soon as the saved look arrives, with that look', async () => {
-    savedLook = { buttons: 'hidden', stripEdge: 'dock' }
+    savedLook = { panel: 'light', opacity: 60 }
     try {
       vi.useFakeTimers()
       const ctx = createPluginContext()
       await vi.advanceTimersByTimeAsync(1)
       await ctx.ready
-      expect(get(ctx.settings)).toMatchObject({ buttons: 'hidden', stripEdge: 'dock' })
+      expect(get(ctx.settings)).toMatchObject({ panel: 'light', opacity: 60 })
     } finally {
       savedLook = null
       vi.useRealTimers()

@@ -200,21 +200,15 @@ pub fn restart_now(app: &AppHandle) -> ! {
     tauri::process::restart(&app.env())
 }
 
-/// Sets the text beside the session's icon: in the menu bar on a Mac, and as the tooltip
-/// elsewhere (the Windows tray has no room for text). The tooltip is set on every platform.
-pub fn set_tray_text(tray: &tauri::tray::TrayIcon, text: &str) {
+/// Sets the text beside the icon in the menu bar on a Mac (`set_title` works there only); the
+/// Windows tray has no room for text, so the time goes in its tooltip (`tray::refresh`).
+pub fn set_tray_title(tray: &tauri::tray::TrayIcon, text: &str) {
     #[cfg(target_os = "macos")]
     if let Err(e) = tray.set_title(Some(text)) {
-        log::warn!("session icon title not set: {e}");
+        log::warn!("icon title not set: {e}");
     }
-    let tooltip = if text.is_empty() {
-        "Oversay".to_string()
-    } else {
-        format!("Oversay · {text}")
-    };
-    if let Err(e) = tray.set_tooltip(Some(tooltip)) {
-        log::warn!("session icon tooltip not set: {e}");
-    }
+    #[cfg(not(target_os = "macos"))]
+    let _ = (tray, text);
 }
 
 /// The session's icon: the one-colour app icon. On a Mac it is a template image, which
@@ -227,17 +221,6 @@ pub fn tray_icon() -> tauri::Result<tauri::image::Image<'static>> {
         return tauri::image::Image::from_bytes(include_bytes!("../icons/tray-white.png"));
     }
     tauri::image::Image::from_bytes(include_bytes!("../icons/tray-black.png"))
-}
-
-/// Sets the session's icon again on Windows, so it follows a change of taskbar theme since it was
-/// made. A Mac's template image follows the menu bar by itself.
-pub fn refresh_tray_icon(tray: &tauri::tray::TrayIcon) {
-    #[cfg(windows)]
-    if let Err(e) = tray_icon().and_then(|icon| tray.set_icon(Some(icon))) {
-        log::warn!("session icon not refreshed: {e}");
-    }
-    #[cfg(not(windows))]
-    let _ = tray;
 }
 
 /// Whether the taskbar is light: Settings › Personalisation › Colours › "Choose your default
@@ -280,7 +263,7 @@ pub fn move_to_trash(path: &std::path::Path) -> Result<(), trash::Error> {
     trash::delete(path)
 }
 
-/// The argument the taskbar button's "Control panel" task starts the app with (Windows).
+/// The argument the taskbar button's "Look panel" task starts the app with (Windows).
 pub const CONTROL_PANEL_ARG: &str = "--control-panel";
 
 /// `Oversay --check` prints to the terminal it was run from. A Windows release build is a GUI app
@@ -311,7 +294,7 @@ pub fn single_instance(builder: tauri::Builder<tauri::Wry>) -> tauri::Builder<ta
     builder
 }
 
-/// Puts "Control panel" in the taskbar button's right-click menu (its jump list, under Tasks) on
+/// Puts "Look panel" in the taskbar button's right-click menu (its jump list, under Tasks) on
 /// Windows (ADR 0028): a task that starts the app with `CONTROL_PANEL_ARG`. Elsewhere nothing.
 pub fn install_jump_list(app: &AppHandle) {
     #[cfg(windows)]
@@ -340,7 +323,7 @@ fn jump_list() -> windows::core::Result<()> {
 
     let exe = std::env::current_exe()
         .map_err(|_| windows::core::Error::from_hresult(windows::Win32::Foundation::E_FAIL))?;
-    let title = "Control panel";
+    let title = "Look panel";
     // SAFETY: COM calls on the main thread, where the webview has already initialised COM.
     unsafe {
         let list: ICustomDestinationList =
@@ -363,7 +346,7 @@ fn jump_list() -> windows::core::Result<()> {
     Ok(())
 }
 
-/// Puts "Control panel" in the Dock icon's right-click menu (ADR 0028), so the panel opens with
+/// Puts "Look panel" in the Dock icon's right-click menu (ADR 0028, ADR 0051), so the card opens with
 /// nothing running and without the menu bar. Tauri has no Dock menu, so the app delegate (tao's)
 /// gets `applicationDockMenu:` and the item's action added at run time. Elsewhere nothing: the
 /// taskbar button's menu is `windows_jump_list`.
@@ -405,7 +388,7 @@ mod dock {
 
     extern "C-unwind" fn toggle_panel(_this: *mut AnyObject, _cmd: Sel, _sender: *mut AnyObject) {
         if let Some(app) = APP.get() {
-            log::info!("Dock menu: control panel");
+            log::info!("Dock menu: Look panel");
             if let Err(e) = crate::session::act(app, crate::session::Action::TogglePanel) {
                 log::warn!("Dock menu: {e}");
             }
@@ -441,7 +424,7 @@ mod dock {
             );
 
             let menu: *mut AnyObject = msg_send![class!(NSMenu), new];
-            let title = NSString::from_str("Control panel");
+            let title = NSString::from_str("Look panel");
             let key = NSString::from_str("");
             let item: *mut AnyObject = msg_send![class!(NSMenuItem), alloc];
             let item: *mut AnyObject = msg_send![item, initWithTitle: &*title, action: sel!(oversayToggleControlPanel:), keyEquivalent: &*key];

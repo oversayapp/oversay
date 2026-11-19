@@ -27,8 +27,6 @@ export const flashcard: OverlayPlugin = {
   description: 'The deck on screen: the current card, or every card along the bottom.',
   window: deckWidgetWindow('card'),
   windowFor: (look) => deckWidgetWindow(look.deckView),
-  // Only a deck opens it (Show); a talk never does.
-  opensWith: () => false,
   mount: (target, ctx) => {
     const instance = mount(DeckWidget, { target, props: { ctx } })
     return () => void unmount(instance)

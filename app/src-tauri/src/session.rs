@@ -12,7 +12,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::collections::BTreeMap;
 use std::sync::Mutex;
-use tauri::{AppHandle, Emitter, Manager};
+use tauri::{AppHandle, Manager};
 
 use crate::state::StateHub;
 
@@ -81,12 +81,15 @@ pub struct Session {
     /// talk, and Pause/Resume (Space) starts it too; Next stops at the last card, which Stop (End)
     /// ends; closing its widget ends it. Not recorded into a project.
     pub deck: bool,
-    /// A sample talk on screen while the control panel is open with nothing running, so the look
-    /// can be set (ADR 0028). It starts at once, has no hotkeys or menu of its own, is never
-    /// recorded, and a real session or a note replaces it. With `deck` too it is the deck editor's
-    /// preview of a deck on screen: the same, but its own, and it follows the editor
-    /// (`preview_deck`) rather than the panel.
+    /// A deck on screen only to be looked at: the deck editor's preview (it follows the editor,
+    /// `preview_deck`), or the Look card's sample deck (`look_preview`). It starts at once, has no
+    /// hotkeys of its own, is never recorded, and a real deck replaces it.
     pub preview: bool,
+    /// The Look card's sample deck, on screen while the card is open with nothing running so the
+    /// look can be set against a slide (ADR 0051); it ends when the card closes. Not broadcast:
+    /// to the windows it is a preview like the editor's.
+    #[serde(skip)]
+    pub look_preview: bool,
 }
 
 impl Session {
@@ -103,6 +106,7 @@ impl Session {
             note: false,
             deck: false,
             preview: false,
+            look_preview: false,
         }
     }
 
@@ -245,6 +249,55 @@ pub fn holds_keys(app: &AppHandle) -> bool {
         .is_some_and(|s| s.status != Status::Finished && !s.preview)
 }
 
+/// What the menu shows as running, and the keys registered now (ADR 0051): an open deck's own
+/// (less any another app has), or with nothing running (or a preview) only the Look card's.
+pub fn menu_run(app: &AppHandle) -> (Option<crate::tray_menu::Run>, BTreeMap<String, String>) {
+    let engine = app.state::<Engine>();
+    let session = engine.session.lock().unwrap();
+    match session
+        .as_ref()
+        .filter(|s| s.status != Status::Finished && !s.preview)
+    {
+        Some(s) => {
+            let keys = s
+                .shortcuts
+                .iter()
+                .filter(|(action, _)| !s.unavailable.contains(action))
+                .map(|(a, k)| (a.clone(), k.clone()))
+                .collect();
+            (Some(run_of(s)), keys)
+        }
+        None => (None, crate::hotkeys::idle_keys()),
+    }
+}
+
+/// A session as the menu shows it.
+fn run_of(s: &Session) -> crate::tray_menu::Run {
+    let deck = s
+        .talk
+        .get("name")
+        .and_then(Value::as_str)
+        .unwrap_or("Deck")
+        .to_string();
+    match s.status {
+        Status::Ready => crate::tray_menu::Run::Ready {
+            deck,
+            cards: s.plan.len(),
+        },
+        Status::Running | Status::Finished => crate::tray_menu::Run::Running {
+            deck,
+            card: s.index,
+            cards: s.plan.len(),
+            title: s
+                .plan
+                .get(s.index)
+                .map(|p| p.name.clone())
+                .unwrap_or_default(),
+            paused: s.paused,
+        },
+    }
+}
+
 /// Over: no session, or a finished one. Hotkeys and overlays belong to a session that isn't.
 fn is_over(session: &Option<Session>) -> bool {
     session
@@ -273,6 +326,8 @@ impl Engine {
             hub.update(app, CHANNEL, |_| value);
             (!was_over && is_over(&session), was_preview)
         };
+        // The menu says what is running, and where (ADR 0051).
+        crate::tray::refresh(app);
         // The talk is over: its overlays go away (the manager shows the result) and its hotkeys
         // are released for other apps. In a task of its own, after the lock is released: when a
         // hotkey ended the session we are inside the shortcut plugin's handler, which holds the
@@ -295,9 +350,9 @@ impl Engine {
             return;
         }
         crate::overlay::hide_all(app);
-        // The icon and the control panel's hotkey stay for the panel (ADR 0028).
-        crate::tray::show_idle(app);
+        // The icon and the Look card's hotkey stay for the card (ADR 0028, ADR 0051).
         crate::hotkeys::register_idle(app);
+        crate::tray::refresh(app);
         if !preview {
             bring_back_manager(app);
         }
@@ -328,11 +383,8 @@ pub enum Action {
     /// Brings the main window back (the session icon's menu, or its hotkey); the session itself
     /// is untouched.
     ShowManager,
-    /// Switches the Timeline to its next style (the session icon's menu, or its hotkey). The
-    /// manager does it, because it owns the saved settings (`CYCLE_STYLE_EVENT`).
-    CycleStyle,
     /// Makes every overlay's panels more solid, or more see-through. The manager does it,
-    /// as for the style (`overlay::OPACITY_EVENT`).
+    /// because it owns the saved settings (`overlay::OPACITY_EVENT`).
     Darker,
     Lighter,
     /// Opens or closes the control panel (ADR 0028); the session is untouched.
@@ -367,11 +419,6 @@ pub fn act(app: &AppHandle, action: Action) -> Result<(), String> {
         });
         return Ok(());
     }
-    if matches!(action, Action::CycleStyle) {
-        return app
-            .emit_to(crate::MANAGER_LABEL, crate::overlay::CYCLE_STYLE_EVENT, ())
-            .map_err(|e| format!("Timeline style not changed: {e}"));
-    }
     if let Some(change) = action.opacity_change() {
         return crate::overlay::change_opacity(app, change);
     }
@@ -384,11 +431,7 @@ pub fn act(app: &AppHandle, action: Action) -> Result<(), String> {
             Action::Previous => s.previous(&at),
             Action::TogglePause => s.toggle_pause(&at),
             Action::End => s.end(&at),
-            Action::ShowManager
-            | Action::CycleStyle
-            | Action::Darker
-            | Action::Lighter
-            | Action::TogglePanel => false,
+            Action::ShowManager | Action::Darker | Action::Lighter | Action::TogglePanel => false,
         }))
     })
 }
@@ -417,7 +460,7 @@ fn ends_with(session: &Session, label: &str) -> bool {
 /// The flashcard widget's window (`overlay-` and the plugin id in src/plugins/flashcard).
 const FLASHCARD_LABEL: &str = "overlay-flashcard";
 
-/// Ends the control panel's preview, if it is showing: the panel has closed (ADR 0028).
+/// Ends the Look card's sample deck, if it is showing: the card has closed (ADR 0051).
 pub fn end_preview(app: &AppHandle) {
     let preview = app
         .state::<Engine>()
@@ -425,7 +468,7 @@ pub fn end_preview(app: &AppHandle) {
         .lock()
         .unwrap()
         .as_ref()
-        .is_some_and(|s| s.preview && !s.deck && s.status != Status::Finished);
+        .is_some_and(|s| s.look_preview && s.status != Status::Finished);
     if preview && let Err(e) = act(app, Action::End) {
         log::warn!("preview not ended: {e}");
     }
@@ -446,12 +489,12 @@ pub async fn session_open(
     shortcuts: BTreeMap<String, String>,
     mode: Option<String>,
 ) -> Result<(), String> {
-    // `talk` (or none), `note`, `deck`, `preview` or `deck-preview`: the same names as
-    // `SessionMode` in src/lib/session/store.ts.
+    // `talk` (or none), `note`, `deck`, `preview` (the Look card's sample deck) or `deck-preview`
+    // (the deck editor's): the same names as `SessionMode` in src/lib/session/store.ts.
     let note = mode.as_deref() == Some("note");
-    let deck_preview = mode.as_deref() == Some("deck-preview");
-    let preview = mode.as_deref() == Some("preview") || deck_preview;
-    let deck = mode.as_deref() == Some("deck") || deck_preview;
+    let look_preview = mode.as_deref() == Some("preview");
+    let preview = look_preview || mode.as_deref() == Some("deck-preview");
+    let deck = preview || mode.as_deref() == Some("deck");
     // A preview gives way to anything, and opens only when nothing else is open.
     let running = |s: &Option<Session>| {
         s.as_ref().is_some_and(|s| {
@@ -463,10 +506,10 @@ pub async fn session_open(
         })
     };
     const REFUSED: &str = "A session is already running. End it first.";
-    // The preview is the open panel's: none once it has closed (it may close while the panel's
+    // The sample deck is the open card's: none once it has closed (it may close while the card's
     // page is still asking for one).
-    if preview && !deck_preview && !crate::control_panel::is_open(&app) {
-        return Err("The control panel is closed.".into());
+    if look_preview && !crate::control_panel::is_open(&app) {
+        return Err("The Look card is closed.".into());
     }
     let _windows = engine.windows.lock().unwrap();
     let replacing_preview = {
@@ -483,13 +526,11 @@ pub async fn session_open(
         crate::overlay::hide_all(&app);
     }
     // Registered before taking the session lock: registering needs the main thread (see `apply`).
-    // A preview keeps the idle key and menu: it is only the panel's.
+    // A preview keeps the idle key and menu: it is only looked at.
     let unavailable = if preview {
         vec![]
     } else {
-        let unavailable = crate::hotkeys::register(&app, &shortcuts);
-        crate::tray::show_tray(&app, &shortcuts, &unavailable);
-        unavailable
+        crate::hotkeys::register(&app, &shortcuts)
     };
     engine.apply(&app, &hub, |session| {
         // Started (by a hotkey) while the new one's hotkeys were being registered.
@@ -506,6 +547,7 @@ pub async fn session_open(
         if note || preview {
             opened.note = note;
             opened.preview = preview;
+            opened.look_preview = look_preview;
             opened.next(&now());
         }
         *session = Some(opened);

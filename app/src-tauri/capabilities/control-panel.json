@@ -1,7 +1,7 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "control-panel",
-  "description": "Permissions for the control panel window (ADR 0028)",
+  "description": "Permissions for the Look card window (ADR 0028, ADR 0051)",
   "windows": [
     "control-panel"
   ],
@@ -9,6 +9,7 @@
     "core:default",
     "allow-close-overlay",
     "allow-control-panel-close",
+    "allow-control-panel-fit",
     "allow-control-panel-look",
     "allow-control-panel-show-manager",
     "allow-control-panel-toggle",

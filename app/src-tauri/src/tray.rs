@@ -1,107 +1,345 @@
-//! The session's icon in the menu bar (Mac) or tray (Windows), which exists for the whole
-//! session: its menu drives the session when every overlay is hidden and another app has focus,
-//! and the manager sets the text beside it from the clock. (It was the Control Panel's home
-//! until the panel was removed in epic 012: the Timeline has Start, Pause, Next and End.)
+//! The Oversay icon in the menu bar (Mac) or the tray (Windows), for the life of the app, and
+//! its menu: Menu 1, the flat menu (ADR 0051), drawn from `tray_menu`. The menu drives the run
+//! when every window is hidden and another app has focus; each item shows its key.
+//!
+//! The menu, icon and tooltip are rebuilt from what is true now (`refresh`) whenever the run,
+//! the look, the sharing setting, the Look card or the pinned decks change. On a Mac the card's
+//! time left is the text beside the icon; Windows has none, so it goes in the tooltip, and the
+//! icon gets a dot while a deck runs. Both get an amber dot while the deck widget is visible in
+//! screen shares.
 
-use std::collections::BTreeMap;
-use tauri::menu::{Menu, MenuItem, PredefinedMenuItem};
-use tauri::tray::TrayIconBuilder;
-use tauri::{AppHandle, Manager, Wry};
+use std::sync::Mutex;
+use tauri::menu::{
+    CheckMenuItem, IsMenuItem, Menu, MenuItem, MenuItemKind, PredefinedMenuItem, Submenu,
+};
+use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
+use tauri::{AppHandle, Emitter, Manager, Wry};
 
-use crate::hotkeys;
+use crate::tray_menu::{self, Choice, Entry, Look, Marks, MenuState, PinnedDeck};
 
 const TRAY_ID: &str = "session";
 
-/// Puts the session's icon in the menu bar (Mac) or tray (Windows), with its menu. The menu
-/// shows each item's hotkey (`shortcuts`, action → accelerator) unless it is `unavailable`.
-pub fn show_tray(app: &AppHandle, shortcuts: &BTreeMap<String, String>, unavailable: &[String]) {
+/// Sent to the manager when a menu item needs it: `{ kind: "settings" | "library" | "deck", id? }`.
+/// Same name as `TRAY_EVENT` in src/lib/session/tray.ts.
+pub const TRAY_EVENT: &str = "tray-choice";
+
+/// The pinned decks, newest pin first, as the manager last sent them (`set_tray_decks`).
+static PINNED: Mutex<Vec<PinnedDeck>> = Mutex::new(Vec::new());
+/// The card's time as the manager last set it (`set_tray_title`).
+static TITLE: Mutex<String> = Mutex::new(String::new());
+/// What the menu, icon and tooltip were last built from: nothing is rebuilt when nothing changed
+/// (the opacity slider changes the look many times a second).
+static SHOWN: Mutex<Option<Shown>> = Mutex::new(None);
+
+#[derive(Clone, PartialEq)]
+struct Shown {
+    menu: Vec<Entry>,
+    marks: Marks,
+    dark: bool,
+    tooltip: String,
+}
+
+/// Everything the menu shows, read now.
+fn state(app: &AppHandle) -> MenuState {
+    let hub = app.state::<crate::state::StateHub>();
+    let (run, keys) = crate::session::menu_run(app);
+    MenuState {
+        run,
+        look: hub
+            .get(crate::overlay::SETTINGS_CHANNEL)
+            .map_or_else(Look::default, |v| Look::from_settings(&v.value)),
+        hidden: crate::overlay::hidden_from_capture(&hub),
+        panel_open: crate::control_panel::is_open(app),
+        pinned: PINNED.lock().unwrap().clone(),
+        keys,
+    }
+}
+
+/// Rebuilds the menu, icon and tooltip from what is true now, on the main thread (status items
+/// belong to it). Puts the icon up the first time.
+pub fn refresh(app: &AppHandle) {
     let handle = app.clone();
-    let keys = menu_shortcuts(shortcuts, unavailable);
-    // Status items belong to the main thread.
     let _ = app.run_on_main_thread(move || {
-        let result = match handle.tray_by_id(TRAY_ID) {
-            // Opened again while ready: the same icon, with this session's keys.
-            Some(tray) => {
-                crate::platform::refresh_tray_icon(&tray);
-                build_menu(&handle, &keys).and_then(|menu| tray.set_menu(Some(menu)))
-            }
-            None => build_tray(&handle, &keys),
+        let s = state(&handle);
+        let shown = Shown {
+            menu: tray_menu::menu(&s),
+            marks: tray_menu::marks(s.run.as_ref(), s.hidden, cfg!(windows)),
+            dark: menu_bar_is_dark(&handle),
+            tooltip: tray_menu::tooltip(s.run.as_ref(), &TITLE.lock().unwrap(), s.hidden),
         };
-        if let Err(e) = result {
-            log::warn!("session icon not shown: {e}");
+        let mut last = SHOWN.lock().unwrap();
+        if last.as_ref() == Some(&shown) && handle.tray_by_id(TRAY_ID).is_some() {
+            return;
+        }
+        match show(&handle, last.as_ref(), &shown) {
+            Ok(()) => *last = Some(shown),
+            Err(e) => log::warn!("menu-bar icon not shown: {e}"),
         }
     });
 }
 
-/// The hotkeys the menu shows: the session's registered ones.
-fn menu_shortcuts(
-    shortcuts: &BTreeMap<String, String>,
-    unavailable: &[String],
-) -> BTreeMap<String, String> {
-    shortcuts
-        .iter()
-        .filter(|(action, _)| !unavailable.contains(action))
-        .map(|(a, k)| (a.clone(), k.clone()))
-        .collect()
-}
-
-fn build_menu(app: &AppHandle, keys: &BTreeMap<String, String>) -> tauri::Result<Menu<Wry>> {
-    // Ids are the hotkey action names (hotkeys::ACTIONS), so both do the same thing, and the
-    // item shows that hotkey. Shown only: the hotkey itself is registered globally.
-    let item = |id: &str, text: &str| {
-        let key = keys.get(id).map(String::as_str);
-        MenuItem::with_id(app, id, text, true, key).or_else(|e| {
-            log::warn!("menu {id}: shortcut {key:?} not shown: {e}");
-            MenuItem::with_id(app, id, text, true, None::<&str>)
-        })
+/// Puts `shown` on the icon, changing only what differs from `before`.
+fn show(app: &AppHandle, before: Option<&Shown>, shown: &Shown) -> tauri::Result<()> {
+    let tray = match app.tray_by_id(TRAY_ID) {
+        Some(tray) => tray,
+        None => build(app)?,
     };
-    Menu::with_items(
-        app,
-        &[
-            // Starting a session puts the main window away (ADR 0018); this brings it back,
-            // for changing a setting (the Timeline's style, say) in the middle of a run.
-            // The control panel first: the look and the run in one place (ADR 0028).
-            &item("panel", "Control panel")?,
-            &item("show", "Open Oversay window")?,
-            &item("style", "Next Timeline style")?,
-            &PredefinedMenuItem::separator(app)?,
-            &item("next", "Start / Next")?,
-            &item("previous", "Previous")?,
-            &item("pause", "Pause / Resume")?,
-            &PredefinedMenuItem::separator(app)?,
-            &item("end", "End session")?,
-        ],
-    )
+    if before.is_none_or(|b| b.menu != shown.menu) {
+        tray.set_menu(Some(build_menu(app, &shown.menu)?))?;
+        log::debug!(
+            "tray.menu_built items={} check=control-panel-v2",
+            shown.menu.len()
+        );
+    }
+    if before.is_none_or(|b| b.marks != shown.marks || b.dark != shown.dark) {
+        set_icon(&tray, shown.marks, shown.dark);
+        log::debug!(
+            "tray.icon_marks running={} shared={} check=control-panel-v2",
+            shown.marks.running,
+            shown.marks.shared
+        );
+    }
+    if before.is_none_or(|b| b.tooltip != shown.tooltip) {
+        tray.set_tooltip(Some(&shown.tooltip))?;
+    }
+    Ok(())
 }
 
-fn build_tray(app: &AppHandle, keys: &BTreeMap<String, String>) -> tauri::Result<()> {
-    build_menu_tray(app, build_menu(app, keys))
-}
-
-fn build_menu_tray(app: &AppHandle, menu: tauri::Result<Menu<Wry>>) -> tauri::Result<()> {
-    let menu = menu?;
-    let mut tray = TrayIconBuilder::with_id(TRAY_ID)
+/// Makes the icon. A Mac menu-bar item opens its menu on any click, as Mac users expect; on
+/// Windows a left-click opens or closes the Look card and the menu is a right-click.
+fn build(app: &AppHandle) -> tauri::Result<tauri::tray::TrayIcon> {
+    let menu = Menu::new(app)?;
+    let tray = TrayIconBuilder::with_id(TRAY_ID)
         .menu(&menu)
-        .tooltip("Oversay session")
-        .on_menu_event(|app, event| {
-            if let Some(action) = hotkeys::action_for(event.id().as_ref()) {
-                log::info!("menu {action:?}");
-                if let Err(e) = crate::session::act(app, action) {
-                    log::warn!("menu {action:?}: {e}");
-                }
+        .tooltip("Oversay")
+        .show_menu_on_left_click(!cfg!(windows))
+        .on_menu_event(|app, event| chosen(app, event.id().as_ref()))
+        .on_tray_icon_event(|tray, event| {
+            if cfg!(windows)
+                && let TrayIconEvent::Click {
+                    button: MouseButton::Left,
+                    button_state: MouseButtonState::Up,
+                    ..
+                } = event
+            {
+                log::info!("action: tray left-click, Look card");
+                let _ = crate::session::act(tray.app_handle(), crate::session::Action::TogglePanel);
+            }
+        })
+        .build(app)?;
+    Ok(tray)
+}
+
+/// Turns the model into the native menu: check items for every tick (Tauri has no radio items).
+fn build_menu(app: &AppHandle, entries: &[Entry]) -> tauri::Result<Menu<Wry>> {
+    let items = build_items(app, entries)?;
+    let refs: Vec<&dyn IsMenuItem<Wry>> = items.iter().map(|i| i as &dyn IsMenuItem<Wry>).collect();
+    Menu::with_items(app, &refs)
+}
+
+fn build_items(app: &AppHandle, entries: &[Entry]) -> tauri::Result<Vec<MenuItemKind<Wry>>> {
+    let mut items = vec![];
+    for (n, entry) in entries.iter().enumerate() {
+        items.push(match entry {
+            Entry::Separator => MenuItemKind::Predefined(PredefinedMenuItem::separator(app)?),
+            Entry::Status(text) => MenuItemKind::MenuItem(MenuItem::with_id(
+                app,
+                format!("status{n}"),
+                text,
+                false,
+                None::<&str>,
+            )?),
+            Entry::Item {
+                id,
+                label,
+                key,
+                enabled,
+            } => MenuItemKind::MenuItem(
+                MenuItem::with_id(app, id, label, *enabled, key.as_deref()).or_else(|e| {
+                    // A key the menu can't show (one muda doesn't know) is left off; the hotkey still works.
+                    log::warn!("menu {id}: key {key:?} not shown: {e}");
+                    MenuItem::with_id(app, id, label, *enabled, None::<&str>)
+                })?,
+            ),
+            Entry::Check {
+                id,
+                label,
+                key,
+                checked,
+                enabled,
+            } => MenuItemKind::Check(
+                CheckMenuItem::with_id(app, id, label, *enabled, *checked, key.as_deref())
+                    .or_else(|e| {
+                        log::warn!("menu {id}: key {key:?} not shown: {e}");
+                        CheckMenuItem::with_id(app, id, label, *enabled, *checked, None::<&str>)
+                    })?,
+            ),
+            Entry::Submenu { label, entries } => {
+                let inner = build_items(app, entries)?;
+                let refs: Vec<&dyn IsMenuItem<Wry>> =
+                    inner.iter().map(|i| i as &dyn IsMenuItem<Wry>).collect();
+                MenuItemKind::Submenu(Submenu::with_items(app, label, true, &refs)?)
             }
         });
-    match crate::platform::tray_icon() {
-        Ok(icon) => tray = tray.icon(icon).icon_as_template(true),
-        Err(e) => {
-            log::warn!("one-colour icon not loaded: {e}");
-            if let Some(icon) = app.default_window_icon() {
-                tray = tray.icon(icon.clone());
+    }
+    Ok(items)
+}
+
+/// A menu item was chosen.
+fn chosen(app: &AppHandle, id: &str) {
+    let Some(choice) = tray_menu::choice(id) else {
+        return;
+    };
+    log::info!("action: menu {id}");
+    log::debug!("tray.chosen id={id} check=control-panel-v2");
+    let done = match choice {
+        Choice::Action(name) => match crate::hotkeys::action_for(name) {
+            Some(action) => crate::session::act(app, action),
+            None => Ok(()),
+        },
+        Choice::Opacity(p) => look_change(app, "opacity", serde_json::json!(p)),
+        Choice::SeeThrough => crate::overlay::change_opacity(app, "see-through"),
+        Choice::Solid => crate::overlay::change_opacity(app, "solid"),
+        Choice::Panel { light } => look_change(
+            app,
+            "panel",
+            serde_json::json!(if light { "light" } else { "dark" }),
+        ),
+        Choice::ToggleHidden => {
+            let hidden =
+                crate::overlay::hidden_from_capture(&app.state::<crate::state::StateHub>());
+            crate::overlay::hide_from_capture(app, !hidden)
+        }
+        Choice::ShowDeck(id) => to_manager(app, serde_json::json!({ "kind": "deck", "id": id })),
+        Choice::Library => to_manager(app, serde_json::json!({ "kind": "library" })),
+        Choice::Settings => to_manager(app, serde_json::json!({ "kind": "settings" })),
+        Choice::Quit => {
+            quit(app);
+            Ok(())
+        }
+    };
+    if let Err(e) = done {
+        log::warn!("menu {id}: {e}");
+    }
+    // A check item ticks or unticks itself when clicked: the menu is drawn again from what is
+    // true, even when nothing changed (Solid chosen while solid).
+    SHOWN.lock().unwrap().take();
+    refresh(app);
+}
+
+/// A change to the look: the manager owns the saved settings, as for the Look card.
+fn look_change(app: &AppHandle, key: &str, value: serde_json::Value) -> Result<(), String> {
+    app.emit_to(
+        crate::MANAGER_LABEL,
+        crate::control_panel::LOOK_EVENT,
+        serde_json::json!({ "key": key, "value": value }),
+    )
+    .map_err(|e| e.to_string())
+}
+
+/// Something only the main window can do: it comes forward and does it.
+fn to_manager(app: &AppHandle, choice: serde_json::Value) -> Result<(), String> {
+    show_manager(app);
+    app.emit_to(crate::MANAGER_LABEL, TRAY_EVENT, choice)
+        .map_err(|e| e.to_string())
+}
+
+/// Quits; while a deck runs, asks first (the design's Decide screen).
+fn quit(app: &AppHandle) {
+    let running = crate::session::menu_run(app).0.is_some();
+    if !running {
+        crate::platform::exit_now(app);
+    }
+    use tauri_plugin_dialog::{DialogExt, MessageDialogButtons, MessageDialogKind};
+    let handle = app.clone();
+    app.dialog()
+        .message("A deck is running. Quitting stops it.")
+        .title("Quit Oversay?")
+        .kind(MessageDialogKind::Warning)
+        .buttons(MessageDialogButtons::OkCancelCustom(
+            "Quit".into(),
+            "Cancel".into(),
+        ))
+        .show(move |quit| {
+            if quit {
+                crate::platform::exit_now(&handle);
+            }
+        });
+}
+
+/// The amber of the shared dot and the blue of the running dot (the design's colours).
+const AMBER: [u8; 3] = [0xf0, 0xa0, 0x20];
+const BLUE: [u8; 3] = [0x2b, 0x6b, 0xe4];
+
+/// Paints the marks onto an icon's RGBA pixels: the shared dot top right, the running dot bottom
+/// right, each with a clear ring so it reads on any bar. With `white`, the glyph is made white
+/// (a coloured icon on a dark Mac menu bar can't be a template image, which macOS would recolour).
+pub fn paint(rgba: &mut [u8], width: u32, height: u32, marks: Marks, white: bool) {
+    let (w, h) = (width as f64, height as f64);
+    let r = (w.min(h) * 0.15).max(2.0);
+    let dots: Vec<((f64, f64), [u8; 3])> = [
+        (marks.shared, (w - r - 1.0, r + 1.0), AMBER),
+        (marks.running, (w - r - 1.0, h - r - 1.0), BLUE),
+    ]
+    .into_iter()
+    .filter(|(on, _, _)| *on)
+    .map(|(_, at, colour)| (at, colour))
+    .collect();
+    for y in 0..height {
+        for x in 0..width {
+            let i = ((y * width + x) * 4) as usize;
+            let (px, py) = (x as f64 + 0.5, y as f64 + 0.5);
+            if white && rgba[i + 3] > 0 {
+                rgba[i..i + 3].copy_from_slice(&[255, 255, 255]);
+            }
+            for ((cx, cy), colour) in &dots {
+                let d = ((px - cx).powi(2) + (py - cy).powi(2)).sqrt();
+                if d <= r {
+                    rgba[i..i + 3].copy_from_slice(colour);
+                    rgba[i + 3] = 255;
+                } else if d <= r + 1.5 {
+                    rgba[i + 3] = 0;
+                }
             }
         }
     }
-    tray.build(app)?;
-    Ok(())
+}
+
+/// The icon with its marks. Plain, a Mac's is a template image macOS colours for the menu bar;
+/// with a dot it is drawn in colour, its glyph white on a dark menu bar.
+fn set_icon(tray: &tauri::tray::TrayIcon, marks: Marks, dark: bool) {
+    let base = match crate::platform::tray_icon() {
+        Ok(icon) => icon,
+        Err(e) => {
+            log::warn!("one-colour icon not loaded: {e}");
+            return;
+        }
+    };
+    let plain = marks == Marks::default();
+    let icon = if plain {
+        base
+    } else {
+        let mut rgba = base.rgba().to_vec();
+        paint(
+            &mut rgba,
+            base.width(),
+            base.height(),
+            marks,
+            cfg!(target_os = "macos") && dark,
+        );
+        tauri::image::Image::new_owned(rgba, base.width(), base.height())
+    };
+    if let Err(e) = tray.set_icon(Some(icon)) {
+        log::warn!("icon not set: {e}");
+    }
+    let _ = tray.set_icon_as_template(plain);
+}
+
+/// Whether the menu bar is dark: it follows the system's appearance, as the main window does.
+fn menu_bar_is_dark(app: &AppHandle) -> bool {
+    app.get_webview_window(crate::MANAGER_LABEL)
+        .and_then(|w| w.theme().ok())
+        .is_some_and(|t| t == tauri::Theme::Dark)
 }
 
 /// Brings the main window back, large, from minimised or hidden; the user can minimise it again.
@@ -119,65 +357,91 @@ pub fn show_manager(app: &AppHandle) {
     }
 }
 
-/// The icon with nothing running (ADR 0028): no time beside it, and a menu to open the control
-/// panel or the main window. It stays for the life of the app.
-pub fn show_idle(app: &AppHandle) {
-    let handle = app.clone();
-    let keys: BTreeMap<String, String> = crate::hotkeys::panel_key()
-        .map(|k| BTreeMap::from([("panel".to_string(), k)]))
-        .unwrap_or_default();
-    let _ = app.run_on_main_thread(move || {
-        let result = match handle.tray_by_id(TRAY_ID) {
-            Some(tray) => build_idle_menu(&handle, &keys).and_then(|menu| {
-                crate::platform::refresh_tray_icon(&tray);
-                crate::platform::set_tray_text(&tray, "");
-                tray.set_menu(Some(menu))
-            }),
-            None => build_menu_tray(&handle, build_idle_menu(&handle, &keys)),
-        };
-        if let Err(e) = result {
-            log::warn!("icon not shown: {e}");
-        }
-    });
-}
-
-fn build_idle_menu(app: &AppHandle, keys: &BTreeMap<String, String>) -> tauri::Result<Menu<Wry>> {
-    let panel_key = keys.get("panel").map(String::as_str);
-    let panel = MenuItem::with_id(app, "panel", "Control panel", true, panel_key)
-        .or_else(|_| MenuItem::with_id(app, "panel", "Control panel", true, None::<&str>))?;
-    Menu::with_items(
-        app,
-        &[
-            &panel,
-            &MenuItem::with_id(app, "show", "Open Oversay window", true, None::<&str>)?,
-        ],
-    )
-}
-
-/// The text beside the session icon (`platform::set_tray_text`).
-/// The manager sets it every second from the session's clock.
+/// The text beside the icon on a Mac, and the time in its tooltip on Windows: the card's time
+/// left, Ready or Paused. The manager sets it every second from the run's clock.
 #[tauri::command]
 pub async fn set_tray_title(app: AppHandle, title: String) -> Result<(), String> {
+    *TITLE.lock().unwrap() = title.clone();
     let handle = app.clone();
     app.run_on_main_thread(move || {
         if let Some(tray) = handle.tray_by_id(TRAY_ID) {
-            crate::platform::set_tray_text(&tray, &title);
+            crate::platform::set_tray_title(&tray, &title);
         }
     })
-    .map_err(|e| e.to_string())
+    .map_err(|e| e.to_string())?;
+    refresh(&app);
+    Ok(())
+}
+
+/// The pinned decks for Show a deck ▸, newest pin first; the manager sends them when they change.
+#[tauri::command]
+pub async fn set_tray_decks(app: AppHandle, decks: Vec<PinnedDeck>) -> Result<(), String> {
+    *PINNED.lock().unwrap() = decks;
+    refresh(&app);
+    Ok(())
 }
 
 #[cfg(test)]
 mod tests {
-    use std::collections::BTreeMap;
+    use super::*;
+
+    fn icon() -> Vec<u8> {
+        // A 20 × 20 black glyph filling the icon.
+        [0u8, 0, 0, 255].repeat(400)
+    }
+
+    fn pixel(rgba: &[u8], x: u32, y: u32) -> [u8; 4] {
+        let i = ((y * 20 + x) * 4) as usize;
+        rgba[i..i + 4].try_into().unwrap()
+    }
 
     #[test]
-    fn the_menu_shows_only_registered_shortcuts() {
-        let shortcuts = BTreeMap::from([
-            ("next".to_string(), "Control+Alt+ArrowRight".to_string()),
-            ("end".to_string(), "Control+Alt+KeyE".to_string()),
-        ]);
-        let shown = super::menu_shortcuts(&shortcuts, &["end".to_string()]);
-        assert_eq!(shown.keys().collect::<Vec<_>>(), ["next"]);
+    fn a_plain_icon_is_left_alone() {
+        let mut rgba = icon();
+        paint(&mut rgba, 20, 20, Marks::default(), false);
+        assert_eq!(rgba, icon());
+    }
+
+    #[test]
+    fn the_shared_dot_is_amber_top_right_and_the_running_dot_blue_bottom_right() {
+        let mut rgba = icon();
+        paint(
+            &mut rgba,
+            20,
+            20,
+            Marks {
+                running: true,
+                shared: true,
+            },
+            false,
+        );
+        assert_eq!(pixel(&rgba, 16, 3), [0xf0, 0xa0, 0x20, 255]);
+        assert_eq!(pixel(&rgba, 16, 16), [0x2b, 0x6b, 0xe4, 255]);
+        // The glyph elsewhere is untouched, and each dot has a clear ring.
+        assert_eq!(pixel(&rgba, 3, 10), [0, 0, 0, 255]);
+        assert_eq!(pixel(&rgba, 12, 3)[3], 0);
+    }
+
+    #[test]
+    fn on_a_dark_menu_bar_the_glyph_is_white() {
+        let mut rgba = icon();
+        paint(
+            &mut rgba,
+            20,
+            20,
+            Marks {
+                running: false,
+                shared: true,
+            },
+            true,
+        );
+        assert_eq!(pixel(&rgba, 3, 10), [255, 255, 255, 255]);
+        assert_eq!(pixel(&rgba, 16, 3), [0xf0, 0xa0, 0x20, 255]);
+    }
+
+    #[test]
+    fn names_match_the_frontend() {
+        // Same name as TRAY_EVENT in src/lib/session/tray.ts (tested there too).
+        assert_eq!(TRAY_EVENT, "tray-choice");
     }
 }

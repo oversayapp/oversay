@@ -1,5 +1,5 @@
 ---
-status: accepted
+status: accepted; its keeping of the Timeline plugin is superseded by 0051
 date: 2026-11-07
 ---
 

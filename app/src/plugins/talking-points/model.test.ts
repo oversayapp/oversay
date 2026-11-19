@@ -32,7 +32,7 @@ const base: SessionState = {
 
 describe('talkingPointsModel', () => {
   it('shows nothing without a session', () => {
-    expect(talkingPointsModel(null)).toEqual({ status: 'none', talkName: null, segment: null, position: 0, count: 0, looking: false })
+    expect(talkingPointsModel(null)).toEqual({ status: 'none', talkName: null, segment: null, position: 0, count: 0 })
   })
 
   it('shows the first segment before the start', () => {
@@ -59,27 +59,5 @@ describe('talkingPointsModel', () => {
 
   it('still names a segment whose talk is gone', () => {
     expect(talkingPointsModel({ ...base, talk: null }).segment).toEqual({ name: 'Intro', points: [], hints: [] })
-  })
-})
-
-describe('looking back along the wave', () => {
-  const running = { ...base, index: 2 }
-
-  it('shows the segment looked at, marked as looking', () => {
-    const m = talkingPointsModel(running, { index: 0, seconds: 60 })
-    expect(m.looking).toBe(true)
-    expect(m.position).toBe(1)
-    expect(m.segment).toEqual({ name: 'Intro', points: ['Why now', 'The plan'], hints: ['Under two minutes'] })
-  })
-
-  it('shows a finished talk’s segments too, and nothing before the start', () => {
-    expect(talkingPointsModel({ ...running, status: 'finished' }, { index: 1, seconds: 200 }).segment?.name).toBe('Topic')
-    expect(talkingPointsModel({ ...base, status: 'ready', events: [] }, { index: 1, seconds: 200 }).looking).toBe(false)
-  })
-
-  it('goes back to the current segment when let go', () => {
-    const m = talkingPointsModel(running, null)
-    expect(m.looking).toBe(false)
-    expect(m.segment?.name).toBe('Demo')
   })
 })

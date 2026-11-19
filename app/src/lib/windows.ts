@@ -2,15 +2,15 @@ import { invoke } from '@tauri-apps/api/core'
 import { channel } from './channel'
 import { logAction } from './log'
 
-/** The control panel's window (ADR 0028). Same as `LABEL` in src-tauri/src/control_panel.rs. */
+/** The Look card's window (ADR 0051; it was the Control Panel's, ADR 0028). Same as `LABEL` in src-tauri/src/control_panel.rs. */
 export const CONTROL_PANEL_LABEL = 'control-panel'
 
-/** Sent to every window when the control panel opens (true) or closes (false). Same as `OPEN_EVENT` in control_panel.rs. */
+/** Sent to every window when the Look card opens (true) or closes (false). Same as `OPEN_EVENT` in control_panel.rs. */
 export const CONTROL_PANEL_OPEN_EVENT = 'control-panel-open'
 
-/** Opens the control panel, or closes it when it is open. */
+/** Opens the Look card, or closes it when it is open. */
 export function toggleControlPanel(): Promise<void> {
-  logAction('control panel')
+  logAction('look card')
   return invoke('control_panel_toggle')
 }
 
@@ -39,14 +39,12 @@ export interface OverlayWindowSize {
   minWidth?: number
   minHeight?: number
   /** Where it opens when it has no remembered place (`Place` in src-tauri/src/overlay.rs); the middle when missing. */
-  place?: 'centre' | 'bottom-centre' | 'bottom-right' | 'top-right' | 'top-left' | 'upper-left' | 'right-rail' | 'bottom-strip'
+  place?: 'centre' | 'bottom-centre' | 'bottom-right' | 'top-right' | 'top-left' | 'upper-left'
   /**
-   * Names the overlay's layout (a Timeline style, 007/10): each layout keeps its own size and place,
+   * Names the overlay's layout (a deck widget view, ADR 0042): each layout keeps its own size and place,
    * and `setOverlayLayout` switches an open overlay between them.
    */
   layout?: string
-  /** A strip's limit: `work-area` (above the Dock or taskbar) or `screen` (the very edge); the screen when missing, like the setting. */
-  against?: 'work-area' | 'screen'
 }
 
 /** The arguments of `open_overlay`: `size` is `WindowSize` in src-tauri/src/overlay.rs. */
@@ -58,12 +56,12 @@ export function openOverlay(pluginId: string, title: string, size: OverlayWindow
   return invoke('open_overlay', openOverlayArgs(pluginId, title, size))
 }
 
-/** Gives an open overlay another layout's window without reopening it (the Timeline's style changed). */
+/** Gives an open overlay another layout's window without reopening it (the deck widget's view changed). */
 export function setOverlayLayout(pluginId: string, size: OverlayWindowSize): Promise<void> {
   return invoke('set_overlay_layout', { pluginId, size })
 }
 
-/** Moves Talking Points back to its place if it is over or under the Timeline (session start only). */
+/** Moves Talking Points back to its place if it is over or under an overlay with layouts (session start only). */
 export function keepOverlaysApart(): Promise<void> {
   return invoke('keep_overlays_apart')
 }

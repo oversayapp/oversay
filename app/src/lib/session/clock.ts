@@ -25,7 +25,7 @@ export interface SessionState {
   note?: boolean
   /** A deck of flashcards on the flashcard widget: opens Ready, stays on its last card until Stop, not recorded into a project. */
   deck?: boolean
-  /** The control panel's preview with nothing running (ADR 0028): a sample talk, never recorded, ended when the panel closes. */
+  /** A deck on screen only to be looked at: the Look card's sample deck (ADR 0051) or the deck editor's preview; never recorded. */
   preview?: boolean
 }
 

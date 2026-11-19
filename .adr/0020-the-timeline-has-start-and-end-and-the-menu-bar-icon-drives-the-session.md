@@ -1,5 +1,5 @@
 ---
-status: accepted
+status: accepted; its menu is superseded by 0051
 date: 2026-10-11
 ---
 

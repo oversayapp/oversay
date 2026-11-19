@@ -21,6 +21,7 @@ mod skill;
 mod state;
 mod transcriber;
 mod tray;
+mod tray_menu;
 mod updates;
 mod workspaces;
 
@@ -52,8 +53,8 @@ pub fn run() {
         .plugin(
             tauri_plugin_window_state::Builder::default()
                 .with_state_flags(StateFlags::POSITION | StateFlags::SIZE | StateFlags::MAXIMIZED)
-                // The Timeline remembers a frame per style itself (overlay::Layouts).
-                .with_denylist(&["overlay-timeline", control_panel::LABEL])
+                // The Look card is placed afresh each time it opens.
+                .with_denylist(&[control_panel::LABEL])
                 .build(),
         )
         .setup(|app| {
@@ -75,7 +76,7 @@ pub fn run() {
             platform::log_native_exceptions();
             settings::apply_saved_appearance(app.handle());
             // The icon is there from the start, for the control panel (ADR 0028).
-            tray::show_idle(app.handle());
+            tray::refresh(app.handle());
             platform::install_dock_menu(app.handle());
             platform::install_jump_list(app.handle());
             // Files written outside Oversay (an AI, another editor) show up as they land (ADR 0034).
@@ -86,7 +87,7 @@ pub fn run() {
             skill::update_installed(app.handle());
             // Links an AI opens to show a note or open Oversay on it (ADR 0032).
             links::init(app.handle());
-            // Started from the jump list's Control panel with the app not yet running.
+            // Started from the jump list's Look panel with the app not yet running.
             if std::env::args().any(|a| a == platform::CONTROL_PANEL_ARG) {
                 let _ = session::act(app.handle(), session::Action::TogglePanel);
             }
@@ -135,7 +136,6 @@ pub fn run() {
             overlay::close_overlay,
             overlay::set_hidden_from_capture,
             overlay::set_overlay_settings,
-            overlay::set_look_back,
             overlay::keep_overlays_apart,
             overlay::set_overlay_layout,
             overlay::fit_overlay,
@@ -190,6 +190,7 @@ pub fn run() {
             session::session_close,
             hotkeys::check_shortcut,
             tray::set_tray_title,
+            tray::set_tray_decks,
             session::session_next,
             session::session_advance,
             session::session_preview_deck,
@@ -200,6 +201,7 @@ pub fn run() {
             hotkeys::set_panel_shortcut,
             hotkeys::panel_shortcut,
             control_panel::control_panel_close,
+            control_panel::control_panel_fit,
             control_panel::control_panel_look,
             control_panel::control_panel_show_manager,
         ])
