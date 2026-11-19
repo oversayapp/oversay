@@ -97,6 +97,8 @@ pub enum LinkOutcome {
     Refused(Refusal),
     /// The link was the one expected, but the code couldn't be traded or kept.
     Failed,
+    /// The sign-in was cancelled or started again while its code was being traded.
+    Abandoned,
 }
 
 /// Why a link was refused; logged as `account.link_refused reason=<code>`.
@@ -201,6 +203,9 @@ struct SignIn {
     state: Secret,
     verifier: Secret,
     started: Instant,
+    /// `Inner::generation` when it started: if that has moved on by the time its code is traded,
+    /// it was cancelled or replaced meanwhile.
+    generation: u64,
 }
 
 struct SignedIn {
@@ -212,6 +217,8 @@ struct SignedIn {
 #[derive(Default)]
 struct Inner {
     sign_in: Option<SignIn>,
+    /// Goes up on every start, cancel and sign-out.
+    generation: u64,
     signed_in: Option<SignedIn>,
     problem: Option<String>,
 }
@@ -336,8 +343,17 @@ impl Account {
             Status::SignedIn {
                 email: s.email.clone(),
             }
-        } else if inner.sign_in.is_some() {
+        } else if inner
+            .sign_in
+            .as_ref()
+            .is_some_and(|s| s.started.elapsed() <= SIGN_IN_LIFETIME)
+        {
             Status::SigningIn
+        } else if inner.sign_in.is_some() {
+            // Its link can only be refused now (follow).
+            Status::SignedOut {
+                problem: Some(SIGN_IN_DID_NOT_FINISH.into()),
+            }
         } else {
             Status::SignedOut {
                 problem: inner.problem.clone(),
@@ -368,10 +384,12 @@ impl Account {
             .append_pair("code_challenge_method", "S256");
         let mut inner = self.inner();
         inner.problem = None;
+        inner.generation += 1;
         inner.sign_in = Some(SignIn {
             state: Secret(state),
             verifier: Secret(verifier),
             started: now,
+            generation: inner.generation,
         });
         log::debug!(
             "account.sign_in_started screen={screen:?} stage={}",
@@ -382,6 +400,7 @@ impl Account {
 
     pub fn cancel_sign_in(&self) {
         let mut inner = self.inner();
+        inner.generation += 1;
         if inner.sign_in.take().is_some() {
             log::debug!("account.sign_in_cancelled");
         }
@@ -425,7 +444,6 @@ impl Account {
             };
             if now.saturating_duration_since(pending.started) > SIGN_IN_LIFETIME {
                 inner.sign_in = None;
-                inner.problem = Some(SIGN_IN_DID_NOT_FINISH.into());
                 return LinkOutcome::Refused(Refusal::Expired);
             }
             // Another state is someone else's link: it doesn't end this sign-in.
@@ -434,17 +452,16 @@ impl Account {
             }
             let sign_in = inner.sign_in.take().expect("checked above");
             if param("error").is_some() {
-                inner.problem = Some(SIGN_IN_DID_NOT_FINISH.into());
                 return LinkOutcome::Refused(Refusal::HostedPageError);
             }
             sign_in
         };
         let Some(code) = param("code") else {
-            self.inner().problem = Some(SIGN_IN_DID_NOT_FINISH.into());
             return LinkOutcome::Refused(Refusal::NoCode);
         };
-        match self.finish(&code, &sign_in.verifier.0, now) {
-            Ok(()) => LinkOutcome::SignedIn,
+        match self.finish(&code, &sign_in, now) {
+            Ok(true) => LinkOutcome::SignedIn,
+            Ok(false) => LinkOutcome::Abandoned,
             Err(problem) => {
                 self.inner().problem = Some(problem);
                 LinkOutcome::Failed
@@ -452,15 +469,19 @@ impl Account {
         }
     }
 
-    /// Trades the code for tokens, keeps the refresh token in the keychain, and signs in.
-    fn finish(&self, code: &str, verifier: &str, now: Instant) -> Result<(), String> {
-        let tokens = self.tokens.exchange_code(code, verifier).map_err(|e| {
-            log::warn!(
-                "account.sign_in_failed step=exchange error={}",
-                describe(&e)
-            );
-            SIGN_IN_DID_NOT_FINISH.to_string()
-        })?;
+    /// Trades the code for tokens, keeps the refresh token in the keychain, and signs in. False
+    /// when the sign-in was cancelled or replaced while the code was being traded.
+    fn finish(&self, code: &str, sign_in: &SignIn, now: Instant) -> Result<bool, String> {
+        let tokens = self
+            .tokens
+            .exchange_code(code, &sign_in.verifier.0)
+            .map_err(|e| {
+                log::warn!(
+                    "account.sign_in_failed step=exchange error={}",
+                    describe(&e)
+                );
+                SIGN_IN_DID_NOT_FINISH.to_string()
+            })?;
         let email = tokens.id_token.as_deref().and_then(email_from_id_token);
         let (Some(refresh_token), Some(email)) = (tokens.refresh_token, email) else {
             log::warn!("account.sign_in_failed step=tokens error=missing_refresh_token_or_email");
@@ -471,11 +492,20 @@ impl Account {
             email: email.clone(),
         })
         .expect("two strings serialize");
+        // Held while the keychain is written, so a cancel can't slip in between the check and it.
+        let mut inner = self.inner();
+        if inner.generation != sign_in.generation {
+            drop(inner);
+            log::debug!("account.sign_in_abandoned");
+            let _ = self.tokens.revoke(&refresh_token);
+            return Ok(false);
+        }
         if let Err(e) = self.store.save(&stored) {
             log::warn!(
                 "account.sign_in_failed step=store store={} error={e}",
                 self.store.kind()
             );
+            drop(inner);
             let _ = self.tokens.revoke(&refresh_token);
             return Err(KEYCHAIN_FAILED.into());
         }
@@ -483,7 +513,6 @@ impl Account {
             "account.token_stored store={} check=epic-036/V7",
             self.store.kind()
         );
-        let mut inner = self.inner();
         inner.problem = None;
         inner.signed_in = Some(SignedIn {
             email,
@@ -497,7 +526,7 @@ impl Account {
             "account.signed_in check=epic-036/V4 stage={}",
             self.stage.name
         );
-        Ok(())
+        Ok(true)
     }
 
     /// Signs out: the keychain item is deleted and the refresh token revoked. Local decks are not
@@ -507,6 +536,7 @@ impl Account {
             let mut inner = self.inner();
             inner.sign_in = None;
             inner.problem = None;
+            inner.generation += 1;
             inner.signed_in.take()
         }?;
         self.forget(&signed_in);
@@ -548,7 +578,12 @@ impl Account {
         match self.tokens.refresh(&refresh_token.0) {
             Ok(tokens) => {
                 let mut inner = self.inner();
-                let signed_in = inner.signed_in.as_mut().ok_or(AccountError::SignedOut)?;
+                // Signed out, or in again as someone else, while the refresh was in flight.
+                let signed_in = inner
+                    .signed_in
+                    .as_mut()
+                    .filter(|s| s.refresh_token == refresh_token)
+                    .ok_or(AccountError::SignedOut)?;
                 signed_in.access = Some((
                     Secret(tokens.access_token.clone()),
                     now + Duration::from_secs(tokens.expires_in),
@@ -560,8 +595,14 @@ impl Account {
                 // Revoked, expired, or the account deleted: there is no sign-in left to keep.
                 let signed_in = {
                     let mut inner = self.inner();
-                    inner.problem = Some(SIGNED_OUT_ELSEWHERE.into());
-                    inner.signed_in.take()
+                    let taken = inner
+                        .signed_in
+                        .take_if(|s| s.refresh_token == refresh_token);
+                    if taken.is_some() {
+                        inner.problem = Some(SIGNED_OUT_ELSEWHERE.into());
+                        inner.generation += 1;
+                    }
+                    taken
                 };
                 if signed_in.is_some() {
                     let _ = self.store.delete();

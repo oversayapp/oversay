@@ -21,6 +21,10 @@ struct Calls {
     stored: Option<String>,
     deletes: usize,
     refresh_fails: bool,
+    /// Runs while a code is being traded, as if the person acted in the meantime.
+    during_exchange: Option<Box<dyn FnOnce() + Send>>,
+    /// Runs while a refresh is in flight.
+    during_refresh: Option<Box<dyn FnOnce() + Send>>,
 }
 
 type Shared = Arc<Mutex<Calls>>;
@@ -36,11 +40,14 @@ struct FakeCognito(Shared);
 
 impl TokenEndpoint for FakeCognito {
     fn exchange_code(&self, code: &str, verifier: &str) -> Result<Tokens, AuthError> {
-        self.0
-            .lock()
-            .unwrap()
-            .exchanged
-            .push((code.into(), verifier.into()));
+        let hook = {
+            let mut calls = self.0.lock().unwrap();
+            calls.exchanged.push((code.into(), verifier.into()));
+            calls.during_exchange.take()
+        };
+        if let Some(hook) = hook {
+            hook();
+        }
         Ok(Tokens {
             access_token: "access-1".into(),
             id_token: Some(id_token("john@example.com")),
@@ -49,6 +56,10 @@ impl TokenEndpoint for FakeCognito {
         })
     }
     fn refresh(&self, refresh_token: &str) -> Result<Tokens, AuthError> {
+        let hook = self.0.lock().unwrap().during_refresh.take();
+        if let Some(hook) = hook {
+            hook();
+        }
         let mut calls = self.0.lock().unwrap();
         calls.refreshed.push(refresh_token.into());
         if calls.refresh_fails {
@@ -513,4 +524,107 @@ fn the_email_comes_from_the_id_token() {
     );
     assert_eq!(email_from_id_token("not.a.jwt"), None);
     assert_eq!(email_from_id_token("only-one-part"), None);
+}
+
+fn shared_account() -> (Arc<Account>, Shared) {
+    let (account, calls) = account();
+    (Arc::new(account), calls)
+}
+
+#[test]
+fn a_sign_in_cancelled_while_its_code_is_traded_does_not_sign_in() {
+    let (account, calls) = shared_account();
+    let now = Instant::now();
+    let state = started(&account, now);
+    let during = account.clone();
+    calls.lock().unwrap().during_exchange = Some(Box::new(move || during.cancel_sign_in()));
+    assert_eq!(
+        account.handle_link(&auth_link("code-1", &state), now),
+        LinkOutcome::Abandoned
+    );
+    assert_eq!(account.status(), Status::SignedOut { problem: None });
+    let c = calls.lock().unwrap();
+    assert!(c.stored.is_none());
+    // The tokens Cognito gave for it are no use to anyone.
+    assert_eq!(c.revoked, vec!["refresh-1".to_string()]);
+    drop(c);
+    assert!(test_log::logged("account.sign_in_abandoned"));
+}
+
+#[test]
+fn a_sign_in_replaced_while_its_code_is_traded_leaves_the_new_one_waiting() {
+    let (account, calls) = shared_account();
+    let now = Instant::now();
+    let state = started(&account, now);
+    let during = account.clone();
+    calls.lock().unwrap().during_exchange = Some(Box::new(move || {
+        during.start_sign_in(Screen::SignIn, now);
+    }));
+    assert_eq!(
+        account.handle_link(&auth_link("code-1", &state), now),
+        LinkOutcome::Abandoned
+    );
+    assert_eq!(account.status(), Status::SigningIn);
+    assert!(calls.lock().unwrap().stored.is_none());
+}
+
+#[test]
+fn a_sign_in_past_its_ten_minutes_shows_as_not_finished() {
+    let (account, _) = account();
+    let long_ago = Instant::now()
+        .checked_sub(Duration::from_secs(11 * 60))
+        .unwrap();
+    account.start_sign_in(Screen::SignIn, long_ago);
+    assert_eq!(
+        account.status(),
+        Status::SignedOut {
+            problem: Some(SIGN_IN_DID_NOT_FINISH.into())
+        }
+    );
+}
+
+#[test]
+fn a_refresh_that_returns_after_signing_out_and_in_again_is_not_kept() {
+    let (account, calls) = shared_account();
+    let now = Instant::now();
+    signed_in(&account, now);
+    let later = now + Duration::from_secs(7200);
+    let during = account.clone();
+    calls.lock().unwrap().during_refresh = Some(Box::new(move || {
+        during.sign_out();
+    }));
+    assert_eq!(account.access_token(later), Err(AccountError::SignedOut));
+    assert_eq!(account.status(), Status::SignedOut { problem: None });
+}
+
+#[test]
+fn the_status_has_the_shape_the_manager_reads() {
+    // Same shapes as AccountStatus in src/lib/account/account.ts.
+    let json = |s: Status| serde_json::to_value(s).unwrap();
+    assert_eq!(
+        json(Status::Unavailable),
+        serde_json::json!({ "state": "unavailable" })
+    );
+    assert_eq!(
+        json(Status::SignedOut { problem: None }),
+        serde_json::json!({ "state": "signedOut", "problem": null })
+    );
+    assert_eq!(
+        json(Status::SigningIn),
+        serde_json::json!({ "state": "signingIn" })
+    );
+    assert_eq!(
+        json(Status::SignedIn {
+            email: "a@b.co".into()
+        }),
+        serde_json::json!({ "state": "signedIn", "email": "a@b.co" })
+    );
+    let screen = |s: &str| serde_json::from_value::<Screen>(serde_json::json!(s)).unwrap();
+    assert_eq!(screen("signIn"), Screen::SignIn);
+    assert_eq!(screen("signUp"), Screen::SignUp);
+}
+
+#[test]
+fn the_account_event_has_the_frontends_name() {
+    assert_eq!(super::commands::ACCOUNT_EVENT, "oversay-account");
 }
