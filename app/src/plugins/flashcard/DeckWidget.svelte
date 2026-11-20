@@ -83,7 +83,7 @@
 <div class="dw" class:hidden class:ink-light={$look.panel === 'light'} style:--tab="{TAB_HEIGHT}px" style:--corner={rec ? '78px' : null}>
   <div class="view">
     {#if view === 'agenda'}
-      <div class="agenda" class:light={$look.panel === 'light'} class:one={model.options.colour === 'one'}>
+      <div class="agenda" class:light={$look.panel === 'light'} class:one={model.options.colour === 'one' || $look.oneColour}>
         <AgendaView {ctx} />
       </div>
     {:else}

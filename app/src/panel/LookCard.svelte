@@ -1,6 +1,6 @@
 <script lang="ts">
   // The Look card (ADR 0051, Control Panel v2): what is judged by eye against a slide, at the top
-  // of the right edge. Opacity with See-through / Solid first, then Dark / Light, then Hide from
+  // of the right edge. Opacity with See-through / Solid first, then Dark / Light, then Card / Agenda, Single colour, then Hide from
   // screen sharing. The run, the keys and the app are in the menu-bar / tray menu. It is never in a
   // screen share, never takes focus from the slides, and with nothing running it puts a sample deck
   // on screen while it is open.
@@ -120,6 +120,31 @@
     <div class="seg" role="radiogroup" aria-label="Panel">
       <button role="radio" aria-checked={look.panel === 'dark'} class:on={look.panel === 'dark'} onclick={() => change({ key: 'panel', value: 'dark' })}><span class="sw"></span>Dark</button>
       <button role="radio" aria-checked={look.panel === 'light'} class:on={look.panel === 'light'} onclick={() => change({ key: 'panel', value: 'light' })}><span class="sw l"></span>Light</button>
+    </div>
+  </section>
+
+  <section class="sec">
+    <h5>View</h5>
+    <div class="seg" role="radiogroup" aria-label="Deck view">
+      <button role="radio" aria-checked={look.deckView === 'card'} class:on={look.deckView === 'card'} onclick={() => change({ key: 'deckView', value: 'card' })}>Card</button>
+      <button role="radio" aria-checked={look.deckView === 'agenda'} class:on={look.deckView === 'agenda'} onclick={() => change({ key: 'deckView', value: 'agenda' })}>Agenda</button>
+    </div>
+  </section>
+
+  <section class="sec">
+    <div class="row">
+      <div class="t">
+        <b>Single colour</b>
+        <small>Every card and block in the panel’s one colour, whatever the deck says.</small>
+      </div>
+      <button
+        class="tog"
+        class:on={look.oneColour}
+        role="switch"
+        aria-checked={look.oneColour}
+        aria-label="Single colour"
+        onclick={() => change({ key: 'oneColour', value: !look.oneColour })}
+      ></button>
     </div>
   </section>
 

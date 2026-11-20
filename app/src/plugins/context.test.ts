@@ -27,7 +27,7 @@ describe('plugin context', () => {
   })
 
   it('gives plugins the overlay settings, with the defaults until the manager sends them', () => {
-    expect(get(createPluginContext().settings)).toEqual({ opacity: 75, solid: false, panel: 'dark', deckView: 'card' })
+    expect(get(createPluginContext().settings)).toEqual({ opacity: 75, solid: false, panel: 'dark', deckView: 'card', oneColour: false })
   })
 
   it('is ready as soon as the saved look arrives, with that look', async () => {

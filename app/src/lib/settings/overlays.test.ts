@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
   DEFAULT_OVERLAY_SETTINGS,
+  checkLookChange,
   MIN_OVERLAY_OPACITY,
   OVERLAY_SETTINGS_CHANNEL,
   cleanOverlays,
@@ -16,7 +17,7 @@ import { parseSettings, serializeSettings } from './settings'
 
 describe('parseOverlaySettings', () => {
   it('defaults to a dark deck widget, see-through at 75%, in the Card view', () => {
-    expect(parseOverlaySettings(undefined)).toEqual({ opacity: 75, solid: false, panel: 'dark', deckView: 'card' })
+    expect(parseOverlaySettings(undefined)).toEqual({ opacity: 75, solid: false, panel: 'dark', deckView: 'card', oneColour: false })
     expect(parseOverlaySettings(null)).toEqual(DEFAULT_OVERLAY_SETTINGS)
     expect(parseOverlaySettings([1])).toEqual(DEFAULT_OVERLAY_SETTINGS)
     expect(parseOverlaySettings('wave')).toEqual(DEFAULT_OVERLAY_SETTINGS)
@@ -25,6 +26,13 @@ describe('parseOverlaySettings', () => {
   it('reads the deck widget\'s view last used, and falls back to the Card view', () => {
     expect(parseOverlaySettings({ deckView: 'agenda' }).deckView).toBe('agenda')
     expect(parseOverlaySettings({ deckView: 'wave' }).deckView).toBe('card')
+  })
+
+  it('reads the single-colour choice, off unless saved on', () => {
+    expect(parseOverlaySettings({ oneColour: true }).oneColour).toBe(true)
+    expect(parseOverlaySettings({ oneColour: 'yes' }).oneColour).toBe(false)
+    expect(checkLookChange({ key: 'oneColour', value: true })).toEqual({ key: 'oneColour', value: true })
+    expect(checkLookChange({ key: 'oneColour', value: 1 })).toBeNull()
   })
 
   it('reads the panel, and falls back for unknown values', () => {
@@ -36,7 +44,7 @@ describe('parseOverlaySettings', () => {
 
   it('ignores what was saved for the Timeline and for Talking Points (Control Panel v2, epic 030)', () => {
     const old = { timelineStyle: 'strip', buttons: 'hover', stripEdge: 'dock', textSize: 'l', layout: 'all', talkIndicator: 'ring', panel: 'light', opacity: 60 }
-    expect(parseOverlaySettings(old)).toEqual({ opacity: 60, solid: false, panel: 'light', deckView: 'card' })
+    expect(parseOverlaySettings(old)).toEqual({ opacity: 60, solid: false, panel: 'light', deckView: 'card', oneColour: false })
   })
 
   it('is kept through the settings file', () => {

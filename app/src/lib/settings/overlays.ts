@@ -34,6 +34,8 @@ export interface OverlaySettings {
   panel: PanelColour
   /** The deck widget's view now; Show sets it back to the Card view (ADR 0042). */
   deckView: DeckView
+  /** Every card and agenda block in the panel's ink, whatever the deck's own colour choice says. */
+  oneColour: boolean
 }
 
 export const DEFAULT_OVERLAY_SETTINGS: OverlaySettings = {
@@ -42,6 +44,7 @@ export const DEFAULT_OVERLAY_SETTINGS: OverlaySettings = {
   solid: false,
   panel: 'dark',
   deckView: 'card',
+  oneColour: false,
 }
 
 /** The lowest overlay opacity: below it the muted text is poor over a bright slide. */
@@ -105,6 +108,7 @@ export function parseOverlaySettings(value: unknown): OverlaySettings {
     solid: typeof o.solid === 'boolean' ? o.solid : d.solid,
     panel: pick(PANEL_OPTIONS, o.panel, d.panel),
     deckView: pick(DECK_VIEW_OPTIONS, o.deckView, d.deckView),
+    oneColour: typeof o.oneColour === 'boolean' ? o.oneColour : d.oneColour,
     opacity: typeof o.opacity === 'number' && Number.isFinite(o.opacity) ? Math.round(Math.min(100, Math.max(MIN_OVERLAY_OPACITY, o.opacity))) : d.opacity,
   }
 }

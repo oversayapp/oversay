@@ -200,7 +200,7 @@ The Oversay icon is in the menu bar (Mac) or the system tray (Windows) for the l
 
 On a Mac the card's time left is beside the icon. Windows has no text beside a tray icon, so the time is in its tooltip and the icon has a dot while a deck runs. Both have an amber dot while the deck widget is visible in screen shares. The deck widget is the only overlay, so it always shows while a deck runs: there is no on/off for it.
 
-The **Look card** is a small card at the top of the right edge, never in a screen share and never taking focus: Opacity (a slider) with See-through / Solid, Dark / Light, and Hide from screen sharing. It opens from Look panel in the menu, `⌃⌥P` (`Ctrl+Alt+Shift+P`), or a left-click on the Windows tray icon. With nothing running it puts a sample deck on screen while it is open, so the look can be set against a slide.
+The **Look card** is a small card at the top of the right edge, never in a screen share and never taking focus: Opacity (a slider) with See-through / Solid, Dark / Light, Card / Agenda (the deck widget's view, also in the menu), Single colour (every card and block in the panel's one colour, whatever the deck says) and Hide from screen sharing. It opens from Look panel in the menu, `⌃⌥P` (`Ctrl+Alt+Shift+P`), or a left-click on the Windows tray icon. With nothing running it puts a sample deck on screen while it is open, so the look can be set against a slide.
 
 ### Screen sharing and displays
 
