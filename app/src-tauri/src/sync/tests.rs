@@ -14,6 +14,8 @@ struct CloudState {
     unreachable: bool,
     /// Ids whose PUT is refused.
     refuse_put: Vec<String>,
+    /// The account's changes, oldest first: (change number, id, revision). The cursor is the last.
+    log: Vec<(u64, String, u64)>,
 }
 
 /// A fake server: what the real API does for one account, without the network.
@@ -33,6 +35,9 @@ impl FakeCloud {
                     revision: 1,
                 },
             );
+            let mut st = cloud.0.lock().unwrap();
+            let n = st.log.len() as u64 + 1;
+            st.log.push((n, d.id.clone(), 1));
         }
         cloud
     }
@@ -45,19 +50,50 @@ impl FakeCloud {
 }
 
 impl Cloud for FakeCloud {
-    fn list(&self) -> Result<Vec<RemoteSummary>, CloudError> {
+    fn list(&self) -> Result<Listing, CloudError> {
         let s = &mut *self.0.lock().unwrap();
         s.requests.push("list".into());
         if s.unreachable {
             return Err(CloudError::Unreachable("offline".into()));
         }
-        Ok(s.decks
-            .values()
-            .map(|d| RemoteSummary {
-                id: d.id.clone(),
-                revision: d.revision,
-            })
-            .collect())
+        Ok(Listing {
+            decks: s
+                .decks
+                .values()
+                .map(|d| RemoteSummary {
+                    id: d.id.clone(),
+                    revision: d.revision,
+                })
+                .collect(),
+            cursor: s.log.last().map_or(0, |l| l.0),
+        })
+    }
+    fn changes(&self, since: u64) -> Result<Changes, CloudError> {
+        let s = &mut *self.0.lock().unwrap();
+        s.requests.push(format!("changes {since}"));
+        if s.unreachable {
+            return Err(CloudError::Unreachable("offline".into()));
+        }
+        let cursor = s.log.last().map_or(0, |l| l.0);
+        if since > cursor {
+            return Ok(Changes {
+                items: vec![],
+                cursor,
+            });
+        }
+        Ok(Changes {
+            items: s
+                .log
+                .iter()
+                .filter(|l| l.0 > since)
+                .map(|l| Change {
+                    id: l.1.clone(),
+                    revision: l.2,
+                    deleted: false,
+                })
+                .collect(),
+            cursor,
+        })
     }
     fn get(&self, id: &str) -> Result<Option<RemoteDeck>, CloudError> {
         let s = &mut *self.0.lock().unwrap();
@@ -67,6 +103,9 @@ impl Cloud for FakeCloud {
     fn put(&self, deck: &LocalDeck) -> Result<u64, CloudError> {
         let s = &mut *self.0.lock().unwrap();
         s.requests.push(format!("put {}", deck.id));
+        if s.unreachable {
+            return Err(CloudError::Unreachable("offline".into()));
+        }
         if s.refuse_put.contains(&deck.id) {
             return Err(CloudError::Refused(413));
         }
@@ -80,6 +119,8 @@ impl Cloud for FakeCloud {
                 revision,
             },
         );
+        let n = s.log.last().map_or(0, |l| l.0) + 1;
+        s.log.push((n, deck.id.clone(), revision));
         Ok(revision)
     }
 }
@@ -94,6 +135,11 @@ impl FakeLibrary {
     fn all(&self) -> Vec<LocalDeck> {
         self.0.lock().unwrap().clone()
     }
+    /// Someone (the editor, an AI skill) rewrites a deck's files here.
+    fn edit(&self, id: &str, deck_md: &str) {
+        let mut all = self.0.lock().unwrap();
+        all.iter_mut().find(|d| d.id == id).unwrap().deck_md = deck_md.into();
+    }
 }
 
 impl Library for FakeLibrary {
@@ -102,6 +148,16 @@ impl Library for FakeLibrary {
             decks: self.all(),
             unsyncable: self.1.lock().unwrap().clone(),
         })
+    }
+    fn replace(&self, expected: &LocalDeck, deck: &RemoteDeck) -> Result<(), String> {
+        let mut all = self.0.lock().unwrap();
+        let here = all.iter_mut().find(|d| d.id == deck.id).ok_or("gone")?;
+        if here != expected {
+            return Err("changed meanwhile".into());
+        }
+        here.deck_md = deck.deck_md.clone();
+        here.sessions_json = deck.sessions_json.clone();
+        Ok(())
     }
     fn add(&self, deck: &RemoteDeck) -> Result<(), String> {
         self.0.lock().unwrap().push(LocalDeck {
@@ -143,7 +199,9 @@ fn sync(cloud: &FakeCloud, library: &FakeLibrary) -> Sync<FakeCloud, FakeLibrary
 fn turning_it_on_uploads_every_local_deck() {
     let library = FakeLibrary::with(five());
     let cloud = FakeCloud::default();
-    let report = sync(&cloud, &library).first_sync().unwrap();
+    let report = sync(&cloud, &library)
+        .first_sync(&mut State::default())
+        .unwrap();
     assert_eq!(report.uploaded, 5);
     assert_eq!(report.downloaded, 0);
     assert_eq!(cloud.ids().len(), 5);
@@ -162,7 +220,9 @@ fn turning_it_on_uploads_every_local_deck() {
 fn a_second_computer_downloads_every_deck() {
     let cloud = FakeCloud::with(&five());
     let library = FakeLibrary::default();
-    let report = sync(&cloud, &library).first_sync().unwrap();
+    let report = sync(&cloud, &library)
+        .first_sync(&mut State::default())
+        .unwrap();
     assert_eq!(report.downloaded, 5);
     assert_eq!(report.uploaded, 0);
     assert_eq!(library.all().len(), 5);
@@ -181,7 +241,9 @@ fn decks_are_matched_by_id_not_by_title() {
     // Same title, different ids: two decks, neither replaces the other.
     let library = FakeLibrary::with(vec![deck("d_local001", "Standup")]);
     let cloud = FakeCloud::with(&[deck("d_cloud001", "Standup")]);
-    let report = sync(&cloud, &library).first_sync().unwrap();
+    let report = sync(&cloud, &library)
+        .first_sync(&mut State::default())
+        .unwrap();
     assert_eq!((report.uploaded, report.downloaded), (1, 1));
     assert_eq!(cloud.ids(), vec!["d_cloud001", "d_local001"]);
     assert_eq!(library.all().len(), 2);
@@ -194,7 +256,9 @@ fn a_deck_the_cloud_already_has_is_left_alone_on_both_sides() {
     theirs.deck_md.push_str("a later edit\n");
     let library = FakeLibrary::with(vec![mine.clone()]);
     let cloud = FakeCloud::with(&[theirs.clone()]);
-    let report = sync(&cloud, &library).first_sync().unwrap();
+    let report = sync(&cloud, &library)
+        .first_sync(&mut State::default())
+        .unwrap();
     assert_eq!(report.left_alone, vec!["d_samesame".to_string()]);
     assert_eq!((report.uploaded, report.downloaded), (0, 0));
     assert_eq!(library.all(), vec![mine]);
@@ -215,7 +279,9 @@ fn an_identical_deck_is_neither_uploaded_nor_downloaded() {
     let d = deck("d_samesame", "Same");
     let library = FakeLibrary::with(vec![d.clone()]);
     let cloud = FakeCloud::with(&[d]);
-    let report = sync(&cloud, &library).first_sync().unwrap();
+    let report = sync(&cloud, &library)
+        .first_sync(&mut State::default())
+        .unwrap();
     assert_eq!(
         (report.uploaded, report.downloaded, report.left_alone.len()),
         (0, 0, 0)
@@ -227,8 +293,9 @@ fn an_identical_deck_is_neither_uploaded_nor_downloaded() {
 fn turning_it_on_twice_changes_nothing_the_second_time() {
     let library = FakeLibrary::with(five());
     let cloud = FakeCloud::default();
-    sync(&cloud, &library).first_sync().unwrap();
-    let again = sync(&cloud, &library).first_sync().unwrap();
+    let mut state = State::default();
+    sync(&cloud, &library).first_sync(&mut state).unwrap();
+    let again = sync(&cloud, &library).first_sync(&mut state).unwrap();
     assert_eq!((again.uploaded, again.downloaded, again.failed), (0, 0, 0));
     assert_eq!(library.all().len(), 5);
 }
@@ -238,7 +305,9 @@ fn one_deck_refused_does_not_stop_the_others() {
     let library = FakeLibrary::with(five());
     let cloud = FakeCloud::default();
     cloud.0.lock().unwrap().refuse_put.push("d_aaaaaaa2".into());
-    let report = sync(&cloud, &library).first_sync().unwrap();
+    let report = sync(&cloud, &library)
+        .first_sync(&mut State::default())
+        .unwrap();
     assert_eq!((report.uploaded, report.failed), (4, 1));
     assert!(
         test_log::lines()
@@ -252,7 +321,9 @@ fn an_unreachable_cloud_stops_before_anything_changes() {
     let library = FakeLibrary::with(five());
     let cloud = FakeCloud::default();
     cloud.0.lock().unwrap().unreachable = true;
-    let err = sync(&cloud, &library).first_sync().unwrap_err();
+    let err = sync(&cloud, &library)
+        .first_sync(&mut State::default())
+        .unwrap_err();
     assert_eq!(err, CloudError::Unreachable("offline".into()));
     assert!(cloud.ids().is_empty());
     assert_eq!(library.all().len(), 5);
@@ -269,21 +340,16 @@ fn push_saves_one_deck_and_says_its_revision() {
 }
 
 #[test]
-fn pull_brings_down_only_decks_this_computer_lacks() {
-    let library = FakeLibrary::with(vec![deck("d_aaaaaaa1", "Mine")]);
-    let cloud = FakeCloud::with(&five());
-    let pulled = sync(&cloud, &library).pull().unwrap();
-    assert_eq!(pulled.downloaded, 4);
-    assert_eq!(library.all().len(), 5);
-}
-
-#[test]
 fn logs_never_hold_deck_content() {
     let library = FakeLibrary::with(five());
     let cloud = FakeCloud::default();
-    sync(&cloud, &library).first_sync().unwrap();
+    sync(&cloud, &library)
+        .first_sync(&mut State::default())
+        .unwrap();
     let other = FakeLibrary::default();
-    sync(&cloud, &other).first_sync().unwrap();
+    sync(&cloud, &other)
+        .first_sync(&mut State::default())
+        .unwrap();
     for line in test_log::lines() {
         assert!(!line.contains("Secret card text"), "{line}");
         assert!(!line.contains("Deck d_"), "{line}");
@@ -331,12 +397,41 @@ mod api {
         );
         assert_eq!(
             cloud.list().unwrap(),
-            vec![RemoteSummary {
-                id: "d_k3x9a2bq".into(),
-                revision: 3
-            }]
+            Listing {
+                decks: vec![RemoteSummary {
+                    id: "d_k3x9a2bq".into(),
+                    revision: 3
+                }],
+                cursor: 9
+            }
         );
         assert_eq!(wire.sent.lock().unwrap()[0].1, "/decks");
+    }
+
+    #[test]
+    fn changes_asks_since_the_cursor_and_reads_tombstones() {
+        let (cloud, wire) = wire(
+            200,
+            r#"{"decks":[{"id":"d_k3x9a2bq","title":"A","revision":3,"change":10},{"id":"d_aaaaaaa1","deleted":true,"revision":2,"change":11}],"cursor":12}"#,
+        );
+        let got = cloud.changes(9).unwrap();
+        assert_eq!(wire.sent.lock().unwrap()[0].1, "/decks?since=9");
+        assert_eq!(got.cursor, 12);
+        assert_eq!(
+            got.items,
+            vec![
+                Change {
+                    id: "d_k3x9a2bq".into(),
+                    revision: 3,
+                    deleted: false
+                },
+                Change {
+                    id: "d_aaaaaaa1".into(),
+                    revision: 2,
+                    deleted: true
+                },
+            ]
+        );
     }
 
     #[test]
@@ -381,8 +476,9 @@ mod api {
     fn an_error_status_is_a_refusal_and_a_bad_id_never_reaches_the_wire() {
         let (cloud, wire) = wire(401, r#"{"error":"x"}"#);
         assert_eq!(cloud.list().unwrap_err(), CloudError::Refused(401));
+        assert_eq!(cloud.changes(3).unwrap_err(), CloudError::Refused(401));
         assert_eq!(cloud.get("../../x").unwrap_err(), CloudError::Refused(400));
-        assert_eq!(wire.sent.lock().unwrap().len(), 1);
+        assert_eq!(wire.sent.lock().unwrap().len(), 2);
     }
 }
 
@@ -471,7 +567,7 @@ mod folder {
         fs::write(&blocker, "x").unwrap();
         let cloud = FakeCloud::with(&[deck("d_aaaaaaa1", "Private title")]);
         let report = Sync::new(cloud, FolderLibrary(blocker))
-            .first_sync()
+            .first_sync(&mut State::default())
             .unwrap();
         assert_eq!(report.failed, 1);
         assert!(
@@ -518,6 +614,44 @@ mod folder {
     }
 
     #[test]
+    fn replace_writes_the_cloud_files_over_the_deck_unless_it_was_edited_since() {
+        let dir = temp("replace");
+        let d = deck("d_aaaaaaa1", "One");
+        write(&dir, "One 2026-11-20/deck.md", &d.deck_md);
+        write(&dir, "One 2026-11-20/sessions.json", &d.sessions_json);
+        write(&dir, "One 2026-11-20/resources/keep.pdf", "RESOURCE");
+        let lib = FolderLibrary(dir.clone());
+        let theirs = RemoteDeck {
+            id: d.id.clone(),
+            deck_md: format!("{}more\n", d.deck_md),
+            sessions_json: "{\"version\":1,\"sessions\":[]}\n".into(),
+            revision: 2,
+        };
+        // Edited after the scan: refused, nothing written.
+        write(
+            &dir,
+            "One 2026-11-20/deck.md",
+            "---\nid: d_aaaaaaa1\n---\n## typed\n",
+        );
+        assert!(lib.replace(&d, &theirs).is_err());
+        assert!(
+            fs::read_to_string(dir.join("One 2026-11-20/deck.md"))
+                .unwrap()
+                .contains("## typed")
+        );
+        // As scanned: both files replaced, the rest left alone.
+        write(&dir, "One 2026-11-20/deck.md", &d.deck_md);
+        lib.replace(&d, &theirs).unwrap();
+        let now = lib.scan().unwrap().decks;
+        assert_eq!(
+            (now[0].deck_md.as_str(), now[0].sessions_json.as_str()),
+            (theirs.deck_md.as_str(), theirs.sessions_json.as_str())
+        );
+        assert!(dir.join("One 2026-11-20/resources/keep.pdf").exists());
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
     fn a_deck_whose_text_carries_another_id_is_not_made() {
         let dir = temp("wrongid");
         let remote = RemoteDeck {
@@ -537,7 +671,9 @@ fn a_local_deck_that_cannot_be_saved_is_not_downloaded_beside_itself() {
     let library = FakeLibrary::default();
     library.1.lock().unwrap().push("d_aaaaaaa1".into());
     let cloud = FakeCloud::with(&[deck("d_aaaaaaa1", "Here already")]);
-    let report = sync(&cloud, &library).first_sync().unwrap();
+    let report = sync(&cloud, &library)
+        .first_sync(&mut State::default())
+        .unwrap();
     assert_eq!((report.downloaded, report.failed), (0, 1));
     assert!(library.all().is_empty());
 }
@@ -557,4 +693,359 @@ fn an_untitled_deck_comes_down_byte_for_byte() {
     lib.add(&remote).unwrap();
     assert_eq!(lib.scan().unwrap().decks[0].deck_md, remote.deck_md);
     let _ = std::fs::remove_dir_all(dir);
+}
+
+// ---- keeping decks saved (slice 5): rounds, the debounce, pulling
+
+mod keeping {
+    use super::*;
+    use crate::sync::saver::{Activity, SAVE_DELAY, Saver};
+    use std::time::{Duration, Instant};
+
+    /// Two computers share one fake cloud; each has its own folder, state and sync.
+    struct Computer {
+        library: FakeLibrary,
+        state: State,
+    }
+
+    fn started(cloud: &FakeCloud, decks: Vec<LocalDeck>) -> Computer {
+        let library = FakeLibrary::with(decks);
+        let mut state = State::default();
+        sync(cloud, &library).first_sync(&mut state).unwrap();
+        Computer { library, state }
+    }
+
+    fn puts(cloud: &FakeCloud) -> usize {
+        cloud
+            .requests()
+            .iter()
+            .filter(|r| r.starts_with("put"))
+            .count()
+    }
+
+    #[test]
+    fn edit_uploads_after_debounce() {
+        let cloud = FakeCloud::default();
+        let a = started(&cloud, vec![deck("d_aaaaaaa1", "One")]);
+        let s = sync(&cloud, &a.library);
+        let t0 = Instant::now();
+        let mut saver = Saver::new(a.state.clone(), t0);
+        // Launch's first round finds nothing to do.
+        assert!(saver.run_due(t0, &s).unwrap().is_ok());
+        let before = puts(&cloud);
+
+        a.library
+            .edit("d_aaaaaaa1", "---\nid: d_aaaaaaa1\n---\n## edited\n");
+        saver.edited(t0);
+        assert_eq!(saver.activity(), Activity::Saving);
+        // Still inside the debounce: nothing is sent.
+        assert!(saver.run_due(t0 + Duration::from_secs(1), &s).is_none());
+        assert_eq!(puts(&cloud), before);
+        assert_eq!(saver.activity(), Activity::Saving);
+        // A second edit restarts the wait.
+        saver.edited(t0 + Duration::from_secs(1));
+        assert!(saver.run_due(t0 + SAVE_DELAY, &s).is_none());
+
+        let round = saver
+            .run_due(t0 + Duration::from_secs(1) + SAVE_DELAY, &s)
+            .unwrap()
+            .unwrap();
+        assert_eq!(round.uploaded, 1);
+        assert_eq!(saver.activity(), Activity::Saved);
+        assert!(SAVE_DELAY < Duration::from_secs(10));
+        assert!(
+            cloud.0.lock().unwrap().decks["d_aaaaaaa1"]
+                .deck_md
+                .contains("## edited")
+        );
+        assert!(
+            test_log::lines()
+                .iter()
+                .any(|l| l.contains("sync.deck_saved id=d_aaaaaaa1 ms=")
+                    && l.contains("check=epic-036/V9"))
+        );
+    }
+
+    #[test]
+    fn an_edit_on_b_appears_on_a_at_its_next_sync() {
+        let cloud = FakeCloud::default();
+        let mut a = started(&cloud, vec![deck("d_aaaaaaa1", "One")]);
+        let mut b = Computer {
+            library: FakeLibrary::default(),
+            state: State::default(),
+        };
+        sync(&cloud, &b.library).first_sync(&mut b.state).unwrap();
+        assert_eq!(b.library.all().len(), 1);
+
+        let edited = "---\nid: d_aaaaaaa1\ntitle: One\n---\n## from B\n";
+        b.library.edit("d_aaaaaaa1", edited);
+        let round = sync(&cloud, &b.library).sync_once(&mut b.state).unwrap();
+        assert_eq!(round.uploaded, 1);
+
+        let round = sync(&cloud, &a.library).sync_once(&mut a.state).unwrap();
+        assert_eq!((round.downloaded, round.uploaded), (1, 0));
+        assert_eq!(a.library.all()[0].deck_md, edited);
+        assert!(
+            test_log::lines()
+                .iter()
+                .any(|l| l.contains("sync.deck_pulled id=d_aaaaaaa1") && l.contains("epic-036/V11"))
+        );
+    }
+
+    #[test]
+    fn a_new_deck_made_on_b_comes_down_on_a() {
+        let cloud = FakeCloud::default();
+        let mut a = started(&cloud, vec![]);
+        let b = started(&cloud, vec![]);
+        b.library.0.lock().unwrap().push(deck("d_bbbbbbb1", "New"));
+        let mut b_state = b.state.clone();
+        sync(&cloud, &b.library).sync_once(&mut b_state).unwrap();
+        let round = sync(&cloud, &a.library).sync_once(&mut a.state).unwrap();
+        assert_eq!(round.downloaded, 1);
+        assert_eq!(a.library.all()[0].id, "d_bbbbbbb1");
+    }
+
+    #[test]
+    fn what_a_pull_wrote_is_never_uploaded_back() {
+        let cloud = FakeCloud::default();
+        let mut a = started(&cloud, vec![deck("d_aaaaaaa1", "One")]);
+        let mut b = started(&cloud, vec![]);
+        a.library
+            .edit("d_aaaaaaa1", "---\nid: d_aaaaaaa1\n---\n## new\n");
+        sync(&cloud, &a.library).sync_once(&mut a.state).unwrap();
+        sync(&cloud, &b.library).sync_once(&mut b.state).unwrap();
+        let puts_before = puts(&cloud);
+        // B's watcher fires for the file the pull wrote, and its next rounds find nothing to send.
+        for _ in 0..3 {
+            let round = sync(&cloud, &b.library).sync_once(&mut b.state).unwrap();
+            assert_eq!((round.uploaded, round.downloaded), (0, 0));
+        }
+        // And A doesn't pull its own upload back.
+        let round = sync(&cloud, &a.library).sync_once(&mut a.state).unwrap();
+        assert_eq!((round.uploaded, round.downloaded), (0, 0));
+        assert_eq!(puts(&cloud), puts_before);
+    }
+
+    #[test]
+    fn a_deck_changed_on_both_sides_is_kept_locally_and_not_uploaded() {
+        let cloud = FakeCloud::default();
+        let mut a = started(&cloud, vec![deck("d_aaaaaaa1", "One")]);
+        let mut b = started(&cloud, vec![]);
+        sync(&cloud, &b.library).sync_once(&mut b.state).unwrap();
+        // B uploads its edit; A edits too, before pulling.
+        b.library
+            .edit("d_aaaaaaa1", "---\nid: d_aaaaaaa1\n---\n## B\n");
+        sync(&cloud, &b.library).sync_once(&mut b.state).unwrap();
+        let mine = "---\nid: d_aaaaaaa1\n---\n## A\n";
+        a.library.edit("d_aaaaaaa1", mine);
+        let puts_before = puts(&cloud);
+        let round = sync(&cloud, &a.library).sync_once(&mut a.state).unwrap();
+        assert_eq!((round.held, round.uploaded, round.downloaded), (1, 0, 0));
+        assert!(
+            test_log::lines()
+                .iter()
+                .any(|l| l.contains("sync.pull_held id=d_aaaaaaa1"))
+        );
+        assert_eq!(a.library.all()[0].deck_md, mine);
+        assert_eq!(puts(&cloud), puts_before);
+        assert!(
+            cloud.0.lock().unwrap().decks["d_aaaaaaa1"]
+                .deck_md
+                .contains("## B")
+        );
+        // It stays held on later rounds, still untouched and not uploaded.
+        let again = sync(&cloud, &a.library).sync_once(&mut a.state).unwrap();
+        assert_eq!((again.uploaded, again.downloaded), (0, 0));
+        assert_eq!(a.library.all()[0].deck_md, mine);
+        assert_eq!(puts(&cloud), puts_before);
+    }
+
+    #[test]
+    fn a_deck_left_alone_by_the_first_sync_is_not_uploaded_by_later_rounds() {
+        let mine = deck("d_samesame", "Mine");
+        let mut theirs = deck("d_samesame", "Theirs");
+        theirs.deck_md.push_str("later\n");
+        let cloud = FakeCloud::with(&[theirs]);
+        let library = FakeLibrary::with(vec![mine.clone()]);
+        let mut state = State::default();
+        sync(&cloud, &library).first_sync(&mut state).unwrap();
+        library.edit("d_samesame", "---\nid: d_samesame\n---\n## more\n");
+        sync(&cloud, &library).sync_once(&mut state).unwrap();
+        assert_eq!(puts(&cloud), 0);
+    }
+
+    #[test]
+    fn a_deck_edited_while_the_pull_ran_is_not_overwritten() {
+        let cloud = FakeCloud::default();
+        let mut a = started(&cloud, vec![deck("d_aaaaaaa1", "One")]);
+        let mut b = started(&cloud, vec![]);
+        sync(&cloud, &b.library).sync_once(&mut b.state).unwrap();
+        b.library
+            .edit("d_aaaaaaa1", "---\nid: d_aaaaaaa1\n---\n## B\n");
+        sync(&cloud, &b.library).sync_once(&mut b.state).unwrap();
+        // A library whose scan is stale: the deck changes between scan and write.
+        struct Racy(FakeLibrary);
+        impl Library for Racy {
+            fn scan(&self) -> Result<Scan, String> {
+                let scan = self.0.scan();
+                self.0.edit(
+                    "d_aaaaaaa1",
+                    "---\nid: d_aaaaaaa1\n---\n## typed meanwhile\n",
+                );
+                scan
+            }
+            fn add(&self, d: &RemoteDeck) -> Result<(), String> {
+                self.0.add(d)
+            }
+            fn replace(&self, e: &LocalDeck, d: &RemoteDeck) -> Result<(), String> {
+                self.0.replace(e, d)
+            }
+        }
+        let racy = Sync::new(cloud.clone(), Racy(a.library.clone()));
+        let round = racy.sync_once(&mut a.state).unwrap();
+        assert_eq!(round.downloaded, 0);
+        assert!(a.library.all()[0].deck_md.contains("typed meanwhile"));
+    }
+
+    #[test]
+    fn a_failed_pull_asks_again_next_time() {
+        let cloud = FakeCloud::default();
+        let mut a = started(&cloud, vec![]);
+        let b = started(&cloud, vec![]);
+        b.library.0.lock().unwrap().push(deck("d_bbbbbbb1", "New"));
+        let mut b_state = b.state.clone();
+        sync(&cloud, &b.library).sync_once(&mut b_state).unwrap();
+        // A's folder refuses the deck once.
+        struct Refusing(FakeLibrary, Mutex<bool>);
+        impl Library for Refusing {
+            fn scan(&self) -> Result<Scan, String> {
+                self.0.scan()
+            }
+            fn add(&self, d: &RemoteDeck) -> Result<(), String> {
+                let mut first = self.1.lock().unwrap();
+                if std::mem::replace(&mut *first, false) {
+                    return Err("disk full".into());
+                }
+                self.0.add(d)
+            }
+            fn replace(&self, e: &LocalDeck, d: &RemoteDeck) -> Result<(), String> {
+                self.0.replace(e, d)
+            }
+        }
+        let s = Sync::new(cloud.clone(), Refusing(a.library.clone(), Mutex::new(true)));
+        assert_eq!(s.sync_once(&mut a.state).unwrap().failed, 1);
+        assert_eq!(s.sync_once(&mut a.state).unwrap().downloaded, 1);
+    }
+
+    #[test]
+    fn unreachable_keeps_the_edit_waiting_and_saving() {
+        let cloud = FakeCloud::default();
+        let a = started(&cloud, vec![deck("d_aaaaaaa1", "One")]);
+        let s = sync(&cloud, &a.library);
+        let t0 = Instant::now();
+        let mut saver = Saver::new(a.state.clone(), t0);
+        saver.run_due(t0, &s);
+        a.library
+            .edit("d_aaaaaaa1", "---\nid: d_aaaaaaa1\n---\n## off\n");
+        saver.edited(t0);
+        cloud.0.lock().unwrap().unreachable = true;
+        let t1 = t0 + SAVE_DELAY;
+        assert!(saver.run_due(t1, &s).unwrap().is_err());
+        assert_eq!(saver.activity(), Activity::Saving);
+        // Not retried straight away.
+        assert!(saver.run_due(t1 + Duration::from_secs(5), &s).is_none());
+        cloud.0.lock().unwrap().unreachable = false;
+        let t2 = t1 + Duration::from_secs(61);
+        assert_eq!(saver.run_due(t2, &s).unwrap().unwrap().uploaded, 1);
+        assert_eq!(saver.activity(), Activity::Saved);
+    }
+
+    #[test]
+    fn a_focus_and_the_timer_pull_and_idle_time_does_not() {
+        let cloud = FakeCloud::default();
+        let a = started(&cloud, vec![]);
+        let s = sync(&cloud, &a.library);
+        let t0 = Instant::now();
+        let mut saver = Saver::new(a.state.clone(), t0);
+        assert!(saver.run_due(t0, &s).is_some()); // launch
+        assert!(saver.run_due(t0 + Duration::from_secs(10), &s).is_none());
+        saver.focused();
+        assert!(saver.run_due(t0 + Duration::from_secs(11), &s).is_some());
+        assert!(saver.run_due(t0 + Duration::from_secs(40), &s).is_none());
+        assert!(saver.run_due(t0 + Duration::from_secs(72), &s).is_some()); // timer
+    }
+
+    #[test]
+    fn a_cursor_from_elsewhere_starts_over_from_a_full_list() {
+        let cloud = FakeCloud::with(&five());
+        let library = FakeLibrary::default();
+        let mut state = State {
+            cursor: Some(999),
+            ..State::default()
+        };
+        let round = sync(&cloud, &library).sync_once(&mut state).unwrap();
+        assert_eq!(round.downloaded, 5);
+        assert_eq!(state.cursor, Some(5));
+    }
+
+    #[test]
+    fn a_state_with_no_cursor_reconciles_like_turning_it_on() {
+        // A computer that turned sync on before rounds existed has no state file.
+        let cloud = FakeCloud::default();
+        let library = FakeLibrary::with(five());
+        let mut state = State::default();
+        let round = sync(&cloud, &library).sync_once(&mut state).unwrap();
+        assert_eq!(round.uploaded, 5);
+        assert!(state.cursor.is_some());
+    }
+
+    #[test]
+    fn rounds_log_no_deck_content() {
+        let cloud = FakeCloud::default();
+        let mut a = started(&cloud, vec![deck("d_aaaaaaa1", "Private title")]);
+        a.library.edit(
+            "d_aaaaaaa1",
+            "---\nid: d_aaaaaaa1\n---\n## Secret card text\n",
+        );
+        sync(&cloud, &a.library).sync_once(&mut a.state).unwrap();
+        for line in test_log::lines() {
+            assert!(
+                !line.contains("Secret card text") && !line.contains("Private title"),
+                "{line}"
+            );
+        }
+    }
+
+    #[test]
+    fn the_state_round_trips_as_json_without_deck_content() {
+        let cloud = FakeCloud::default();
+        let a = started(&cloud, vec![deck("d_aaaaaaa1", "Private title")]);
+        let text = serde_json::to_string(&a.state).unwrap();
+        assert_eq!(serde_json::from_str::<State>(&text).unwrap(), a.state);
+        assert!(!text.contains("Private title") && !text.contains("Secret card"));
+    }
+
+    #[test]
+    fn signed_out_makes_no_requests() {
+        struct SignedOut;
+        impl Cloud for SignedOut {
+            fn list(&self) -> Result<Listing, CloudError> {
+                Err(CloudError::SignedOut)
+            }
+            fn changes(&self, _: u64) -> Result<Changes, CloudError> {
+                Err(CloudError::SignedOut)
+            }
+            fn get(&self, _: &str) -> Result<Option<RemoteDeck>, CloudError> {
+                Err(CloudError::SignedOut)
+            }
+            fn put(&self, _: &LocalDeck) -> Result<u64, CloudError> {
+                Err(CloudError::SignedOut)
+            }
+        }
+        let s = Sync::new(SignedOut, FakeLibrary::with(five()));
+        assert_eq!(
+            s.sync_once(&mut State::default()).unwrap_err(),
+            CloudError::SignedOut
+        );
+    }
 }

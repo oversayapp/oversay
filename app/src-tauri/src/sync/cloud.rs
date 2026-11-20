@@ -5,7 +5,7 @@ use std::time::Instant;
 
 use serde_json::{Value, json};
 
-use super::{Cloud, CloudError, LocalDeck, RemoteDeck, RemoteSummary};
+use super::{Change, Changes, Cloud, CloudError, Listing, LocalDeck, RemoteDeck, RemoteSummary};
 use crate::account::{Account, AccountError};
 use crate::ids::{DECK_PREFIX, is_valid_id};
 
@@ -65,6 +65,18 @@ fn revision(v: &Value) -> Result<u64, CloudError> {
         .ok_or_else(|| CloudError::Unreachable("The API's answer was missing a revision".into()))
 }
 
+fn array(body: &Value) -> Result<&Vec<Value>, CloudError> {
+    body.get("decks")
+        .and_then(Value::as_array)
+        .ok_or_else(|| CloudError::Unreachable("The API's list wasn't a list".into()))
+}
+
+fn cursor(body: &Value) -> Result<u64, CloudError> {
+    body.get("cursor")
+        .and_then(Value::as_u64)
+        .ok_or_else(|| CloudError::Unreachable("The API's answer was missing a cursor".into()))
+}
+
 fn ok((status, body): (u16, String)) -> Result<String, CloudError> {
     if status == 200 {
         Ok(body)
@@ -74,11 +86,9 @@ fn ok((status, body): (u16, String)) -> Result<String, CloudError> {
 }
 
 impl<T: Transport> Cloud for ApiCloud<T> {
-    fn list(&self) -> Result<Vec<RemoteSummary>, CloudError> {
+    fn list(&self) -> Result<Listing, CloudError> {
         let body = parse(&ok(self.0.get("/decks")?)?)?;
-        body.get("decks")
-            .and_then(Value::as_array)
-            .ok_or_else(|| CloudError::Unreachable("The API's list wasn't a list".into()))?
+        let decks = array(&body)?
             .iter()
             .map(|d| {
                 Ok(RemoteSummary {
@@ -86,7 +96,29 @@ impl<T: Transport> Cloud for ApiCloud<T> {
                     revision: revision(d)?,
                 })
             })
-            .collect()
+            .collect::<Result<_, CloudError>>()?;
+        Ok(Listing {
+            decks,
+            cursor: cursor(&body)?,
+        })
+    }
+
+    fn changes(&self, since: u64) -> Result<Changes, CloudError> {
+        let body = parse(&ok(self.0.get(&format!("/decks?since={since}"))?)?)?;
+        let items = array(&body)?
+            .iter()
+            .map(|d| {
+                Ok(Change {
+                    id: text(d, "id")?,
+                    revision: revision(d)?,
+                    deleted: d.get("deleted").and_then(Value::as_bool).unwrap_or(false),
+                })
+            })
+            .collect::<Result<_, CloudError>>()?;
+        Ok(Changes {
+            items,
+            cursor: cursor(&body)?,
+        })
     }
 
     fn get(&self, id: &str) -> Result<Option<RemoteDeck>, CloudError> {

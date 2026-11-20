@@ -2,6 +2,7 @@
 // (src-tauri/src/sync): this only asks it to turn on or off and shows what it says.
 
 import { invoke } from '@tauri-apps/api/core'
+import { listen } from '@tauri-apps/api/event'
 import { writable } from 'svelte/store'
 import { logAction } from '../log'
 import { loadDecks } from '../decks/store'
@@ -20,6 +21,29 @@ export interface SyncStatus {
   working: boolean
   last: SyncOutcome | null
   problem: string | null
+  /** Saving while an edit waits to go up or is going up; Saved once it has. */
+  activity: 'idle' | 'saving' | 'saved'
+  /** Decks changed on both computers: kept as they are here until they are settled. */
+  held: number
+}
+
+/** Same name as `SYNC_CHANGED_EVENT` in src-tauri/src/sync/commands.rs. */
+export const SYNC_CHANGED_EVENT = 'sync-changed'
+
+/** Shows what Rust says as it saves and pulls. Returns the way to stop listening. */
+export async function watchSync(): Promise<() => void> {
+  return listen<SyncStatus>(SYNC_CHANGED_EVENT, (e) => sync.set(e.payload))
+}
+
+/** The line under the switch while saving is on. */
+export function activityText(s: SyncStatus): string {
+  const held =
+    s.held > 0
+      ? ` ${s.held} deck${s.held === 1 ? ' was' : 's were'} changed on two computers; ${s.held === 1 ? 'it is' : 'they are'} kept as ${s.held === 1 ? 'it is' : 'they are'} here for now.`
+      : ''
+  if (s.activity === 'saving') return 'Saving…'
+  if (s.activity === 'saved') return `Saved.${held}`
+  return held.trim()
 }
 
 /** Null until Rust has been asked. */

@@ -310,9 +310,9 @@ const fakeBridge = `(() => {
       if (cmd === 'account_cancel_sign_in' || cmd === 'account_sign_out' || cmd === 'account_delete') return (window.__account = window.__accountNext ?? { state: 'signedOut', problem: null });
       if (cmd === 'account_check_api') return 'GET /decks: 200, 2 decks';
       // Save decks to the cloud (slice 4): off until a step turns it on.
-      if (cmd === 'sync_status') return window.__sync ?? { on: false, working: false, last: null, problem: null };
-      if (cmd === 'sync_turn_on') return (window.__sync = { on: true, working: false, last: { uploaded: 5, downloaded: 0, leftAlone: 1, failed: 0 }, problem: null });
-      if (cmd === 'sync_turn_off') return (window.__sync = { on: false, working: false, last: null, problem: null });
+      if (cmd === 'sync_status') return window.__sync ?? { on: false, working: false, last: null, problem: null, activity: 'idle', held: 0 };
+      if (cmd === 'sync_turn_on') return (window.__sync = { on: true, working: false, last: { uploaded: 5, downloaded: 0, leftAlone: 1, failed: 0 }, problem: null, activity: 'saved', held: 1 });
+      if (cmd === 'sync_turn_off') return (window.__sync = { on: false, working: false, last: null, problem: null, activity: 'idle', held: 0 });
       if (cmd === 'platform_info') return { os: 'macos', arch: 'aarch64' };
       if (cmd === 'paths_exist') return args.paths.map(() => true);
       // Workspaces (ADR 0040), from the list above.
