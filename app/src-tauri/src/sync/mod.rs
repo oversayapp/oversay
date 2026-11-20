@@ -209,8 +209,12 @@ impl<C: Cloud, L: Library> Sync<C, L> {
                 Ok(None) => {}
                 Ok(Some(deck)) => match self.library.add(&deck) {
                     Ok(()) => pulled.downloaded += 1,
-                    Err(e) => {
-                        log::warn!("sync.deck_failed step=download id={} error={e}", summary.id);
+                    // The library's message names the deck's folder (its title) and a path: not logged.
+                    Err(_) => {
+                        log::warn!(
+                            "sync.deck_failed step=download id={} reason=not_saved",
+                            summary.id
+                        );
                         pulled.failed += 1;
                     }
                 },

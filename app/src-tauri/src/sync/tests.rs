@@ -430,6 +430,58 @@ mod folder {
         let _ = fs::remove_dir_all(dir);
     }
 
+    #[cfg(unix)]
+    #[test]
+    fn a_symlinked_file_is_never_followed_and_so_never_uploaded() {
+        let dir = temp("links");
+        let outside = temp("outside");
+        write(&outside, "other.json", "{\"secret\":true}");
+        write(&outside, "other.md", &deck("d_aaaaaaa9", "Else").deck_md);
+        // A deck whose sessions.json points at another file.
+        write(
+            &dir,
+            "A 2026-11-20/deck.md",
+            &deck("d_aaaaaaa1", "A").deck_md,
+        );
+        std::os::unix::fs::symlink(
+            outside.join("other.json"),
+            dir.join("A 2026-11-20/sessions.json"),
+        )
+        .unwrap();
+        // A deck whose deck.md points at another file.
+        fs::create_dir_all(dir.join("B 2026-11-20")).unwrap();
+        std::os::unix::fs::symlink(outside.join("other.md"), dir.join("B 2026-11-20/deck.md"))
+            .unwrap();
+        let found = FolderLibrary(dir.clone()).decks().unwrap();
+        assert!(found.iter().all(|d| !d.sessions_json.contains("secret")));
+        assert!(found.iter().all(|d| d.id != "d_aaaaaaa9"));
+        let _ = fs::remove_dir_all(dir);
+        let _ = fs::remove_dir_all(outside);
+    }
+
+    #[test]
+    fn a_failed_download_logs_no_deck_title_or_path() {
+        test_log::start();
+        // A folder that can't be made: Decks is a file.
+        let dir = temp("nofolder");
+        let blocker = dir.join("Decks");
+        fs::write(&blocker, "x").unwrap();
+        let cloud = FakeCloud::with(&[deck("d_aaaaaaa1", "Private title")]);
+        let report = Sync::new(cloud, FolderLibrary(blocker))
+            .first_sync()
+            .unwrap();
+        assert_eq!(report.failed, 1);
+        assert!(
+            test_log::lines()
+                .iter()
+                .any(|l| l.contains("sync.deck_failed"))
+        );
+        assert!(test_log::lines().iter().all(
+            |l| !l.contains("Private title") && !l.contains(&dir.to_string_lossy().to_string())
+        ));
+        let _ = fs::remove_dir_all(dir);
+    }
+
     #[test]
     fn a_downloaded_deck_gets_a_folder_named_by_its_title_and_both_files() {
         let dir = temp("add");

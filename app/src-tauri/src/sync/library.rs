@@ -16,12 +16,21 @@ pub const NO_SESSIONS: &str = "{\"version\":1,\"sessions\":[]}\n";
 /// skipped rather than tried.
 const LARGEST_FILE: usize = 1_900_000;
 
+fn is_link(path: &std::path::Path) -> bool {
+    fs::symlink_metadata(path).is_ok_and(|m| m.file_type().is_symlink())
+}
+
 pub struct FolderLibrary(pub PathBuf);
 
 impl Library for FolderLibrary {
     fn decks(&self) -> Result<Vec<LocalDeck>, String> {
         let mut found = Vec::new();
         for (file, sessions) in deck_files_in(&self.0) {
+            // A link to another file is never followed: it could point anywhere on the computer.
+            if is_link(&file) || is_link(&sessions) {
+                log::warn!("sync.deck_skipped reason=symlink");
+                continue;
+            }
             let Ok(deck_md) = fs::read_to_string(&file) else {
                 log::warn!("sync.deck_skipped reason=unreadable");
                 continue;
