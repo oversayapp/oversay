@@ -157,6 +157,7 @@ pub fn run() {
             account::commands::account_sign_in,
             account::commands::account_cancel_sign_in,
             account::commands::account_sign_out,
+            account::commands::account_delete,
             account::commands::account_check_api,
             sync::commands::sync_status,
             sync::commands::sync_turn_on,

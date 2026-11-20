@@ -12,7 +12,7 @@ vi.mock('@tauri-apps/api/core', () => ({
 }))
 vi.mock('../log', () => ({ logAction: () => {}, logProblem: () => {} }))
 
-const { account, loadAccount, signIn, cancelSignIn, signOut, checkApi, ACCOUNT_EVENT } = await import('./account')
+const { account, loadAccount, signIn, cancelSignIn, signOut, deleteAccount, checkApi, ACCOUNT_EVENT } = await import('./account')
 
 beforeEach(() => {
   calls.length = 0
@@ -46,6 +46,12 @@ describe('the account in Settings', () => {
     await cancelSignIn()
     await signOut()
     expect(calls.map((c) => c.cmd)).toEqual(['account_cancel_sign_in', 'account_sign_out'])
+    expect(get(account)).toEqual({ state: 'signedOut', problem: null })
+  })
+
+  it('deletes the account through Rust and shows the signed-out result', async () => {
+    await deleteAccount()
+    expect(calls).toEqual([{ cmd: 'account_delete', args: undefined }])
     expect(get(account)).toEqual({ state: 'signedOut', problem: null })
   })
 

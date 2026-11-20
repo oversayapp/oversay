@@ -5,9 +5,12 @@
   import { onMount } from 'svelte'
   import { account, cancelSignIn, loadAccount, signIn, signOut } from '../lib/account/account'
   import { loadSync, outcomeText, sync, turnSyncOff, turnSyncOn } from '../lib/account/sync'
+  import { account, cancelSignIn, deleteAccount, loadAccount, signIn, signOut } from '../lib/account/account'
+  import ConfirmDelete from './ConfirmDelete.svelte'
   import { attempt } from './errors'
 
   let busy = $state(false)
+  let deleting = $state(false)
   const run = (action: () => Promise<unknown>) =>
     attempt(async () => {
       busy = true
@@ -59,7 +62,20 @@
     </div>
   {/if}
   <div class="row">
-    <button disabled={busy} onclick={() => run(signOut)}>Sign out</button>
+    {#if deleting}
+      <ConfirmDelete
+        label="Delete account"
+        onconfirm={() => {
+          deleting = false
+          void run(deleteAccount)
+        }}
+        oncancel={() => (deleting = false)}
+        >Delete your account? Your account and every deck saved under it in the cloud are deleted for good, and this can't be undone. Decks on this computer stay.</ConfirmDelete
+      >
+    {:else}
+      <button disabled={busy} onclick={() => run(signOut)}>Sign out</button>
+      <button class="danger" disabled={busy} onclick={() => (deleting = true)}>Delete account…</button>
+    {/if}
   </div>
   <p class="muted hint">Signing out leaves every deck on this computer as it is.</p>
 {:else if $account.state === 'signingIn'}

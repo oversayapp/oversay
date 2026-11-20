@@ -25,6 +25,7 @@ const COMMANDS: &[&str] = &[
     "account_sign_in",
     "account_cancel_sign_in",
     "account_sign_out",
+    "account_delete",
     "account_check_api",
     "sync_status",
     "sync_turn_on",

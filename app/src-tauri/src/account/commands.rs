@@ -117,6 +117,29 @@ pub async fn account_sign_out(
     Ok(account.status())
 }
 
+/// Delete account: the cloud account and everything saved under it go (the API), then the app is
+/// signed out as Sign out does. Local decks stay. The status comes back; a failure is an error
+/// message and the account stays signed in, so it can be tried again.
+#[tauri::command]
+pub async fn account_delete(
+    app: AppHandle,
+    state: State<'_, AccountState>,
+) -> Result<Status, String> {
+    let account = account(&state)?;
+    let worker = account.clone();
+    let logout =
+        tauri::async_runtime::spawn_blocking(move || worker.delete_account(Instant::now()))
+            .await
+            .map_err(|e| e.to_string())?
+            .map_err(|e| e.to_string())?;
+    // Syncing stops with the account (epic 036 V6); the decks stay.
+    crate::sync::commands::signed_out(&app);
+    if let Err(e) = app.opener().open_url(logout, None::<&str>) {
+        log::warn!("account.browser_not_opened error={e}");
+    }
+    Ok(account.status())
+}
+
 /// Developer tools: `GET /decks` with the account's token. Signed out, no request is made.
 #[tauri::command]
 pub async fn account_check_api(state: State<'_, AccountState>) -> Result<String, String> {

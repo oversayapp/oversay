@@ -18,6 +18,10 @@ struct Calls {
     refreshed: Vec<String>,
     revoked: Vec<String>,
     api: Vec<(String, String)>,
+    /// `DELETE`s the API was sent: path and access token.
+    api_deletes: Vec<(String, String)>,
+    /// What the API answers a `DELETE` with; `None` is a request that can't be made.
+    delete_answer: Option<(u16, String)>,
     stored: Option<String>,
     deletes: usize,
     refresh_fails: bool,
@@ -130,11 +134,21 @@ impl Api for FakeApi {
             .push((path.into(), access_token.into()));
         Ok((200, "{}".into()))
     }
+
+    fn delete(&self, path: &str, access_token: &str) -> Result<(u16, String), String> {
+        let mut calls = self.0.lock().unwrap();
+        calls.api_deletes.push((path.into(), access_token.into()));
+        calls
+            .delete_answer
+            .clone()
+            .ok_or_else(|| "The API couldn't be reached: offline".into())
+    }
 }
 
 fn account() -> (Account, Shared) {
     test_log::start();
     let calls = Shared::default();
+    calls.lock().unwrap().delete_answer = Some((204, String::new()));
     let account = Account::new(
         DEV,
         Box::new(FakeCognito(calls.clone())),
@@ -760,4 +774,78 @@ fn signed_out_the_api_is_never_called() {
     );
     assert!(!account.is_signed_in());
     assert!(calls.lock().unwrap().api.is_empty());
+}
+
+// epic-036/V15 (oversayapp/web-api#12): Delete account asks the API, then signs out like Sign out
+// does. The decks are not this module's: it has no way to touch them.
+#[test]
+fn delete_account_deletes_on_the_server_then_signs_out() {
+    let (account, calls) = account();
+    let now = Instant::now();
+    signed_in(&account, now);
+    let logout = account.delete_account(now).unwrap();
+    {
+        let c = calls.lock().unwrap();
+        assert_eq!(
+            c.api_deletes,
+            vec![("/account".to_string(), "access-1".to_string())]
+        );
+        // The keychain item is gone, as after Sign out.
+        assert!(c.stored.is_none());
+        assert!(c.deletes >= 1);
+    }
+    assert!(logout.starts_with("https://oversay-dev.auth.eu-west-1.amazoncognito.com/logout?"));
+    assert_eq!(account.status(), Status::SignedOut { problem: None });
+    assert_eq!(account.access_token(now), Err(AccountError::SignedOut));
+    let lines = test_log::lines();
+    assert!(
+        lines
+            .iter()
+            .any(|l| l.starts_with("account.deleted check=epic-036/V15")),
+        "{lines:?}"
+    );
+    assert!(
+        lines
+            .iter()
+            .all(|l| !l.contains("access-1") && !l.contains("refresh-1"))
+    );
+}
+
+#[test]
+fn a_failed_delete_leaves_the_account_signed_in_to_try_again() {
+    for answer in [
+        Some((500, "{}".to_string())),
+        Some((401, "{}".to_string())),
+        None,
+    ] {
+        let (account, calls) = account();
+        let now = Instant::now();
+        signed_in(&account, now);
+        calls.lock().unwrap().delete_answer = answer;
+        assert!(matches!(
+            account.delete_account(now),
+            Err(AccountError::Unreachable(_))
+        ));
+        assert_eq!(
+            account.status(),
+            Status::SignedIn {
+                email: "john@example.com".into()
+            }
+        );
+        assert!(calls.lock().unwrap().stored.is_some());
+        // A retry after the server comes back works.
+        calls.lock().unwrap().delete_answer = Some((204, String::new()));
+        assert!(account.delete_account(now).is_ok());
+        assert_eq!(account.status(), Status::SignedOut { problem: None });
+    }
+}
+
+#[test]
+fn deleting_the_account_when_signed_out_makes_no_request() {
+    let (account, calls) = account();
+    assert_eq!(
+        account.delete_account(Instant::now()),
+        Err(AccountError::SignedOut)
+    );
+    assert!(calls.lock().unwrap().api_deletes.is_empty());
 }
