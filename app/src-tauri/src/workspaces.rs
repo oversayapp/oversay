@@ -75,12 +75,12 @@ fn plain(name: &str) -> bool {
 }
 
 /// Whether `path` is a real folder, not a link to one.
-fn is_folder(path: &Path) -> bool {
+pub(crate) fn is_folder(path: &Path) -> bool {
     fs::symlink_metadata(path).is_ok_and(|m| m.is_dir())
 }
 
 /// The workspace folders in `root`: real, not hidden, holding a `workspace.json`; by name.
-fn workspace_dirs(root: &Path) -> Vec<(String, PathBuf)> {
+pub(crate) fn workspace_dirs(root: &Path) -> Vec<(String, PathBuf)> {
     let mut found: Vec<_> = fs::read_dir(root)
         .map(|entries| {
             entries
@@ -97,7 +97,7 @@ fn workspace_dirs(root: &Path) -> Vec<(String, PathBuf)> {
 }
 
 /// `<dir>/<base>`, or `<base> (2)`, `(3)`… when taken, made empty so nothing else takes it.
-fn new_folder(dir: &Path, base: &str) -> Result<PathBuf, String> {
+pub(crate) fn new_folder(dir: &Path, base: &str) -> Result<PathBuf, String> {
     for n in 1..1000 {
         let folder = dir.join(if n == 1 {
             base.to_string()
@@ -141,7 +141,7 @@ fn rename_folder(from: &Path, base: &str) -> Result<PathBuf, String> {
 }
 
 /// A folder's name for a workspace called `name`.
-fn name_for_folder(name: &str) -> String {
+pub(crate) fn name_for_folder(name: &str) -> String {
     if name.trim().is_empty() {
         UNTITLED.to_string()
     } else {
@@ -152,7 +152,7 @@ fn name_for_folder(name: &str) -> String {
 // ---- workspace.json
 
 /// The text as a JSON object, or why it isn't one.
-fn parse(text: &str) -> Result<Map<String, Value>, String> {
+pub(crate) fn parse(text: &str) -> Result<Map<String, Value>, String> {
     match serde_json::from_str::<Value>(text) {
         Ok(Value::Object(map)) => Ok(map),
         Ok(_) => Err("workspace.json is not a workspace".into()),
@@ -160,7 +160,7 @@ fn parse(text: &str) -> Result<Map<String, Value>, String> {
     }
 }
 
-fn text_of(map: &Map<String, Value>, key: &str) -> String {
+pub(crate) fn text_of(map: &Map<String, Value>, key: &str) -> String {
     map.get(key)
         .and_then(Value::as_str)
         .map(|s| s.trim().to_string())
@@ -181,7 +181,7 @@ fn strings_of(map: &Map<String, Value>, key: &str) -> Vec<String> {
 }
 
 /// The workspace's id, when it has a valid one.
-fn id_of(map: &Map<String, Value>) -> Option<String> {
+pub(crate) fn id_of(map: &Map<String, Value>) -> Option<String> {
     Some(text_of(map, "id")).filter(|id| is_valid_id(WORKSPACE_PREFIX, id))
 }
 
@@ -239,6 +239,21 @@ fn to_text(map: &Map<String, Value>) -> String {
         lines.push(field(key, value));
     }
     format!("{{\n{}\n}}\n", lines.join(",\n"))
+}
+
+/// What a workspace changed on two computers leaves beside the one kept (sync, slice 8): the other
+/// version's `workspace.json` as a new workspace with `id`, named "… (conflict copy)". Gives that
+/// name and the text; None when `text` isn't a workspace.
+pub(crate) fn conflict_copy(text: &str, id: &str) -> Option<(String, String)> {
+    let mut map = parse(text).ok()?;
+    let name = text_of(&map, "name");
+    let name = format!(
+        "{} (conflict copy)",
+        if name.is_empty() { UNTITLED } else { &name }
+    );
+    map.insert("id".into(), Value::String(id.into()));
+    map.insert("name".into(), Value::String(name.clone()));
+    Some((name, to_text(&map)))
 }
 
 /// What `Oversay --check` and a careful writer want to know about a `workspace.json`: anything
@@ -372,7 +387,7 @@ fn list_in(root: &Path) -> Vec<Workspace> {
 }
 
 /// The folder of the workspace with this id.
-fn find_in(root: &Path, id: &str) -> Result<PathBuf, String> {
+pub(crate) fn find_in(root: &Path, id: &str) -> Result<PathBuf, String> {
     if is_valid_id(WORKSPACE_PREFIX, id) {
         for (_, dir) in workspace_dirs(root) {
             let found = fs::read_to_string(dir.join(WORKSPACE_FILE))
@@ -626,7 +641,7 @@ struct Watcher(#[allow(dead_code)] Mutex<Option<Debouncer<RecommendedWatcher>>>)
 
 /// Whether a changed path under `root` may change the list: a workspace's folder or its
 /// `workspace.json`. Resources and anything deeper do not.
-fn is_change(root: &Path, path: &Path) -> bool {
+pub(crate) fn is_change(root: &Path, path: &Path) -> bool {
     let Ok(inside) = path.strip_prefix(root) else {
         return false;
     };

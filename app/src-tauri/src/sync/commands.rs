@@ -2,7 +2,7 @@
 //! config folder, never in settings.json or the keychain) and the commands Settings › Account
 //! calls. Signed out, nothing here makes a request (V5), and signing out turns it off.
 
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
@@ -12,7 +12,7 @@ use serde::Serialize;
 use tauri::{AppHandle, Emitter, Manager};
 
 use super::cloud::{AccountTransport, ApiCloud};
-use super::library::FolderLibrary;
+use super::library::{FolderLibrary, Folders, WorkspaceFolder};
 use super::saver::{Activity, Saver};
 use super::{CloudError, FirstSync, State, Sync};
 use crate::account::{Account, commands::account_of};
@@ -155,20 +155,28 @@ pub fn init(app: &AppHandle) {
     std::thread::spawn(move || worker(app));
 }
 
-/// Tells the worker a deck file changed. Off or signed out, nothing is noted and nothing is sent.
+/// Tells the worker a deck or workspace file changed. Off or signed out, nothing is noted and
+/// nothing is sent.
 fn watch_decks(app: &AppHandle) -> Result<Debouncer<RecommendedWatcher>, String> {
-    let dir = crate::quick::decks_dir(app)?;
-    // Events may name the folder by its real path (`/private/var/…` for `/var/…`).
-    let roots = [
-        dir.clone(),
-        dir.canonicalize().unwrap_or_else(|_| dir.clone()),
-    ];
+    let decks = crate::quick::decks_dir(app)?;
+    let workspaces = crate::workspaces::root(app)?;
+    // Events may name a folder by its real path (`/private/var/…` for `/var/…`).
+    let both = |dir: &Path| {
+        [
+            dir.to_path_buf(),
+            dir.canonicalize().unwrap_or_else(|_| dir.to_path_buf()),
+        ]
+    };
+    let (deck_roots, workspace_roots) = (both(&decks), both(&workspaces));
     let handle = app.clone();
     let mut debouncer = new_debouncer(QUIET, move |result: DebounceEventResult| match result {
         Ok(events)
-            if events
-                .iter()
-                .any(|e| roots.iter().any(|r| is_synced_path(r, &e.path))) =>
+            if events.iter().any(|e| {
+                deck_roots.iter().any(|r| is_synced_path(r, &e.path))
+                    || workspace_roots
+                        .iter()
+                        .any(|r| crate::workspaces::is_change(r, &e.path))
+            }) =>
         {
             if lock(&handle).on {
                 inbox(&handle).edited = Some(Instant::now());
@@ -178,11 +186,21 @@ fn watch_decks(app: &AppHandle) -> Result<Debouncer<RecommendedWatcher>, String>
         Err(e) => log::warn!("sync.watch_error error={e}"),
     })
     .map_err(|e| e.to_string())?;
-    debouncer
-        .watcher()
-        .watch(&dir, RecursiveMode::Recursive)
-        .map_err(|e| e.to_string())?;
+    for dir in [&decks, &workspaces] {
+        debouncer
+            .watcher()
+            .watch(dir, RecursiveMode::Recursive)
+            .map_err(|e| e.to_string())?;
+    }
     Ok(debouncer)
+}
+
+/// The Decks and Workspaces folders as the sync reads and writes them.
+fn folders(app: &AppHandle) -> Result<Folders, String> {
+    Ok(Folders {
+        decks: FolderLibrary(crate::quick::decks_dir(app)?),
+        workspaces: WorkspaceFolder(crate::workspaces::root(app)?),
+    })
 }
 
 /// The window came to the front: pull at the next look (launch pulls too: a new saver starts with
@@ -255,7 +273,7 @@ fn worker(app: AppHandle) {
         let Some(account) = account_of(&app).filter(|a| a.is_signed_in()) else {
             continue;
         };
-        let Ok(dir) = crate::quick::decks_dir(&app) else {
+        let Ok(folders) = folders(&app) else {
             continue;
         };
         let now = Instant::now();
@@ -270,7 +288,7 @@ fn worker(app: AppHandle) {
         if focused {
             saver.focused();
         }
-        let sync = Sync::new(ApiCloud(AccountTransport(account)), FolderLibrary(dir));
+        let sync = Sync::new(ApiCloud(AccountTransport(account)), folders);
         let Some(result) = saver.run_due(Instant::now(), &sync) else {
             continue;
         };
@@ -364,9 +382,9 @@ pub async fn sync_turn_on(app: AppHandle) -> Result<SyncStatus, String> {
             ..SyncStatus::default()
         };
     }
-    let dir = crate::quick::decks_dir(&app)?;
+    let folders = folders(&app)?;
     let still = account.clone();
-    let result = tauri::async_runtime::spawn_blocking(move || first_sync(account, dir)).await;
+    let result = tauri::async_runtime::spawn_blocking(move || first_sync(account, folders)).await;
     let mut status = lock(&app);
     status.working = false;
     match result.map_err(|e| e.to_string())? {
@@ -392,9 +410,9 @@ pub async fn sync_turn_on(app: AppHandle) -> Result<SyncStatus, String> {
     Ok(lock(&app).clone())
 }
 
-fn first_sync(account: Arc<Account>, dir: PathBuf) -> Result<(FirstSync, State), CloudError> {
+fn first_sync(account: Arc<Account>, folders: Folders) -> Result<(FirstSync, State), CloudError> {
     let mut state = State::default();
-    Sync::new(ApiCloud(AccountTransport(account)), FolderLibrary(dir))
+    Sync::new(ApiCloud(AccountTransport(account)), folders)
         .first_sync(&mut state)
         .map(|report| (report, state))
 }

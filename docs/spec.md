@@ -572,7 +572,8 @@ ADR 0050; epic oversayapp/web-api#1. An account is optional. Without one, Oversa
 - **Save decks to the cloud** (off until turned on): every deck uploads, then each edit, in the editor or by the AI skill writing `deck.md`, is saved within a few seconds. The status reads Saving, Saved or Offline.
 - **A second computer** signed in to the same account brings every deck down into its `Decks/` folder, where it opens and runs as normal. Each computer picks up the other's changes when it starts, when its window comes to the front, and on a timer.
 - **The same deck changed on both computers** while one was offline: both versions are kept, one as a conflict copy, and Oversay names the deck.
-- **A deck moved to the Trash** on one computer is removed from the cloud and from the other computer.
+- **Workspaces sync the same way** as decks: a workspace made or changed on one computer (its `workspace.json`: name, tags, the decks it lists) is on the other, with its decks. Changed on both: both are kept, the other version as a workspace named "… (conflict copy)". Its `resources/` folder stays on the computer.
+- **A deck or workspace moved to the Trash** on one computer is removed from the cloud and from the other computer (a workspace's decks are not removed with it).
 - **Sign out** removes the stored tokens and stops syncing. Every local deck stays.
 - **Delete account** (asks first) removes the account and everything of its in the cloud. Local decks stay.
 

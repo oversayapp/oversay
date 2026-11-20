@@ -1,5 +1,7 @@
 //! Saving decks to the cloud (ADR 0050, spec §14). A deck's `deck.md` and `sessions.json`, byte for
-//! byte, are the only things that travel; the Decks folder stays the source of truth.
+//! byte, are the only things that travel; the Decks folder stays the source of truth. A workspace's
+//! `workspace.json` travels the same way (slice 8): it is a `LocalDeck` with a `w_` id, its text in
+//! `deck_md` and no `sessions_json`, so every rule below holds for it too.
 //!
 //! The module is one small interface, `Sync`: `push(deck)`, `pull()`, and `first_sync()` (what
 //! turning Save decks to the cloud on does, built from the two). The cloud and the Decks folder sit
@@ -607,11 +609,12 @@ impl<C: Cloud, L: Library> Sync<C, L> {
         match pushed {
             Ok(Pushed::Saved { revision }) => {
                 state.decks.insert(deck.id.clone(), Base { revision, hash });
-                log::debug!(
-                    "sync.deck_saved id={} ms={} check=epic-036/V9",
-                    deck.id,
-                    started.elapsed().as_millis()
-                );
+                let ms = started.elapsed().as_millis();
+                if is_workspace(&deck.id) {
+                    log::debug!("sync.workspace_saved id={} ms={ms}", deck.id);
+                } else {
+                    log::debug!("sync.deck_saved id={} ms={ms} check=epic-036/V9", deck.id);
+                }
                 Ok(true)
             }
             // Changed again in the cloud since: the next round settles that too.
@@ -633,18 +636,14 @@ impl<C: Cloud, L: Library> Sync<C, L> {
         local: &LocalDeck,
         theirs: &RemoteDeck,
     ) -> Result<String, CloudError> {
-        let title = format!(
-            "{} (conflict copy)",
-            crate::quick::front_value(&theirs.deck_md, "title")
-                .unwrap_or_else(|| "Untitled deck".into())
-        );
-        let id = crate::ids::new_id(crate::ids::DECK_PREFIX);
-        let copy = RemoteDeck {
-            id: id.clone(),
-            deck_md: with_title(&crate::quick::with_id(&theirs.deck_md, &id), &title),
-            sessions_json: theirs.sessions_json.clone(),
-            revision: 0,
-        };
+        let (title, copy) = conflict_copy(theirs).ok_or_else(|| {
+            log::warn!(
+                "sync.deck_failed step=conflict_copy id={} reason=unreadable",
+                local.id
+            );
+            CloudError::Unreachable("not readable".into())
+        })?;
+        let id = copy.id.clone();
         if self.library.add(&copy).is_err() {
             log::warn!(
                 "sync.deck_failed step=conflict_copy id={} reason=not_saved",
@@ -659,6 +658,43 @@ impl<C: Cloud, L: Library> Sync<C, L> {
         );
         Ok(title)
     }
+}
+
+/// The version of `theirs` that is kept beside a deck or workspace changed on both computers: a
+/// new item with its own id, titled "… (conflict copy)"; gives that title and the copy.
+fn conflict_copy(theirs: &RemoteDeck) -> Option<(String, RemoteDeck)> {
+    if is_workspace(&theirs.id) {
+        let id = crate::ids::new_id(crate::ids::WORKSPACE_PREFIX);
+        let (name, text) = crate::workspaces::conflict_copy(&theirs.deck_md, &id)?;
+        return Some((
+            name,
+            RemoteDeck {
+                id,
+                deck_md: text,
+                sessions_json: String::new(),
+                revision: 0,
+            },
+        ));
+    }
+    let title = format!(
+        "{} (conflict copy)",
+        crate::quick::front_value(&theirs.deck_md, "title")
+            .unwrap_or_else(|| "Untitled deck".into())
+    );
+    let id = crate::ids::new_id(crate::ids::DECK_PREFIX);
+    let copy = RemoteDeck {
+        id: id.clone(),
+        deck_md: with_title(&crate::quick::with_id(&theirs.deck_md, &id), &title),
+        sessions_json: theirs.sessions_json.clone(),
+        revision: 0,
+    };
+    Some((title, copy))
+}
+
+/// Workspaces go through the rounds as decks do (slice 8): an id starting `w_` is a workspace,
+/// whose `workspace.json` text is `LocalDeck::deck_md` and whose `sessions_json` is empty.
+fn is_workspace(id: &str) -> bool {
+    id.starts_with(crate::ids::WORKSPACE_PREFIX)
 }
 
 /// `text` with its front matter `title:` saying `title`, added when there is none.
