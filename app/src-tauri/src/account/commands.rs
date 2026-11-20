@@ -48,6 +48,11 @@ pub fn receive_link(app: &AppHandle, url: String) {
     });
 }
 
+/// The account, for `sync`; None in a build with no account stage.
+pub fn account_of(app: &AppHandle) -> Option<Arc<Account>> {
+    app.try_state::<AccountState>().and_then(|s| s.0.clone())
+}
+
 fn account(state: &State<'_, AccountState>) -> Result<Arc<Account>, String> {
     state
         .0
@@ -100,6 +105,8 @@ pub async fn account_sign_out(
     let signed_out = tauri::async_runtime::spawn_blocking(move || worker.sign_out())
         .await
         .map_err(|e| e.to_string())?;
+    // Syncing stops with the sign-in (epic 036 V6); the decks stay.
+    crate::sync::commands::signed_out(&app);
     if let Some((logout, revocation)) = signed_out {
         if let Err(e) = app.opener().open_url(logout, None::<&str>) {
             log::warn!("account.browser_not_opened error={e}");

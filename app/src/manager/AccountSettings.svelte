@@ -4,6 +4,7 @@
   // Tokens stay in Rust: this only shows the status it gives.
   import { onMount } from 'svelte'
   import { account, cancelSignIn, loadAccount, signIn, signOut } from '../lib/account/account'
+  import { loadSync, outcomeText, sync, turnSyncOff, turnSyncOn } from '../lib/account/sync'
   import { attempt } from './errors'
 
   let busy = $state(false)
@@ -18,7 +19,11 @@
     })
 
   // Manager.svelte keeps it current from then on (ACCOUNT_EVENT).
-  onMount(() => void attempt(loadAccount))
+  onMount(() => void attempt(loadAccount).then(() => attempt(loadSync)))
+  // Signed out elsewhere, or by Sign out: Rust turned saving off too.
+  $effect(() => {
+    if ($account?.state === 'signedOut') void attempt(loadSync)
+  })
 </script>
 
 {#if $account === null}
@@ -27,6 +32,32 @@
   <p class="muted hint">This build of Oversay has no account.</p>
 {:else if $account.state === 'signedIn'}
   <p class="who">Signed in as <strong>{$account.email}</strong></p>
+  {#if $sync}
+    <div class="save">
+      <label class="check">
+        <input
+          type="checkbox"
+          checked={$sync.on}
+          disabled={busy || $sync.working}
+          onchange={async (e) => {
+            const box = e.currentTarget
+            await run(box.checked ? turnSyncOn : turnSyncOff)
+            // A failed turn-on leaves it off: the box says so too.
+            box.checked = $sync?.on ?? false
+          }}
+        />
+        Save decks to the cloud
+      </label>
+      {#if $sync.working}
+        <p class="muted hint" role="status">Saving your decks…</p>
+      {:else if $sync.problem}
+        <p class="error" role="alert">{$sync.problem}</p>
+      {:else if $sync.last}
+        <p class="muted hint" role="status">{outcomeText($sync.last)}</p>
+      {/if}
+      <p class="muted hint">Saves each deck's cards and sessions to your account, so they're on your other computers too. Recordings, transcripts and resources stay on this computer.</p>
+    </div>
+  {/if}
   <div class="row">
     <button disabled={busy} onclick={() => run(signOut)}>Sign out</button>
   </div>
@@ -53,6 +84,14 @@
 <style>
   .who {
     margin: 0 0 10px;
+  }
+  .save {
+    margin: 0 0 14px;
+  }
+  .check {
+    display: flex;
+    align-items: center;
+    gap: 8px;
   }
   .error {
     margin: 0 0 10px;

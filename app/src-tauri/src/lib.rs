@@ -20,6 +20,7 @@ mod session_files;
 mod settings;
 mod skill;
 mod state;
+mod sync;
 mod transcriber;
 mod tray;
 mod tray_menu;
@@ -92,6 +93,7 @@ pub fn run() {
             // Links an AI opens to show a note or open Oversay on it (ADR 0032).
             // The optional account, restored from the keychain (ADR 0050); before links, which hand it oversay://auth.
             account::commands::init(app.handle());
+            sync::commands::init(app.handle());
             links::init(app.handle());
             // Started from the jump list's Control panel with the app not yet running.
             if std::env::args().any(|a| a == platform::CONTROL_PANEL_ARG) {
@@ -156,6 +158,9 @@ pub fn run() {
             account::commands::account_cancel_sign_in,
             account::commands::account_sign_out,
             account::commands::account_check_api,
+            sync::commands::sync_status,
+            sync::commands::sync_turn_on,
+            sync::commands::sync_turn_off,
             skill::skill_targets,
             skill::install_skill,
             skill::remove_skill,
