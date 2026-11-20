@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest'
 import type { AccountStatus } from './account'
 import type { SyncStatus } from './sync'
-import { initialOf, railAccount, syncLine } from './summary'
+import { initialOf, PRIVACY_URL, railAccount, syncLine, TERMS_URL } from './summary'
+import capabilities from '../../../src-tauri/capabilities/default.json'
 
 const on: SyncStatus = { on: true, working: false, last: null, problem: null, activity: 'saved', conflicts: [] }
 const signedIn: AccountStatus = { state: 'signedIn', email: 'john@example.com' }
@@ -85,5 +86,20 @@ describe('initialOf', () => {
   })
   it('falls back to a dot for an empty email', () => {
     expect(initialOf('')).toBe('•')
+  })
+})
+
+describe('the policy links under Sign in and Create account', () => {
+  // The opener plugin only opens what capabilities/default.json allows, so both are listed there.
+  const allowed = capabilities.permissions
+    .filter((p): p is { identifier: string; allow: { url: string }[] } => typeof p === 'object' && 'allow' in p)
+    .filter((p) => p.identifier === 'opener:allow-open-url')
+    .flatMap((p) => p.allow.map((a) => a.url))
+
+  it('are the website pages, over https, and may be opened', () => {
+    for (const url of [TERMS_URL, PRIVACY_URL]) {
+      expect(url).toMatch(/^https:\/\/oversay\.app\//)
+      expect(allowed).toContain(url)
+    }
   })
 })
