@@ -3,12 +3,16 @@
   // Sign in and Create account open Cognito's page in the browser; signed in, the email and Sign out.
   // Tokens stay in Rust: this only shows the status it gives.
   import { onMount } from 'svelte'
-  import { activityText, loadSync, outcomeText, sync, turnSyncOff, turnSyncOn, watchSync } from '../lib/account/sync'
+  import { loadSync, sync, turnSyncOff, turnSyncOn } from '../lib/account/sync'
+  import { initialOf, PRIVACY_LINE, syncLine } from '../lib/account/summary'
   import { account, cancelSignIn, deleteAccount, loadAccount, signIn, signOut } from '../lib/account/account'
-  import ConfirmDelete from './ConfirmDelete.svelte'
+  import Icon from './Icon.svelte'
+  import AccountAvatar from './AccountAvatar.svelte'
+  import { goLibrary } from './route'
   import { attempt } from './errors'
 
   let busy = $state(false)
+  const line = $derived($sync ? syncLine($sync) : null)
   let deleting = $state(false)
   const run = (action: () => Promise<unknown>) =>
     attempt(async () => {
@@ -23,9 +27,6 @@
   // Manager.svelte keeps it current from then on (ACCOUNT_EVENT).
   onMount(() => {
     void attempt(loadAccount).then(() => attempt(loadSync))
-    // Saving, then Saved, as edits go up and changes from another computer come in.
-    const stop = watchSync().catch(() => () => {})
-    return () => void stop.then((off) => off())
   })
   // Signed out elsewhere, or by Sign out: Rust turned saving off too.
   $effect(() => {
@@ -38,12 +39,20 @@
 {:else if $account.state === 'unavailable'}
   <p class="muted hint">This build of Oversay has no account.</p>
 {:else if $account.state === 'signedIn'}
-  <p class="who">Signed in as <strong>{$account.email}</strong></p>
+  <div class="who">
+    <AccountAvatar initial={initialOf($account.email)} size={36} />
+    <div>
+      <strong>{$account.email}</strong>
+      <p class="muted small">Signed in</p>
+    </div>
+  </div>
   {#if $sync}
     <div class="save">
-      <label class="check">
+      <p class="label">Cloud saving</p>
+      <label class="switch">
         <input
           type="checkbox"
+          role="switch"
           checked={$sync.on}
           disabled={busy || $sync.working}
           onchange={async (e) => {
@@ -53,72 +62,278 @@
             box.checked = $sync?.on ?? false
           }}
         />
+        <span class="track" aria-hidden="true"></span>
         Save decks to the cloud
       </label>
-      {#if $sync.working}
-        <p class="muted hint" role="status">Saving your decks…</p>
-      {:else if $sync.problem}
+      {#if $sync.problem && !line}
         <p class="error" role="alert">{$sync.problem}</p>
-      {:else if $sync.last}
-        <p class="muted hint" role="status">{outcomeText($sync.last)}</p>
       {/if}
-      {#if $sync.on && !$sync.working && activityText($sync)}
-        <p class="activity" role="status">{activityText($sync)}</p>
+      {#if line}
+        <div class="status {line.tone}" role="status">
+          <span class="statusdot"></span>
+          <div>
+            <b>{line.title}</b>
+            {#if line.detail}<small>{line.detail}</small>{/if}
+          </div>
+        </div>
+        {#if $sync.conflicts.length > 0}
+          <div class="row"><button onclick={() => goLibrary()}>Show in Library</button></div>
+        {/if}
       {/if}
       <p class="muted hint">Saves each deck's cards and sessions to your account, so they're on your other computers too. Recordings, transcripts and resources stay on this computer.</p>
     </div>
   {/if}
-  <div class="row">
-    {#if deleting}
-      <ConfirmDelete
-        label="Delete account"
-        onconfirm={() => {
+  {#if deleting}
+    <div class="confirm" role="alertdialog" aria-label="Delete account">
+      <p class="ask">Delete your account?</p>
+      <ul>
+        <li><b>Deleted for good:</b> your account and every deck saved under it in the cloud. This can't be undone.</li>
+        <li><b>Kept:</b> every deck on this computer.</li>
+      </ul>
+    </div>
+    <div class="row">
+      <button
+        class="solid"
+        onclick={() => {
           deleting = false
           void run(deleteAccount)
-        }}
-        oncancel={() => (deleting = false)}
-        >Delete your account? Your account and every deck saved under it in the cloud are deleted for good, and this can't be undone. Decks on this computer stay.</ConfirmDelete
+        }}>Delete account</button
       >
-    {:else}
+      <button onclick={() => (deleting = false)}>Cancel</button>
+    </div>
+  {:else}
+    <div class="row apart">
       <button disabled={busy} onclick={() => run(signOut)}>Sign out</button>
       <button class="danger" disabled={busy} onclick={() => (deleting = true)}>Delete account…</button>
-    {/if}
-  </div>
-  <p class="muted hint">Signing out leaves every deck on this computer as it is.</p>
+    </div>
+    <p class="muted hint">Signing out leaves every deck on this computer as it is.</p>
+  {/if}
 {:else if $account.state === 'signingIn'}
-  <p class="who" role="status">Finish signing in in your browser.</p>
-  <div class="row">
-    <button onclick={() => run(cancelSignIn)}>Cancel</button>
-    <button onclick={() => run(() => signIn('signIn'))}>Open the page again</button>
+  <div class="waiting" role="status">
+    <svg class="spin" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke-width="2.5" stroke-linecap="round" aria-hidden="true"
+      ><circle cx="12" cy="12" r="9" stroke="var(--accent-soft)" /><path d="M12 3a9 9 0 0 1 9 9" stroke="var(--accent)" /></svg
+    >
+    <div>
+      <strong>Waiting for your browser</strong>
+      <p class="muted small">Finish signing in in the window that just opened. When you're done, it brings you back to Oversay.</p>
+    </div>
   </div>
-  <p class="muted hint">When you're done, your browser brings you back to Oversay.</p>
+  <div class="row">
+    <button class="primary" onclick={() => run(() => signIn('signIn'))}>Open the page again</button>
+    <button onclick={() => run(cancelSignIn)}>Cancel</button>
+  </div>
 {:else}
   {#if $account.problem}<p class="error" role="alert">{$account.problem}</p>{/if}
+  <p class="lead">Keep your decks on every computer</p>
+  <ul class="perks">
+    <li><span class="tick"><Icon name="check" size={12} /></span>Your cards and sessions are saved to your account and appear on your other computers</li>
+    <li><span class="tick"><Icon name="check" size={12} /></span>Optional: without an account everything stays on this computer</li>
+    <li><span class="tick"><Icon name="check" size={12} /></span>Sign in with Apple, Google or email. Oversay never sees your password</li>
+  </ul>
   <div class="row">
     <button class="primary" disabled={busy} onclick={() => run(() => signIn('signIn'))}>Sign in</button>
     <button disabled={busy} onclick={() => run(() => signIn('signUp'))}>Create account</button>
   </div>
-  <p class="muted hint">
-    An account is optional. With one, Oversay can save your decks to the cloud, so they're on your other computers too; without one, everything stays on
-    this computer. Your browser opens to sign in with Apple, Google, or an email and password, and Oversay never sees your password.
-  </p>
+  <p class="muted hint">{PRIVACY_LINE}</p>
 {/if}
 
 <style>
   .who {
-    margin: 0 0 10px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin: 0 0 14px;
+  }
+  .who :global(.av) {
+    --rail: var(--card);
+  }
+  .small {
+    margin: 0;
+    font-size: 13px;
+  }
+  .label {
+    margin: 0 0 8px;
+    font-size: 12px;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: var(--muted);
   }
   .save {
     margin: 0 0 14px;
   }
-  .activity {
-    margin: 6px 0 0;
-    font-size: 13px;
-  }
-  .check {
+  .switch {
     display: flex;
     align-items: center;
+    gap: 10px;
+    font-weight: 600;
+  }
+  .switch input {
+    position: absolute;
+    opacity: 0;
+    width: 34px;
+    height: 20px;
+    margin: 0;
+  }
+  .track {
+    flex: none;
+    position: relative;
+    width: 34px;
+    height: 20px;
+    border-radius: 10px;
+    background: var(--line-strong);
+    transition: background 0.12s;
+  }
+  .track::after {
+    content: '';
+    position: absolute;
+    top: 2px;
+    left: 2px;
+    width: 16px;
+    height: 16px;
+    border-radius: 50%;
+    background: #fff;
+    transition: transform 0.12s;
+  }
+  .switch input:checked + .track {
+    background: var(--accent);
+  }
+  .switch input:checked + .track::after {
+    transform: translateX(14px);
+  }
+  .switch input:focus-visible + .track {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+  }
+  .switch input:disabled + .track {
+    opacity: 0.5;
+  }
+  .status {
+    display: flex;
+    gap: 10px;
+    align-items: flex-start;
+    margin: 12px 0;
+    padding: 12px 14px;
+    border-radius: 10px;
+    line-height: 1.4;
+  }
+  .status b {
+    display: block;
+    font-weight: 650;
+  }
+  .status small {
+    display: block;
+    margin-top: 2px;
+    font-size: 13px;
+  }
+  .statusdot {
+    flex: none;
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    margin-top: 5px;
+  }
+  .status.ok {
+    background: var(--ok-bg);
+    color: var(--ok);
+  }
+  .status.ok .statusdot {
+    background: var(--ok);
+  }
+  .status.busy {
+    background: var(--accent-soft);
+    color: var(--accent-text);
+  }
+  .status.busy .statusdot {
+    background: var(--accent);
+  }
+  .status.warn {
+    background: var(--warn-bg);
+    color: var(--warn);
+  }
+  .status.warn .statusdot {
+    background: var(--warn);
+  }
+  .apart {
+    border-top: 1px solid var(--line);
+    padding-top: 16px;
+  }
+  .confirm {
+    background: var(--danger-bg);
+    border: 1px solid var(--danger);
+    border-radius: 10px;
+    padding: 14px 16px;
+    margin: 0 0 12px;
+  }
+  .ask {
+    margin: 0 0 8px;
+    font-weight: 700;
+    color: var(--danger);
+  }
+  .confirm ul {
+    margin: 0;
+    padding-left: 18px;
+    line-height: 1.55;
+  }
+  .solid {
+    background: var(--danger);
+    border-color: var(--danger);
+    color: #fff;
+  }
+  .solid:hover:not(:disabled) {
+    background: var(--danger);
+    filter: brightness(0.92);
+  }
+  .waiting {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    margin: 0 0 14px;
+  }
+  .spin {
+    flex: none;
+    animation: spin 1s linear infinite;
+  }
+  @keyframes spin {
+    to {
+      transform: rotate(360deg);
+    }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .spin {
+      animation: none;
+    }
+  }
+  .lead {
+    margin: 0 0 10px;
+    font-size: 15px;
+    font-weight: 600;
+  }
+  .perks {
+    list-style: none;
+    margin: 0 0 14px;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
     gap: 8px;
+  }
+  .perks li {
+    display: flex;
+    gap: 10px;
+    align-items: flex-start;
+    line-height: 1.4;
+  }
+  .tick {
+    flex: none;
+    width: 18px;
+    height: 18px;
+    border-radius: 50%;
+    background: var(--ok-bg);
+    color: var(--ok);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin-top: 1px;
   }
   .error {
     margin: 0 0 10px;

@@ -35,17 +35,6 @@ export async function watchSync(): Promise<() => void> {
   return listen<SyncStatus>(SYNC_CHANGED_EVENT, (e) => sync.set(e.payload))
 }
 
-/** The line under the switch while saving is on. */
-export function activityText(s: SyncStatus): string {
-  const copies = s.conflicts
-    .map((t) => ` “${t.replace(/ \(conflict copy\)$/, '')}” was changed on two computers. Both versions are kept: the other computer's is “${t}”.`)
-    .join('')
-  if (s.activity === 'offline') return `Offline. Your decks are safe here and will be saved when you are back online.${copies}`
-  if (s.activity === 'saving') return `Saving…${copies}`
-  if (s.activity === 'saved') return `Saved.${copies}`
-  return copies.trim()
-}
-
 /** Null until Rust has been asked. */
 export const sync = writable<SyncStatus | null>(null)
 
