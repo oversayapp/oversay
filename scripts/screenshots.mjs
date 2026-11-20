@@ -307,7 +307,7 @@ const fakeBridge = `(() => {
       // The account (ADR 0050): signed out, unless a step sets what the next account command gives.
       if (cmd === 'account_status') return window.__account ?? { state: 'signedOut', problem: null };
       if (cmd === 'account_sign_in') return (window.__account = window.__accountNext ?? { state: 'signingIn' });
-      if (cmd === 'account_cancel_sign_in' || cmd === 'account_sign_out') return (window.__account = window.__accountNext ?? { state: 'signedOut', problem: null });
+      if (cmd === 'account_cancel_sign_in' || cmd === 'account_sign_out' || cmd === 'account_delete') return (window.__account = window.__accountNext ?? { state: 'signedOut', problem: null });
       if (cmd === 'account_check_api') return 'GET /decks: 200, 2 decks';
       // Save decks to the cloud (slice 4): off until a step turns it on.
       if (cmd === 'sync_status') return window.__sync ?? { on: false, working: false, last: null, problem: null };
@@ -482,6 +482,7 @@ const SCREENS = [
   ['settings-account-problem', `(async () => { window.__accountNext = { state: 'signedOut', problem: 'Sign-in did not finish. Try again.' }; [...document.querySelectorAll('#account button')].find((b) => b.textContent.trim() === 'Cancel').click(); await new Promise((r) => setTimeout(r, 150)) })()`],
   ['settings-account-signed-in', `(async () => { window.__accountNext = { state: 'signedIn', email: 'john@example.com' }; [...document.querySelectorAll('#account button')].find((b) => b.textContent.trim() === 'Sign in').click(); await new Promise((r) => setTimeout(r, 150)); window.__accountNext = undefined })()`],
   ['settings-account-saving-decks', `(async () => { document.querySelector('#account input[type=checkbox]').click(); await new Promise((r) => setTimeout(r, 250)) })()`],
+  ['settings-account-delete-ask', `(async () => { [...document.querySelectorAll('#account button')].find((b) => b.textContent.includes('Delete account')).click(); await new Promise((r) => setTimeout(r, 150)) })()`],
   // 013/02: the section list: jump to Shortcuts, scroll to the end, and (narrow) the open menu.
   // Each step runs at the widest size and the picture is then taken at each width.
   ['settings-overlays', `(async () => { [...document.querySelectorAll('.toc ul button')].find((b) => b.textContent.trim() === 'Overlays').click(); await new Promise((r) => setTimeout(r, 900)) })()`],

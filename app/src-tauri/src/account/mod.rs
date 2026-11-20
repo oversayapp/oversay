@@ -184,11 +184,12 @@ pub trait SecretStore: Send + Sync {
     fn delete(&self) -> Result<(), String>;
 }
 
-/// The stage's API: a GET with the access token, giving the status and body.
+/// The stage's API: a request with the access token, giving the status and body.
 pub trait Api: Send + Sync {
     fn get(&self, path: &str, access_token: &str) -> Result<(u16, String), String>;
     /// A PUT with a JSON body (a deck, in `sync`).
     fn put(&self, path: &str, access_token: &str, body: &str) -> Result<(u16, String), String>;
+    fn delete(&self, path: &str, access_token: &str) -> Result<(u16, String), String>;
 }
 
 /// A string that never shows itself in a `{:?}`, so a token can't reach the log by accident.
@@ -599,10 +600,40 @@ impl Account {
             log::warn!("account.token_not_deleted store=keychain error={e}");
         }
         log::debug!("account.signed_out check=epic-036/V6");
+        Some((self.hosted_logout(), Revocation(signed_in.refresh_token)))
+    }
+
+    /// Deletes the account in the cloud (`DELETE /account`: Cognito user and every row of theirs),
+    /// then signs out as Sign out does: keychain item removed, local decks untouched (this module
+    /// has no access to them). Any failure leaves the account signed in so the person can try
+    /// again; the API's delete is safe to repeat. Gives the hosted page's sign-out address, which
+    /// clears the browser's sign-in.
+    pub fn delete_account(&self, now: Instant) -> Result<String, AccountError> {
+        let token = self.access_token(now)?;
+        let (status, _) = self
+            .api
+            .delete("/account", &token)
+            .map_err(AccountError::Unreachable)?;
+        if status != 204 {
+            log::warn!("account.delete_failed status={status}");
+            return Err(AccountError::Unreachable(format!(
+                "The account couldn't be deleted (the server answered {status}). Nothing on this computer changed. Try again."
+            )));
+        }
+        // Signed out meanwhile is fine: the account is gone either way. No revoke: the user is gone.
+        let logout = self.sign_out().map(|(logout, _)| logout);
+        log::debug!(
+            "account.deleted check=epic-036/V15 stage={}",
+            self.stage.name
+        );
+        Ok(logout.unwrap_or_else(|| self.hosted_logout()))
+    }
+
+    fn hosted_logout(&self) -> String {
         let mut url = self.hosted("/logout");
         url.query_pairs_mut()
             .append_pair("logout_uri", SIGNED_OUT_REDIRECT);
-        Some((url.into(), Revocation(signed_in.refresh_token)))
+        url.into()
     }
 
     /// Tells Cognito a signed-out refresh token is no longer good.

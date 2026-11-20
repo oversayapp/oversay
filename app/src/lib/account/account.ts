@@ -41,6 +41,12 @@ export function signOut() {
   return set(invoke<AccountStatus>('account_sign_out'))
 }
 
+/** Deletes the account in the cloud and everything saved under it, then signs out. Every deck stays in the folder. */
+export function deleteAccount() {
+  logAction('account', 'delete account')
+  return set(invoke<AccountStatus>('account_delete'))
+}
+
 /** Developer tools: `GET /decks` with the account's token, to see that the token works. */
 export function checkApi() {
   logAction('account', 'check the API')
