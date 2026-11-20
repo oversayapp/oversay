@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import type { AccountStatus } from './account'
 import type { SyncStatus } from './sync'
-import { initialOf, railAccount, syncLine } from './summary'
+import { initialOf, PRIVACY_URL, railAccount, syncLine } from './summary'
 
 const on: SyncStatus = { on: true, working: false, last: null, problem: null, activity: 'saved', conflicts: [] }
 const signedIn: AccountStatus = { state: 'signedIn', email: 'john@example.com' }
@@ -85,5 +85,14 @@ describe('initialOf', () => {
   })
   it('falls back to a dot for an empty email', () => {
     expect(initialOf('')).toBe('•')
+  })
+})
+
+describe('the privacy policy link', () => {
+  it('is an https page the opener is allowed to open', async () => {
+    const caps = (await import('../../../src-tauri/capabilities/default.json')).default
+    const urls = JSON.stringify(caps)
+    expect(PRIVACY_URL).toMatch(/^https:\/\//)
+    expect(urls).toContain(PRIVACY_URL)
   })
 })

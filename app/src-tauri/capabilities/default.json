@@ -104,6 +104,9 @@
       "identifier": "opener:allow-open-url",
       "allow": [
         {
+          "url": "https://oversay.app/privacy"
+        },
+        {
           "url": "https://crates.io/*"
         },
         {

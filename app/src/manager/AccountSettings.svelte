@@ -4,8 +4,9 @@
   // Tokens stay in Rust: this only shows the status it gives.
   import { onMount } from 'svelte'
   import { loadSync, sync, turnSyncOff, turnSyncOn } from '../lib/account/sync'
-  import { initialOf, PRIVACY_LINE, syncLine } from '../lib/account/summary'
+  import { initialOf, PRIVACY_LINE, PRIVACY_URL, syncLine } from '../lib/account/summary'
   import { account, cancelSignIn, deleteAccount, loadAccount, signIn, signOut } from '../lib/account/account'
+  import { openUrl } from '@tauri-apps/plugin-opener'
   import Icon from './Icon.svelte'
   import AccountAvatar from './AccountAvatar.svelte'
   import { goLibrary } from './route'
@@ -134,10 +135,20 @@
     <button class="primary" disabled={busy} onclick={() => run(() => signIn('signIn'))}>Sign in</button>
     <button disabled={busy} onclick={() => run(() => signIn('signUp'))}>Create account</button>
   </div>
-  <p class="muted hint">{PRIVACY_LINE}</p>
+  <p class="muted hint">{PRIVACY_LINE} <button class="link" onclick={() => attempt(() => openUrl(PRIVACY_URL))}>How we use your data</button></p>
 {/if}
 
 <style>
+  button.link {
+    display: inline;
+    border: 0;
+    background: none;
+    padding: 0;
+    color: var(--accent-text);
+    font-size: inherit;
+    text-decoration: underline;
+  }
+
   .who {
     display: flex;
     align-items: center;
