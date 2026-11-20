@@ -227,6 +227,11 @@ fn chosen(app: &AppHandle, id: &str) {
             "panel",
             serde_json::json!(if light { "light" } else { "dark" }),
         ),
+        Choice::DeckView { agenda } => crate::control_panel::look_change(
+            app,
+            "deckView",
+            serde_json::json!(if agenda { "agenda" } else { "card" }),
+        ),
         Choice::ToggleHidden => {
             let hidden =
                 crate::overlay::hidden_from_capture(&app.state::<crate::state::StateHub>());

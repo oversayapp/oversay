@@ -1,13 +1,13 @@
 <script lang="ts">
   // The deck widget (ADR 0042): one window, two views of the
   // same run. The Card view is the flashcard widget; the Agenda view is every card along the bottom.
-  // The switch left of the host's ✕ goes to the other view: the manager saves it as the view last
-  // used, and the host moves the window to that view's remembered place and size (`windowFor`).
-  import { emit } from '@tauri-apps/api/event'
+  // The Look button left of the host's ✕ opens the Look card. The view is chosen in the menu (Card
+  // view / Agenda view): the manager saves it as the view last used, and the host moves the window
+  // to that view's remembered place and size (`windowFor`).
   import { deckRun } from '../../lib/decks/run'
-  import { logAction } from '../../lib/log'
   import { recordButton, recordFromWidget, recording, stopRecordingThisRun } from '../../lib/sessions/recording'
-  import { DECK_VIEW_EVENT, type DeckView } from '../../lib/settings/overlays'
+  import type { DeckView } from '../../lib/settings/overlays'
+  import { toggleControlPanel } from '../../lib/windows'
   import AgendaView from './AgendaView.svelte'
   import type { PluginContext } from '../types'
   import DeckTab from './DeckTab.svelte'
@@ -58,13 +58,6 @@
     view = $look.deckView
   })
   $effect(() => () => clearTimeout(settle))
-
-  const other = $derived<DeckView>(view === 'card' ? 'agenda' : 'card')
-  const otherName = $derived(other === 'agenda' ? 'Agenda view' : 'Card view')
-  function switchView() {
-    logAction('deck view', other)
-    void emit(DECK_VIEW_EVENT, other)
-  }
 
   // Record my voice (ADR 0041, 0042): on every running deck the button is shown left of the
   // switch: red while recording, dimmed while paused, grey when not, struck through when the
@@ -120,26 +113,17 @@
       >
     </button>
   {/if}
-  <button class="switch" type="button" title={otherName} aria-label="Switch to the {otherName}" onclick={switchView}>
-    {#if other === 'agenda'}
-      <svg width="16" height="14" viewBox="0 0 16 14" aria-hidden="true"
-        ><rect x="1" y="3.5" width="14" height="7" rx="2.2" fill="none" stroke="currentColor" stroke-width="1.5" /><path
-          d="M3.5 7h2.5M7.5 7h1.5M10.5 7h2"
-          stroke="currentColor"
-          stroke-width="2.2"
-          stroke-linecap="round"
-        /></svg
-      >
-    {:else}
-      <svg width="16" height="14" viewBox="0 0 16 14" aria-hidden="true"
-        ><rect x="2.5" y="1.5" width="11" height="11" rx="2.2" fill="none" stroke="currentColor" stroke-width="1.5" /><path
-          d="M5 5h6M5 7.5h4.5M5 10h5"
-          stroke="currentColor"
-          stroke-width="1.3"
-          stroke-linecap="round"
-        /></svg
-      >
-    {/if}
+  <button class="look" type="button" title="Look panel" aria-label="Look panel" onclick={() => void toggleControlPanel()}>
+    <svg width="16" height="14" viewBox="0 0 16 14" aria-hidden="true"
+      ><path d="M1.5 3.5h7M12 3.5h2.5M1.5 10.5h2.5M7.5 10.5h7" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" /><circle
+        cx="10.2"
+        cy="3.5"
+        r="1.8"
+        fill="none"
+        stroke="currentColor"
+        stroke-width="1.5"
+      /><circle cx="5.8" cy="10.5" r="1.8" fill="none" stroke="currentColor" stroke-width="1.5" /></svg
+    >
   </button>
 </div>
 
@@ -183,18 +167,18 @@
     --k-break: rgb(var(--ink));
   }
 
-  /* The view sits over its tab; the host's ✕ and the switch sit over the view. */
+  /* The view sits over its tab; the host's ✕ and the Look button sit over the view. */
   :global(.host > .corner) {
     z-index: 2;
   }
 
-  /* The host's ✕ in the panel's ink, as the switch is: dark on the Light panel. */
+  /* The host's ✕ in the panel's ink, as the Look button is: dark on the Light panel. */
   :global(.host:has(.dw.ink-light) > .corner .close) {
     color: rgba(0, 0, 0, 0.7);
   }
 
   /* Left of the host's ✕, and like it shown while the pointer is over the widget. */
-  .switch {
+  .look {
     position: absolute;
     z-index: 2;
     top: 7px;
@@ -213,8 +197,8 @@
     transition: opacity 0.15s;
   }
 
-  :global(.host:hover) .switch,
-  .switch:focus-visible {
+  :global(.host:hover) .look,
+  .look:focus-visible {
     opacity: 1;
   }
 
@@ -288,7 +272,7 @@
     }
   }
 
-  .switch:hover {
+  .look:hover {
     background: rgba(var(--ink), 0.14);
     color: rgb(var(--ink));
   }

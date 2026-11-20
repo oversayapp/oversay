@@ -62,12 +62,6 @@ export const OVERLAY_OPACITY_EVENT = 'overlay-opacity'
  */
 export const CONTROL_PANEL_LOOK_EVENT = 'control-panel-look'
 
-/** Sent to the manager, which owns the saved settings, by the deck widget's switch: the view it went to (ADR 0042). */
-export const DECK_VIEW_EVENT = 'deck-view'
-
-/** The view the switch asked for, or null when the event isn't one (it is checked, not trusted). */
-export const checkDeckView = (value: unknown): DeckView | null => DECK_VIEW_OPTIONS.find((o) => o.id === value)?.id ?? null
-
 /** One change to the look: a setting and its value; `opacityPreview` while the slider moves, `opacity` when it is let go. */
 export type LookChange = { key: keyof OverlaySettings | 'opacityPreview'; value: unknown }
 

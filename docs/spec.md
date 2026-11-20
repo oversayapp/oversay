@@ -194,7 +194,7 @@ The Oversay icon is in the menu bar (Mac) or the system tray (Windows) for the l
 
 1. What is running, greyed: the deck and *Card 2 of 6 · Pollination* (*· paused*), *Ready · press Start*, or *No deck running*.
 2. The run: Start or Pause / Resume, Next, Previous and Stop deck (which stops at once); with nothing running, **Show a deck ▸** with the pinned decks and Open Library….
-3. The look: See-through (with its opacity) / Solid, **Opacity ▸** (90, 75, 60, 50, 40%, More solid, More see-through), Dark panel / Light panel.
+3. The look: See-through (with its opacity) / Solid, **Opacity ▸** (90, 75, 60, 50, 40%, More solid, More see-through), Dark panel / Light panel, Card view / Agenda view.
 4. Hide from screen sharing.
 5. Look panel, Open Oversay, Settings…, then Quit Oversay (which asks first while a deck runs).
 
@@ -318,7 +318,7 @@ made-with: Oversay skill 0.1.0
 
 One overlay for every deck, with two views of the same run (ADR 0042): the **Card view** and the **Agenda view**.
 
-- **The switch**, a small glyph of the other view left of ✕, shown while pointed at, moves the widget to the other view's own remembered place and size; nothing about the run changes. Show and Preview on screen always start in the **Card view** (John, 7 Nov); the switch then goes to the Agenda view. The Card view first opens in the upper left, in from the corner (near the camera); the Agenda view along the bottom, in the middle, 960 px wide.
+- **The Look button**, a small sliders glyph left of ✕, shown while pointed at, opens the Look card (John, 20 Nov: it replaces the view switch). The view is chosen in the menu, **Card view / Agenda view**, and moves the widget to that view's own remembered place and size; nothing about the run changes. Show and Preview on screen always start in the **Card view** (John, 7 Nov); the menu then goes to the Agenda view. The Card view first opens in the upper left, in from the corner (near the camera); the Agenda view along the bottom, in the middle, 960 px wide.
 - **The tab:** Previous, Start / Pause / Resume (Stop once the last card is over) and Next, then a Stop square apart at the end (the first click turns it into a red "Stop?" for 3 seconds, the second stops the deck; a preview or a deck not yet started closes at once), with the deck's name, in a tab that slides out from under the panel's bottom edge while the pointer is over the widget, on both views; 40 × 34 px, Previous and Next 52 px wide, Next filled once the deck runs.
 - **Recording:** on every deck, the record button sits left of the switch on both views, always shown once the deck runs (never in a preview): a red dot in a ring while recording, dimmed while paused, a grey dot when not recording, struck through when the microphone was refused (its tooltip says how to allow it). A click toggles it; recording again adds to the run's recording (§11).
 - Both views start see-through at 75%, with the other overlays (Dark / Light, opacity, hiding from screen sharing).

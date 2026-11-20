@@ -31,6 +31,8 @@ pub struct Look {
     pub opacity: u8,
     pub solid: bool,
     pub light: bool,
+    /// The deck widget shows its Agenda view rather than the Card view.
+    pub agenda: bool,
 }
 
 impl Default for Look {
@@ -40,6 +42,7 @@ impl Default for Look {
             opacity: 75,
             solid: false,
             light: false,
+            agenda: false,
         }
     }
 }
@@ -60,6 +63,7 @@ impl Look {
                 .and_then(serde_json::Value::as_bool)
                 .unwrap_or(d.solid),
             light: value.get("panel").and_then(serde_json::Value::as_str) == Some("light"),
+            agenda: value.get("deckView").and_then(serde_json::Value::as_str) == Some("agenda"),
         }
     }
 }
@@ -128,6 +132,10 @@ pub enum Choice {
     Panel {
         light: bool,
     },
+    /// The deck widget's Card view or Agenda view.
+    DeckView {
+        agenda: bool,
+    },
     ToggleHidden,
     ShowDeck(String),
     Library,
@@ -165,6 +173,8 @@ pub fn choice(id: &str) -> Option<Choice> {
         "solid" => Choice::Solid,
         "dark" => Choice::Panel { light: false },
         "light" => Choice::Panel { light: true },
+        "card" => Choice::DeckView { agenda: false },
+        "agenda" => Choice::DeckView { agenda: true },
         "hide" => Choice::ToggleHidden,
         "library" => Choice::Library,
         "settings" => Choice::Settings,
@@ -342,6 +352,8 @@ fn look_items(state: &MenuState) -> Vec<Entry> {
         Entry::Separator,
         check(state, "dark", "Dark panel", None, !look.light, true),
         check(state, "light", "Light panel", None, look.light, true),
+        check(state, "card", "Card view", None, !look.agenda, true),
+        check(state, "agenda", "Agenda view", None, look.agenda, true),
     ]
 }
 
@@ -510,6 +522,8 @@ mod tests {
                 "---",
                 "[x] Dark panel",
                 "[ ] Light panel",
+                "[x] Card view",
+                "[ ] Agenda view",
                 "---",
                 "[x] Hide from screen sharing",
                 "---",
@@ -568,6 +582,7 @@ mod tests {
             opacity: 60,
             solid: true,
             light: true,
+            agenda: true,
         };
         let m = menu(&s);
         let t = text(&m);
@@ -575,6 +590,8 @@ mod tests {
         assert!(t.contains(&"[x] Solid".to_string()));
         assert!(t.contains(&"[ ] Dark panel".to_string()));
         assert!(t.contains(&"[x] Light panel".to_string()));
+        assert!(t.contains(&"[ ] Card view".to_string()));
+        assert!(t.contains(&"[x] Agenda view".to_string()));
         let sub = text(submenu(&m, "Opacity"));
         assert!(sub.iter().take(5).all(|l| l.starts_with("[ ]")), "{sub:?}");
         assert!(
@@ -705,6 +722,8 @@ mod tests {
         assert_eq!(choice("op61"), None);
         assert_eq!(choice("light"), Some(Choice::Panel { light: true }));
         assert_eq!(choice("hide"), Some(Choice::ToggleHidden));
+        assert_eq!(choice("agenda"), Some(Choice::DeckView { agenda: true }));
+        assert_eq!(choice("card"), Some(Choice::DeckView { agenda: false }));
         assert_eq!(choice("deck:d_2"), Some(Choice::ShowDeck("d_2".into())));
         assert_eq!(choice("deck:"), None);
         assert_eq!(choice("quit"), Some(Choice::Quit));
@@ -713,13 +732,14 @@ mod tests {
 
     #[test]
     fn the_look_is_read_from_the_overlay_settings() {
-        let v = serde_json::json!({ "opacity": 60, "solid": true, "panel": "light", "timelineStyle": "strip" });
+        let v = serde_json::json!({ "opacity": 60, "solid": true, "panel": "light", "deckView": "agenda", "timelineStyle": "strip" });
         assert_eq!(
             Look::from_settings(&v),
             Look {
                 opacity: 60,
                 solid: true,
-                light: true
+                light: true,
+                agenda: true
             }
         );
         assert_eq!(

@@ -711,8 +711,8 @@ const evaluate = async (expression) => (await send('Runtime.evaluate', { express
     await send('Emulation.setDeviceMetricsOverride', { width: size.width, height: size.height, deviceScaleFactor: 2, mobile: false })
     await send('Page.navigate', { url: `http://localhost:${port}/?overlay=${id}&view=${view}&${params}` })
     await sleep(1200)
-    // As if the pointer were over it: the host's ✕ and the switch show.
-    if (pointed) await run(`document.head.insertAdjacentHTML('beforeend', '<style>.corner, .switch { opacity: 1 !important; transition: none !important } .tb { transform: none !important; transition: none !important }</style>')`)
+    // As if the pointer were over it: the host's ✕ and the Look button show.
+    if (pointed) await run(`document.head.insertAdjacentHTML('beforeend', '<style>.corner, .look { opacity: 1 !important; transition: none !important } .tb { transform: none !important; transition: none !important }</style>')`)
     for (const [slide, colour] of Object.entries(SLIDES)) {
       const file = join(out, `overlay-deck-widget-${name}-${slide}.png`)
       if (!wanted(`overlay-deck-widget-${name}-${slide}`)) continue

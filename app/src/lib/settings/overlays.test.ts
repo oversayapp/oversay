@@ -3,7 +3,6 @@ import {
   DEFAULT_OVERLAY_SETTINGS,
   MIN_OVERLAY_OPACITY,
   OVERLAY_SETTINGS_CHANNEL,
-  checkDeckView,
   cleanOverlays,
   panelAlpha,
   PANEL_OPTIONS,
@@ -26,13 +25,6 @@ describe('parseOverlaySettings', () => {
   it('reads the deck widget\'s view last used, and falls back to the Card view', () => {
     expect(parseOverlaySettings({ deckView: 'agenda' }).deckView).toBe('agenda')
     expect(parseOverlaySettings({ deckView: 'wave' }).deckView).toBe('card')
-  })
-
-  it('takes only a known view from the switch', () => {
-    expect(checkDeckView('agenda')).toBe('agenda')
-    expect(checkDeckView('card')).toBe('card')
-    expect(checkDeckView('wave')).toBeNull()
-    expect(checkDeckView({ view: 'card' })).toBeNull()
   })
 
   it('reads the panel, and falls back for unknown values', () => {
@@ -148,6 +140,9 @@ describe('checkLookChange', () => {
     expect(checkLookChange({ key: 'opacity', value: 60 })).toEqual({ key: 'opacity', value: 60 })
     expect(checkLookChange({ key: 'solid', value: true })).toEqual({ key: 'solid', value: true })
     expect(checkLookChange({ key: 'panel', value: 'blue' })).toBeNull()
+    // The menu's Card view / Agenda view.
+    expect(checkLookChange({ key: 'deckView', value: 'agenda' })).toEqual({ key: 'deckView', value: 'agenda' })
+    expect(checkLookChange({ key: 'deckView', value: 'wave' })).toBeNull()
     expect(checkLookChange({ key: 'nope', value: 1 })).toBeNull()
     expect(checkLookChange({ key: 'opacity', value: 'x' })).toBeNull()
     expect(checkLookChange(null)).toBeNull()

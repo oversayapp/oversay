@@ -5,8 +5,8 @@
   import { derived, get } from 'svelte/store'
   import { listen } from '@tauri-apps/api/event'
   import { logProblem } from '../lib/log'
-  import { applyLookChange, changeOverlayOpacity, loadSettings, pinStarredDecks, pins, setOverlaySetting, settings } from '../lib/settings/store'
-  import { CONTROL_PANEL_LOOK_EVENT, DECK_VIEW_EVENT, OPACITY_CHANGES, OVERLAY_OPACITY_EVENT, checkDeckView, checkLookChange, type OpacityChange } from '../lib/settings/overlays'
+  import { applyLookChange, changeOverlayOpacity, loadSettings, pinStarredDecks, pins, settings } from '../lib/settings/store'
+  import { CONTROL_PANEL_LOOK_EVENT, OPACITY_CHANGES, OVERLAY_OPACITY_EVENT, checkLookChange, type OpacityChange } from '../lib/settings/overlays'
   import { installExampleDecksOnFirstRun } from '../lib/decks/examples'
   import { TRAY_EVENT, checkTrayChoice, pinnedDecks, syncTrayDecks, syncTrayTitle, type TrayChoice } from '../lib/session/tray'
   import { showDeckOnScreen } from '../lib/decks/show'
@@ -109,11 +109,6 @@
       const change = checkLookChange(e.payload)
       if (change) attempt(() => applyLookChange(change))
     })
-    // The deck widget's switch: the view it went to is the one the next deck opens in (ADR 0042).
-    const deckViewListener = listen<unknown>(DECK_VIEW_EVENT, (e) => {
-      const view = checkDeckView(e.payload)
-      if (view) attempt(() => setOverlaySetting('deckView', view))
-    })
     // A shown deck's session closes as soon as its widget is closed.
     const stopNotes = closeFinishedNotes()
     // A deck that ends opens its session's page (John, 7 Nov): its times, and its recording
@@ -157,7 +152,6 @@
       trayListener.then((unlisten) => unlisten())
       opacityListener.then((unlisten) => unlisten())
       lookListener.then((unlisten) => unlisten())
-      deckViewListener.then((unlisten) => unlisten())
       folderListener.then((unlisten) => unlisten())
       workspacesListener.then((unlisten) => unlisten())
       linkListener.then((unlisten) => unlisten())
