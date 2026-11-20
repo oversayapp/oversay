@@ -63,5 +63,9 @@ export function railAccount(account: AccountStatus | null, sync: SyncStatus | nu
   return { label: line?.short ?? 'Account', tone: line?.tone ?? null, initial: initialOf(account.email) }
 }
 
-/** Said under Sign in and Create account, and on the hosted page (web-api). Placeholder wording until the policy is written. */
+/** Said under Sign in and Create account, and on the hosted page (web-api). */
 export const PRIVACY_LINE = 'We keep only your email and the decks you choose to save.'
+
+/** The policies an account is agreed to under, on the website (oversayapp/web). Opened in the browser. */
+export const TERMS_URL = 'https://oversay.app/terms/'
+export const PRIVACY_URL = 'https://oversay.app/privacy/'

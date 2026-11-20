@@ -4,7 +4,8 @@
   // Tokens stay in Rust: this only shows the status it gives.
   import { onMount } from 'svelte'
   import { loadSync, sync, turnSyncOff, turnSyncOn } from '../lib/account/sync'
-  import { initialOf, PRIVACY_LINE, syncLine } from '../lib/account/summary'
+  import { initialOf, PRIVACY_LINE, PRIVACY_URL, syncLine, TERMS_URL } from '../lib/account/summary'
+  import { openUrl } from '@tauri-apps/plugin-opener'
   import { account, cancelSignIn, deleteAccount, loadAccount, signIn, signOut } from '../lib/account/account'
   import Icon from './Icon.svelte'
   import AccountAvatar from './AccountAvatar.svelte'
@@ -134,10 +135,22 @@
     <button class="primary" disabled={busy} onclick={() => run(() => signIn('signIn'))}>Sign in</button>
     <button disabled={busy} onclick={() => run(() => signIn('signUp'))}>Create account</button>
   </div>
-  <p class="muted hint">{PRIVACY_LINE}</p>
+  <p class="muted hint">
+    {PRIVACY_LINE} By signing in or creating an account, you agree to the
+    <button class="link" onclick={() => attempt(() => openUrl(TERMS_URL))}>Terms</button> and the
+    <button class="link" onclick={() => attempt(() => openUrl(PRIVACY_URL))}>Privacy policy</button>.
+  </p>
 {/if}
 
 <style>
+  .link {
+    padding: 0;
+    border: 0;
+    background: none;
+    color: var(--accent);
+    font: inherit;
+    cursor: pointer;
+  }
   .who {
     display: flex;
     align-items: center;
