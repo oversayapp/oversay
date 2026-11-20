@@ -16,6 +16,16 @@ It is a desktop app for macOS and Windows, built with [Tauri](https://tauri.app)
 
 Your decks are plain files in `Documents/Oversay`.
 
+## Install
+
+On a Mac (Apple silicon or Intel), with [Homebrew](https://brew.sh):
+
+```bash
+brew install oversayapp/tap/oversay
+```
+
+Or download the installer for macOS or Windows from the [latest release](https://github.com/oversayapp/oversay/releases/latest).
+
 ## Build from source
 
 You need Rust, Node and cmake (whisper.cpp is built from source). On macOS, `make setup` installs [mise](https://mise.jdx.dev) with Homebrew and then everything `mise.toml` pins (Rust, Node, cmake, gitleaks, cargo-audit), the app's npm packages and the git hooks. `make doctor` checks that nothing is missing.
