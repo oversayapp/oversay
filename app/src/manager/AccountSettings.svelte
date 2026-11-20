@@ -39,7 +39,12 @@
           type="checkbox"
           checked={$sync.on}
           disabled={busy || $sync.working}
-          onchange={(e) => run(e.currentTarget.checked ? turnSyncOn : turnSyncOff)}
+          onchange={async (e) => {
+            const box = e.currentTarget
+            await run(box.checked ? turnSyncOn : turnSyncOff)
+            // A failed turn-on leaves it off: the box says so too.
+            box.checked = $sync?.on ?? false
+          }}
         />
         Save decks to the cloud
       </label>

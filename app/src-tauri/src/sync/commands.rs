@@ -132,11 +132,13 @@ pub async fn sync_turn_on(app: AppHandle) -> Result<SyncStatus, String> {
         };
     }
     let dir = crate::quick::decks_dir(&app)?;
-    let result =
-        tauri::async_runtime::spawn_blocking(move || first_sync(account, dir.clone())).await;
+    let still = account.clone();
+    let result = tauri::async_runtime::spawn_blocking(move || first_sync(account, dir)).await;
     let mut status = lock(&app);
     status.working = false;
     match result.map_err(|e| e.to_string())? {
+        // Signed out while it ran: sign-out already turned it off, and it stays off.
+        Ok(_) if !still.is_signed_in() => {}
         Ok(report) => {
             status.on = true;
             status.last = Some((&report).into());

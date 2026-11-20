@@ -73,10 +73,20 @@ pub trait Cloud {
     fn put(&self, deck: &LocalDeck) -> Result<u64, CloudError>;
 }
 
+/// What the Decks folder held.
+#[derive(Debug, Default, PartialEq)]
+pub struct Scan {
+    /// Every deck that has an id and is in a folder of its own, with its two files.
+    pub decks: Vec<LocalDeck>,
+    /// Ids of decks that are here but can't be saved (a link, a sessions file that isn't JSON, too
+    /// large): they are not uploaded, and the cloud's deck with the same id is not brought down
+    /// beside them.
+    pub unsyncable: Vec<String>,
+}
+
 /// The Decks folder.
 pub trait Library {
-    /// Every deck that has an id and is in a folder of its own, with its two files.
-    fn decks(&self) -> Result<Vec<LocalDeck>, String>;
+    fn scan(&self) -> Result<Scan, String>;
     /// Makes a deck of the cloud's, in a new folder named as ADR 0037 says.
     fn add(&self, deck: &RemoteDeck) -> Result<(), String>;
 }
@@ -147,9 +157,15 @@ impl<C: Cloud, L: Library> Sync<C, L> {
     /// computer lacks, and leaves a deck both have (same id) as it is on each side, saying so.
     pub fn first_sync(&self) -> Result<FirstSync, CloudError> {
         let remote = self.cloud.list()?;
-        let local_decks = self.library.decks().map_err(CloudError::Unreachable)?;
+        let Scan {
+            decks: local_decks,
+            unsyncable,
+        } = self.library.scan().map_err(CloudError::Unreachable)?;
         let in_cloud: BTreeSet<&str> = remote.iter().map(|r| r.id.as_str()).collect();
-        let mut report = FirstSync::default();
+        let mut report = FirstSync {
+            failed: unsyncable.len(),
+            ..FirstSync::default()
+        };
         for deck in &local_decks {
             if !in_cloud.contains(deck.id.as_str()) {
                 match self.push(deck) {
@@ -175,7 +191,11 @@ impl<C: Cloud, L: Library> Sync<C, L> {
                 }
             }
         }
-        let local: BTreeSet<String> = local_decks.into_iter().map(|d| d.id).collect();
+        let local: BTreeSet<String> = local_decks
+            .into_iter()
+            .map(|d| d.id)
+            .chain(unsyncable)
+            .collect();
         let pulled = self.download_missing(&remote, &local);
         report.downloaded = pulled.downloaded;
         report.failed += pulled.failed;
@@ -192,12 +212,12 @@ impl<C: Cloud, L: Library> Sync<C, L> {
 
     #[allow(dead_code)]
     fn local_ids(&self) -> Result<BTreeSet<String>, CloudError> {
-        Ok(self
-            .library
-            .decks()
-            .map_err(CloudError::Unreachable)?
+        let scan = self.library.scan().map_err(CloudError::Unreachable)?;
+        Ok(scan
+            .decks
             .into_iter()
             .map(|d| d.id)
+            .chain(scan.unsyncable)
             .collect())
     }
 

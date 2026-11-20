@@ -4,7 +4,7 @@
 use std::fs;
 use std::path::PathBuf;
 
-use super::{Library, LocalDeck, RemoteDeck};
+use super::{Library, LocalDeck, RemoteDeck, Scan};
 use crate::files::write_atomically;
 use crate::quick::{DECK_SESSIONS, create_deck_in, deck_files_in, deck_id, front_value, today};
 
@@ -23,8 +23,9 @@ fn is_link(path: &std::path::Path) -> bool {
 pub struct FolderLibrary(pub PathBuf);
 
 impl Library for FolderLibrary {
-    fn decks(&self) -> Result<Vec<LocalDeck>, String> {
+    fn scan(&self) -> Result<Scan, String> {
         let mut found = Vec::new();
+        let mut unsyncable = Vec::new();
         for (file, sessions) in deck_files_in(&self.0) {
             // A link to another file is never followed: it could point anywhere on the computer.
             if is_link(&file) || is_link(&sessions) {
@@ -44,15 +45,18 @@ impl Library for FolderLibrary {
                 Err(e) if e.kind() == std::io::ErrorKind::NotFound => NO_SESSIONS.to_string(),
                 Err(_) => {
                     log::warn!("sync.deck_skipped id={id} reason=sessions_unreadable");
+                    unsyncable.push(id);
                     continue;
                 }
             };
             if serde_json::from_str::<serde_json::Value>(&sessions_json).is_err() {
                 log::warn!("sync.deck_skipped id={id} reason=sessions_not_json");
+                unsyncable.push(id);
                 continue;
             }
             if deck_md.len() + sessions_json.len() > LARGEST_FILE {
                 log::warn!("sync.deck_skipped id={id} reason=too_large");
+                unsyncable.push(id);
                 continue;
             }
             found.push(LocalDeck {
@@ -61,7 +65,10 @@ impl Library for FolderLibrary {
                 sessions_json,
             });
         }
-        Ok(found)
+        Ok(Scan {
+            decks: found,
+            unsyncable,
+        })
     }
 
     fn add(&self, deck: &RemoteDeck) -> Result<(), String> {
@@ -74,6 +81,9 @@ impl Library for FolderLibrary {
         // A folder named as a new deck's is (`<title> <day>`, numbered when taken).
         let file = create_deck_in(&self.0, &title, &deck.deck_md, &today())?;
         let sessions = file.with_file_name(DECK_SESSIONS);
+        // create_deck_in adds a title to a deck that has none; the deck is kept byte for byte as the
+        // cloud has it, so the next comparison finds it the same.
+        write_atomically(&file, &deck.deck_md).map_err(|e| format!("Could not save it: {e}"))?;
         write_atomically(&sessions, &deck.sessions_json).map_err(|e| {
             let _ = fs::remove_dir_all(file.parent().unwrap_or(&self.0));
             format!("Could not save its sessions: {e}")

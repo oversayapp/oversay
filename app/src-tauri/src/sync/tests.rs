@@ -85,11 +85,11 @@ impl Cloud for FakeCloud {
 }
 
 #[derive(Clone, Default)]
-struct FakeLibrary(Arc<Mutex<Vec<LocalDeck>>>);
+struct FakeLibrary(Arc<Mutex<Vec<LocalDeck>>>, Arc<Mutex<Vec<String>>>);
 
 impl FakeLibrary {
     fn with(decks: Vec<LocalDeck>) -> Self {
-        FakeLibrary(Arc::new(Mutex::new(decks)))
+        FakeLibrary(Arc::new(Mutex::new(decks)), Arc::default())
     }
     fn all(&self) -> Vec<LocalDeck> {
         self.0.lock().unwrap().clone()
@@ -97,8 +97,11 @@ impl FakeLibrary {
 }
 
 impl Library for FakeLibrary {
-    fn decks(&self) -> Result<Vec<LocalDeck>, String> {
-        Ok(self.all())
+    fn scan(&self) -> Result<Scan, String> {
+        Ok(Scan {
+            decks: self.all(),
+            unsyncable: self.1.lock().unwrap().clone(),
+        })
     }
     fn add(&self, deck: &RemoteDeck) -> Result<(), String> {
         self.0.lock().unwrap().push(LocalDeck {
@@ -422,7 +425,7 @@ mod folder {
             "---\ntitle: x\n---\n## c\n",
         );
         write(&dir, "Lone.md", &deck("d_aaaaaaa3", "Lone").deck_md);
-        let mut found = FolderLibrary(dir.clone()).decks().unwrap();
+        let mut found = FolderLibrary(dir.clone()).scan().unwrap().decks;
         found.sort_by(|a, b| a.id.cmp(&b.id));
         assert_eq!(found.len(), 2);
         assert_eq!(found[0], d);
@@ -452,7 +455,7 @@ mod folder {
         fs::create_dir_all(dir.join("B 2026-11-20")).unwrap();
         std::os::unix::fs::symlink(outside.join("other.md"), dir.join("B 2026-11-20/deck.md"))
             .unwrap();
-        let found = FolderLibrary(dir.clone()).decks().unwrap();
+        let found = FolderLibrary(dir.clone()).scan().unwrap().decks;
         assert!(found.iter().all(|d| !d.sessions_json.contains("secret")));
         assert!(found.iter().all(|d| d.id != "d_aaaaaaa9"));
         let _ = fs::remove_dir_all(dir);
@@ -510,7 +513,7 @@ mod folder {
             remote.sessions_json
         );
         // It reads back as the same deck.
-        assert_eq!(lib.decks().unwrap()[0].id, "d_aaaaaaa1");
+        assert_eq!(lib.scan().unwrap().decks[0].id, "d_aaaaaaa1");
         let _ = fs::remove_dir_all(dir);
     }
 
@@ -527,4 +530,31 @@ mod folder {
         assert_eq!(fs::read_dir(&dir).unwrap().count(), 0);
         let _ = fs::remove_dir_all(dir);
     }
+}
+
+#[test]
+fn a_local_deck_that_cannot_be_saved_is_not_downloaded_beside_itself() {
+    let library = FakeLibrary::default();
+    library.1.lock().unwrap().push("d_aaaaaaa1".into());
+    let cloud = FakeCloud::with(&[deck("d_aaaaaaa1", "Here already")]);
+    let report = sync(&cloud, &library).first_sync().unwrap();
+    assert_eq!((report.downloaded, report.failed), (0, 1));
+    assert!(library.all().is_empty());
+}
+
+#[test]
+fn an_untitled_deck_comes_down_byte_for_byte() {
+    let dir = std::env::temp_dir().join(format!("oversay-sync-untitled-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    let remote = RemoteDeck {
+        id: "d_aaaaaaa1".into(),
+        deck_md: "---\nid: d_aaaaaaa1\n---\n## Card\n".into(),
+        sessions_json: "{}".into(),
+        revision: 1,
+    };
+    let lib = crate::sync::library::FolderLibrary(dir.clone());
+    lib.add(&remote).unwrap();
+    assert_eq!(lib.scan().unwrap().decks[0].deck_md, remote.deck_md);
+    let _ = std::fs::remove_dir_all(dir);
 }
