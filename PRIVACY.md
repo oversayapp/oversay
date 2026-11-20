@@ -12,6 +12,6 @@ The full policy is at **[oversay.app/privacy](https://oversay.app/privacy/)**. T
 
 The website itself sets no cookies; the cookies the sign-in page sets are listed at [oversay.app/privacy#cookies](https://oversay.app/privacy/#cookies). The terms for the account and the site are at **[oversay.app/terms](https://oversay.app/terms/)**; the app itself is under the [GPL-3.0](LICENSE).
 
-Questions about your data: <!-- TODO(owner): privacy contact email --> **[privacy contact email]**.
+Questions about your data: **support@oversay.app**.
 
 The code behind each of these points is in this repository: `app/src-tauri/src/account/`, `app/src-tauri/src/sync/`, `recorder.rs`, `transcriber.rs`, `updates.rs`, and §14 of [docs/spec.md](docs/spec.md). The server is in oversayapp/web-api.
