@@ -3,7 +3,6 @@
   // Sign in and Create account open Cognito's page in the browser; signed in, the email and Sign out.
   // Tokens stay in Rust: this only shows the status it gives.
   import { onMount } from 'svelte'
-  import { account, cancelSignIn, loadAccount, signIn, signOut } from '../lib/account/account'
   import { loadSync, outcomeText, sync, turnSyncOff, turnSyncOn } from '../lib/account/sync'
   import { account, cancelSignIn, deleteAccount, loadAccount, signIn, signOut } from '../lib/account/account'
   import ConfirmDelete from './ConfirmDelete.svelte'
