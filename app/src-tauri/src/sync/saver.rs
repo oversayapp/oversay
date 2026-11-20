@@ -23,6 +23,8 @@ pub enum Activity {
     Saving,
     /// Everything on this computer is saved and the cloud's changes are in.
     Saved,
+    /// The cloud can't be reached: edits are kept on this computer and go up when it can.
+    Offline,
 }
 
 pub struct Saver {
@@ -90,9 +92,14 @@ impl Saver {
                     self.activity = Activity::Saved;
                 }
             }
-            Err(_) => {
+            Err(e) => {
                 // Still unsaved: the edit stays waiting for the next try.
-                if self.edited_at.is_some() {
+                if matches!(e, CloudError::Unreachable(_)) {
+                    if self.activity != Activity::Offline {
+                        log::info!("sync.offline");
+                    }
+                    self.activity = Activity::Offline;
+                } else if self.edited_at.is_some() {
                     self.activity = Activity::Saving;
                 }
                 self.edited_at = self.edited_at.map(|_| now + PULL_EVERY - SAVE_DELAY);

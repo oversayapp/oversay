@@ -21,7 +21,7 @@ vi.mock('../decks/store', () => ({ loadDecks: async () => void calls.push('loadD
 
 const { sync, loadSync, turnSyncOn, turnSyncOff, outcomeText, watchSync, activityText } = await import('./sync')
 
-const off = { on: false, working: false, last: null, problem: null, activity: 'idle', held: 0 }
+const off = { on: false, working: false, last: null, problem: null, activity: 'idle', conflicts: [] }
 
 beforeEach(() => {
   calls.length = 0
@@ -37,7 +37,7 @@ describe('Save decks to the cloud in Settings', () => {
   })
 
   it('turning it on asks Rust, shows what it did, and reads the decks folder again', async () => {
-    reply = { on: true, working: false, last: { uploaded: 5, downloaded: 0, leftAlone: 0, failed: 0 }, problem: null, activity: 'saved', held: 0 }
+    reply = { on: true, working: false, last: { uploaded: 5, downloaded: 0, leftAlone: 0, failed: 0 }, problem: null, activity: 'saved', conflicts: [] }
     await turnSyncOn()
     expect(calls).toEqual(['sync_turn_on', 'loadDecks'])
     expect(get(sync)?.on).toBe(true)
@@ -63,10 +63,13 @@ describe('Save decks to the cloud in Settings', () => {
     expect(activityText(get(sync)!)).toBe('Saved.')
   })
 
-  it('says when decks changed on two computers are being kept as they are', () => {
-    expect(activityText({ ...off, on: true, activity: 'saved', held: 2 })).toBe(
-      'Saved. 2 decks were changed on two computers; they are kept as they are here for now.',
-    )
-    expect(activityText({ ...off, on: true, activity: 'saved', held: 1 })).toContain('1 deck was changed on two computers; it is kept as it is here')
+  it('names a deck changed on two computers and the copy that keeps the other version', () => {
+    const text = activityText({ ...off, on: true, activity: 'saved', conflicts: ['Standup (conflict copy)'] })
+    expect(text).toContain('“Standup” was changed on two computers')
+    expect(text).toContain('“Standup (conflict copy)”')
+  })
+
+  it('says Offline, and that decks are kept here', () => {
+    expect(activityText({ ...off, on: true, activity: 'offline' })).toMatch(/^Offline\. .*saved when you are back online/)
   })
 })
