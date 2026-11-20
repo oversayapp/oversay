@@ -716,6 +716,14 @@ impl Account {
             .map_err(AccountError::Unreachable)
     }
 
+    /// A DELETE to the API with the account's token. Signed out, no request is made (V5).
+    pub fn api_delete(&self, now: Instant, path: &str) -> Result<(u16, String), AccountError> {
+        let token = self.access_token(now)?;
+        self.api
+            .delete(path, &token)
+            .map_err(AccountError::Unreachable)
+    }
+
     /// Developer tools only: `GET /decks` with the access token, to show the token works.
     pub fn call_api(&self, now: Instant) -> Result<String, AccountError> {
         let token = self.access_token(now)?;

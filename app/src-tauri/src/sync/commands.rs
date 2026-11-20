@@ -102,7 +102,9 @@ pub(crate) fn is_synced_path(dir: &Path, path: &Path) -> bool {
         !file.starts_with('.') && (file.ends_with(".md") || file == crate::quick::DECK_SESSIONS)
     };
     match parts.as_slice() {
-        [file] => !file.starts_with('.') && file.ends_with(".md"),
+        // A deck's folder appearing or going (moved to the Trash) is a change too; a file there
+        // that isn't Markdown is not.
+        [entry] => !entry.starts_with('.') && (entry.ends_with(".md") || !entry.contains('.')),
         [folder, file] => !folder.starts_with('.') && saved(file),
         _ => false,
     }
@@ -417,6 +419,10 @@ mod tests {
         assert!(yes("/d/Decks/Standup 2026-11-20/deck.md"));
         assert!(yes("/d/Decks/Standup 2026-11-20/sessions.json"));
         assert!(yes("/d/Decks/Loose.md"));
+        // A deck folder moved away (to the Trash) is a change; a stray file or hidden entry is not.
+        assert!(yes("/d/Decks/Standup 2026-11-20"));
+        assert!(!yes("/d/Decks/notes.txt"));
+        assert!(!yes("/d/Decks/.DS_Store"));
         assert!(!yes("/d/Decks/Standup 2026-11-20/resources/a.md"));
         assert!(!yes("/d/Decks/Standup 2026-11-20/transcripts/t.md"));
         assert!(!yes("/d/Decks/Standup 2026-11-20/reviews/r.json"));
