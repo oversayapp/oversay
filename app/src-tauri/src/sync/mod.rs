@@ -238,7 +238,10 @@ impl<C: Cloud, L: Library> Sync<C, L> {
 
     /// Saves one deck to the cloud, based on the revision `state` last agreed (a new deck: 0).
     pub fn push(&self, state: &State, deck: &LocalDeck) -> Result<Pushed, CloudError> {
-        let base = state.decks.get(&deck.id).map_or(0, |b| b.revision);
+        self.push_over(deck, state.decks.get(&deck.id).map_or(0, |b| b.revision))
+    }
+
+    fn push_over(&self, deck: &LocalDeck, base: u64) -> Result<Pushed, CloudError> {
         match self.cloud.put(deck, base) {
             Ok(revision) => Ok(Pushed::Saved { revision }),
             Err(CloudError::Stale(stored)) => Ok(Pushed::Conflict(stored)),
@@ -592,11 +595,7 @@ impl<C: Cloud, L: Library> Sync<C, L> {
                 // over the tombstone, so no edit is lost.
                 None => {
                     log::debug!("sync.deck_delete_kept id={} reason=edited_here", deck.id);
-                    match self.cloud.put(deck, stored) {
-                        Ok(revision) => Ok(Pushed::Saved { revision }),
-                        Err(CloudError::Stale(other)) => Ok(Pushed::Conflict(other)),
-                        Err(e) => Err(e),
-                    }
+                    self.push_over(deck, stored)
                 }
                 // Both changed: keep both, then try again.
                 Some(theirs) => {
