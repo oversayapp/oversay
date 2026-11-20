@@ -10,6 +10,8 @@ The full policy is at **[oversay.app/privacy](https://oversay.app/privacy/)**. T
 - **Where:** Amazon Web Services in Ireland (eu-west-1) for sign-in (Cognito), the API and logs; Neon Postgres in Frankfurt (eu-central-1) for saved decks. Server logs keep no IP address, email or deck content, and are deleted after 3 months.
 - **Delete account** in Settings › Account removes your account and everything of yours in the cloud. Your local decks are not touched.
 
+The website itself sets no cookies; the cookies the sign-in page sets are listed at [oversay.app/privacy#cookies](https://oversay.app/privacy/#cookies). The terms for the account and the site are at **[oversay.app/terms](https://oversay.app/terms/)**; the app itself is under the [GPL-3.0](LICENSE).
+
 Questions about your data: <!-- TODO(owner): privacy contact email --> **[privacy contact email]**.
 
 The code behind each of these points is in this repository: `app/src-tauri/src/account/`, `app/src-tauri/src/sync/`, `recorder.rs`, `transcriber.rs`, `updates.rs`, and §14 of [docs/spec.md](docs/spec.md). The server is in oversayapp/web-api.
