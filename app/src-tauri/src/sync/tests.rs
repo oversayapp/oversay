@@ -452,6 +452,22 @@ mod api {
     struct FakeWire {
         sent: Mutex<Vec<(String, String, String)>>,
         reply: Mutex<(u16, String)>,
+        /// What a request for the workspaces' list gets; an empty list when not set.
+        workspace_reply: Mutex<Option<(u16, String)>>,
+    }
+    impl FakeWire {
+        fn answer(&self, path: &str) -> (u16, String) {
+            if path.starts_with("/workspaces")
+                && !path.starts_with("/workspaces/")
+                && let Some(reply) = self.workspace_reply.lock().unwrap().clone()
+            {
+                return reply;
+            }
+            if path.starts_with("/workspaces") && !path.starts_with("/workspaces/") {
+                return (200, r#"{"workspaces":[],"cursor":999}"#.into());
+            }
+            self.reply.lock().unwrap().clone()
+        }
     }
     impl Transport for Arc<FakeWire> {
         fn get(&self, path: &str) -> Result<(u16, String), CloudError> {
@@ -459,7 +475,7 @@ mod api {
                 .lock()
                 .unwrap()
                 .push(("GET".into(), path.into(), String::new()));
-            Ok(self.reply.lock().unwrap().clone())
+            Ok(self.answer(path))
         }
         fn put(&self, path: &str, body: &str) -> Result<(u16, String), CloudError> {
             self.sent
@@ -581,6 +597,76 @@ mod api {
         assert_eq!(cloud.delete("../x"), Err(CloudError::Refused(400)));
         assert_eq!(w.sent.lock().unwrap().len(), 1);
     }
+    #[test]
+    fn workspaces_use_their_own_routes_and_send_only_workspace_json() {
+        let (cloud, wire) = wire(
+            200,
+            r#"{"id":"w_k3x9a2bq","workspaceJson":"{\"id\":\"w_k3x9a2bq\"}","revision":2,"change":1}"#,
+        );
+        let got = cloud.get("w_k3x9a2bq").unwrap().unwrap();
+        assert_eq!(
+            (
+                got.deck_md.as_str(),
+                got.sessions_json.as_str(),
+                got.revision
+            ),
+            (r#"{"id":"w_k3x9a2bq"}"#, "", 2)
+        );
+        let ws = LocalDeck {
+            id: "w_k3x9a2bq".into(),
+            deck_md: "{\"id\":\"w_k3x9a2bq\"}".into(),
+            sessions_json: String::new(),
+        };
+        assert_eq!(cloud.put(&ws, 2).unwrap(), 2);
+        let (method, path, body) = wire.sent.lock().unwrap()[1].clone();
+        assert_eq!(
+            (method.as_str(), path.as_str()),
+            ("PUT", "/workspaces/w_k3x9a2bq")
+        );
+        let sent: serde_json::Value = serde_json::from_str(&body).unwrap();
+        let mut keys: Vec<_> = sent.as_object().unwrap().keys().cloned().collect();
+        keys.sort();
+        assert_eq!(keys, vec!["baseRevision", "workspaceJson"]);
+        let (cloud, wire) = wire_with(204);
+        assert_eq!(cloud.delete("w_k3x9a2bq"), Ok(()));
+        assert_eq!(wire.sent.lock().unwrap()[0].1, "/workspaces/w_k3x9a2bq");
+        assert_eq!(cloud.delete("w_../x"), Err(CloudError::Refused(400)));
+    }
+
+    #[test]
+    fn lists_and_pulls_cover_decks_and_workspaces_on_the_lower_cursor() {
+        let (cloud, wire) = wire(
+            200,
+            r#"{"decks":[{"id":"d_k3x9a2bq","title":"A","revision":3,"change":9}],"cursor":12}"#,
+        );
+        *wire.workspace_reply.lock().unwrap() = Some((
+            200,
+            r#"{"workspaces":[{"id":"w_k3x9a2bq","revision":1,"change":10}],"cursor":11}"#.into(),
+        ));
+        let listing = cloud.list().unwrap();
+        let ids: Vec<_> = listing.decks.iter().map(|d| d.id.as_str()).collect();
+        assert_eq!(ids, vec!["d_k3x9a2bq", "w_k3x9a2bq"]);
+        // Either list may have been read a moment later than the other: the lower cursor loses
+        // nothing (a change seen twice is the same revision).
+        assert_eq!(listing.cursor, 11);
+
+        *wire.workspace_reply.lock().unwrap() = Some((
+            200,
+            r#"{"workspaces":[{"id":"w_k3x9a2bq","deleted":true,"revision":2,"change":13}],"cursor":13}"#.into(),
+        ));
+        let got = cloud.changes(9).unwrap();
+        let sent: Vec<_> = wire
+            .sent
+            .lock()
+            .unwrap()
+            .iter()
+            .map(|s| s.1.clone())
+            .collect();
+        assert_eq!(sent[2..], ["/decks?since=9", "/workspaces?since=9"]);
+        assert_eq!(got.cursor, 12);
+        assert!(got.items.iter().any(|c| c.id == "w_k3x9a2bq" && c.deleted));
+    }
+
     fn wire_with(status: u16) -> (ApiCloud<Arc<FakeWire>>, Arc<FakeWire>) {
         wire(status, r#"{"error":"x"}"#)
     }
@@ -1530,5 +1616,312 @@ mod trashing {
                 "{l}"
             );
         }
+    }
+}
+
+// ---- workspaces (slice 8): workspace.json travels through the same rounds as a deck
+
+mod workspaces {
+    use super::*;
+
+    /// A workspace as the sync sees it: `workspace.json` is the one file, so `sessions_json` is
+    /// empty. Its name is something a log must never hold.
+    fn workspace(id: &str, name: &str) -> LocalDeck {
+        LocalDeck {
+            id: id.into(),
+            deck_md: format!(
+                "{{\n  \"version\": 1,\n  \"id\": \"{id}\",\n  \"name\": \"{name}\",\n  \"tags\": [],\n  \"decks\": [\"d_aaaaaaa1\"]\n}}\n"
+            ),
+            sessions_json: String::new(),
+        }
+    }
+
+    struct Computer {
+        library: FakeLibrary,
+        state: State,
+    }
+
+    fn started(cloud: &FakeCloud, items: Vec<LocalDeck>) -> Computer {
+        let library = FakeLibrary::with(items);
+        let mut state = State::default();
+        sync(cloud, &library).first_sync(&mut state).unwrap();
+        Computer { library, state }
+    }
+
+    fn round(cloud: &FakeCloud, c: &mut Computer) -> Round {
+        sync(cloud, &c.library).sync_once(&mut c.state).unwrap()
+    }
+
+    #[test]
+    fn a_workspace_made_on_a_comes_to_b_with_its_decks() {
+        let cloud = FakeCloud::default();
+        let mut a = started(&cloud, vec![deck("d_aaaaaaa1", "One")]);
+        let mut b = started(&cloud, vec![]);
+        a.library
+            .0
+            .lock()
+            .unwrap()
+            .push(workspace("w_bbbbbbb1", "Secret client plans"));
+        let r = round(&cloud, &mut a);
+        assert_eq!(r.uploaded, 1);
+        assert!(
+            test_log::lines()
+                .iter()
+                .any(|l| l.starts_with("sync.workspace_saved id=w_bbbbbbb1 "))
+        );
+        let r = round(&cloud, &mut b);
+        assert_eq!(r.downloaded, 1);
+        let mut ids: Vec<_> = b.library.all().into_iter().map(|d| d.id).collect();
+        ids.sort();
+        assert_eq!(ids, vec!["d_aaaaaaa1", "w_bbbbbbb1"]);
+        assert_eq!(
+            b.library
+                .all()
+                .iter()
+                .find(|d| d.id == "w_bbbbbbb1")
+                .unwrap(),
+            &workspace("w_bbbbbbb1", "Secret client plans")
+        );
+        // Nothing bounces back, and no log line holds the workspace's name.
+        assert_eq!(round(&cloud, &mut a), Round::default());
+        assert_eq!(round(&cloud, &mut b), Round::default());
+        for line in test_log::lines() {
+            assert!(!line.contains("Secret client plans"), "{line}");
+        }
+    }
+
+    #[test]
+    fn an_edit_to_a_workspace_goes_up_and_comes_down() {
+        let cloud = FakeCloud::default();
+        let mut a = started(&cloud, vec![workspace("w_bbbbbbb1", "Research")]);
+        let mut b = started(&cloud, vec![]);
+        a.library
+            .edit("w_bbbbbbb1", &workspace("w_bbbbbbb1", "Renamed").deck_md);
+        assert_eq!(round(&cloud, &mut a).uploaded, 1);
+        assert_eq!(round(&cloud, &mut b).downloaded, 1);
+        assert!(b.library.all()[0].deck_md.contains("Renamed"));
+    }
+
+    #[test]
+    fn a_workspace_changed_on_both_computers_keeps_both() {
+        let cloud = FakeCloud::default();
+        let mut a = started(&cloud, vec![workspace("w_bbbbbbb1", "Research")]);
+        let mut b = started(&cloud, vec![]);
+        round(&cloud, &mut b);
+        b.library
+            .edit("w_bbbbbbb1", &workspace("w_bbbbbbb1", "From B").deck_md);
+        round(&cloud, &mut b);
+        a.library
+            .edit("w_bbbbbbb1", &workspace("w_bbbbbbb1", "From A").deck_md);
+
+        let r = round(&cloud, &mut a);
+        assert_eq!(r.copies, vec!["From B (conflict copy)".to_string()]);
+        let all = a.library.all();
+        assert_eq!(all.len(), 2);
+        let mine = all.iter().find(|d| d.id == "w_bbbbbbb1").unwrap();
+        assert!(mine.deck_md.contains("From A"));
+        let copy = all.iter().find(|d| d.id != "w_bbbbbbb1").unwrap();
+        // A workspace of its own: a new w_ id inside and out, B's version under a named copy.
+        assert!(copy.id.starts_with("w_"));
+        assert!(copy.deck_md.contains(&format!("\"id\": \"{}\"", copy.id)));
+        assert!(
+            copy.deck_md
+                .contains("\"name\": \"From B (conflict copy)\"")
+        );
+        assert!(copy.deck_md.contains("d_aaaaaaa1"));
+        assert_eq!(cloud.ids().len(), 2);
+        assert!(
+            test_log::lines()
+                .iter()
+                .any(|l| l.contains("sync.conflict id=w_bbbbbbb1 kept=both"))
+        );
+
+        round(&cloud, &mut b);
+        let texts = |c: &Computer| {
+            let mut t: Vec<_> = c.library.all().into_iter().map(|d| d.deck_md).collect();
+            t.sort();
+            t
+        };
+        assert_eq!(texts(&a), texts(&b));
+        assert_eq!(round(&cloud, &mut a), Round::default());
+        for line in test_log::lines() {
+            assert!(
+                !line.contains("From A") && !line.contains("From B"),
+                "{line}"
+            );
+        }
+    }
+
+    #[test]
+    fn a_workspace_trashed_on_a_is_deleted_from_the_cloud_and_trashed_on_b() {
+        let cloud = FakeCloud::default();
+        let mut a = started(&cloud, vec![workspace("w_bbbbbbb1", "Research")]);
+        let mut b = started(&cloud, vec![]);
+        round(&cloud, &mut b);
+        a.library.trash_by_hand("w_bbbbbbb1");
+        assert_eq!(round(&cloud, &mut a).deleted, 1);
+        assert!(cloud.ids().is_empty());
+        assert_eq!(round(&cloud, &mut b).deleted, 1);
+        assert_eq!(b.library.trashed(), vec!["w_bbbbbbb1".to_string()]);
+    }
+}
+
+// ---- the real library over a temporary Workspaces folder (slice 8)
+
+mod workspace_folder {
+    use super::*;
+    use crate::sync::library::{Folders, WorkspaceFolder};
+    use std::fs;
+    use std::path::Path;
+
+    fn temp(name: &str) -> std::path::PathBuf {
+        let dir = std::env::temp_dir().join(format!("oversay-ws-{name}-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&dir);
+        fs::create_dir_all(&dir).unwrap();
+        dir
+    }
+    fn write(dir: &Path, rel: &str, text: &str) {
+        let file = dir.join(rel);
+        fs::create_dir_all(file.parent().unwrap()).unwrap();
+        fs::write(file, text).unwrap();
+    }
+    fn json(id: &str, name: &str) -> String {
+        format!(
+            "{{\n  \"version\": 1,\n  \"id\": \"{id}\",\n  \"name\": \"{name}\",\n  \"tags\": [],\n  \"decks\": []\n}}\n"
+        )
+    }
+    fn remote(id: &str, name: &str) -> RemoteDeck {
+        RemoteDeck {
+            id: id.into(),
+            deck_md: json(id, name),
+            sessions_json: String::new(),
+            revision: 1,
+        }
+    }
+
+    #[test]
+    fn only_workspace_json_is_read_and_matched_by_id() {
+        let dir = temp("read");
+        write(
+            &dir,
+            "Research/workspace.json",
+            &json("w_aaaaaaa1", "Research"),
+        );
+        write(&dir, "Research/resources/notes.md", "never read");
+        write(&dir, "Old two-level/deck.md", "not a workspace");
+        write(&dir, "No id/workspace.json", "{\"name\":\"No id yet\"}");
+        let scan = WorkspaceFolder(dir.clone()).scan().unwrap();
+        assert_eq!(
+            scan.decks,
+            vec![LocalDeck {
+                id: "w_aaaaaaa1".into(),
+                deck_md: json("w_aaaaaaa1", "Research"),
+                sessions_json: String::new(),
+            }]
+        );
+        // A workspace with no id yet is Oversay's to tidy, and nothing is missing from the scan.
+        assert!(scan.unsyncable.is_empty() && !scan.incomplete);
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn a_workspace_that_cannot_be_read_hides_nothing_and_a_link_is_never_followed() {
+        let dir = temp("unread");
+        write(&dir, "Broken/workspace.json", "{ not json");
+        let scan = WorkspaceFolder(dir.clone()).scan().unwrap();
+        // It may be a synced workspace mid-edit: nothing is taken to be trashed from this scan.
+        assert!(scan.decks.is_empty() && scan.incomplete);
+        let _ = fs::remove_dir_all(&dir);
+
+        let dir = temp("link");
+        let outside = temp("link-target");
+        write(&outside, "secret.json", &json("w_aaaaaaa2", "Elsewhere"));
+        fs::create_dir_all(dir.join("Linked")).unwrap();
+        #[cfg(unix)]
+        std::os::unix::fs::symlink(
+            outside.join("secret.json"),
+            dir.join("Linked/workspace.json"),
+        )
+        .unwrap();
+        let scan = WorkspaceFolder(dir.clone()).scan().unwrap();
+        assert!(scan.decks.is_empty() && scan.incomplete);
+        let _ = fs::remove_dir_all(dir);
+        let _ = fs::remove_dir_all(outside);
+    }
+
+    #[test]
+    fn a_downloaded_workspace_gets_a_folder_named_by_its_name_and_the_cloud_text_exactly() {
+        let dir = temp("add");
+        let lib = WorkspaceFolder(dir.clone());
+        lib.add(&remote("w_aaaaaaa1", "Research")).unwrap();
+        assert_eq!(
+            fs::read_to_string(dir.join("Research/workspace.json")).unwrap(),
+            json("w_aaaaaaa1", "Research")
+        );
+        // The same name again is numbered, never merged into the first.
+        lib.add(&remote("w_aaaaaaa2", "Research")).unwrap();
+        assert!(dir.join("Research (2)/workspace.json").is_file());
+        // A text that says another id is not made.
+        let mut wrong = remote("w_aaaaaaa3", "Other");
+        wrong.deck_md = json("w_aaaaaaa9", "Other");
+        assert!(lib.add(&wrong).is_err());
+        assert!(!dir.join("Other").exists());
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn replace_and_trash_refuse_a_workspace_edited_since_it_was_read() {
+        let dir = temp("replace");
+        write(
+            &dir,
+            "Research/workspace.json",
+            &json("w_aaaaaaa1", "Research"),
+        );
+        let lib = WorkspaceFolder(dir.clone());
+        let read = lib.scan().unwrap().decks.remove(0);
+        lib.replace(&read, &remote("w_aaaaaaa1", "Renamed"))
+            .unwrap();
+        assert_eq!(
+            fs::read_to_string(dir.join("Research/workspace.json")).unwrap(),
+            json("w_aaaaaaa1", "Renamed")
+        );
+        // `read` is stale now: the file has changed since.
+        assert!(lib.replace(&read, &remote("w_aaaaaaa1", "Again")).is_err());
+        assert!(lib.trash(&read).is_err());
+        assert!(dir.join("Research").is_dir());
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn folders_send_each_id_to_its_own_folder() {
+        let decks = temp("both-decks");
+        let workspaces = temp("both-ws");
+        write(
+            &decks,
+            "One/deck.md",
+            "---\nid: d_aaaaaaa1\ntitle: One\n---\n",
+        );
+        write(
+            &workspaces,
+            "Research/workspace.json",
+            &json("w_bbbbbbb1", "Research"),
+        );
+        let both = Folders {
+            decks: crate::sync::library::FolderLibrary(decks.clone()),
+            workspaces: WorkspaceFolder(workspaces.clone()),
+        };
+        let mut ids: Vec<_> = both
+            .scan()
+            .unwrap()
+            .decks
+            .into_iter()
+            .map(|d| d.id)
+            .collect();
+        ids.sort();
+        assert_eq!(ids, vec!["d_aaaaaaa1", "w_bbbbbbb1"]);
+        both.add(&remote("w_bbbbbbb2", "Second")).unwrap();
+        assert!(workspaces.join("Second/workspace.json").is_file());
+        let _ = fs::remove_dir_all(decks);
+        let _ = fs::remove_dir_all(workspaces);
     }
 }

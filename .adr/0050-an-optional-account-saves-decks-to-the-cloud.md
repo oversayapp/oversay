@@ -13,7 +13,7 @@ ADR 0033 decided that nothing is hosted, and a deck is a folder on one computer 
 - **The local `Documents/Oversay/Decks/` folder stays the source of truth.** The cloud holds a copy kept in step with it. A signed-in person works offline as before; edits upload when the network is back. Signing out stops syncing and leaves every local deck.
 - **What is stored**, per account:
   - for each deck, its `deck.md` (with its `id`) and its `sessions.json`, byte for byte, with a revision number that goes up on every write;
-  - for each workspace, its `workspace.json` (a later slice of the same epic);
+  - for each workspace, its `workspace.json` (with its `id` and the ids of its decks), byte for byte, with a revision number as a deck has. A workspace is saved, pulled, deleted (to the Trash) and conflict-checked by the same rounds as a deck, and decks and workspaces share one change cursor. Its `resources/` folder stays on the computer;
   - in Cognito, the account's email address and what Cognito keeps to sign it in.
 - **What is never stored:** audio and recordings. A deck's `transcripts/`, `reviews/` and `resources/` stay on the computer too, as do Settings and `oversay-local.json`. Any of these going to the cloud needs a decision of its own.
 - **The service** is the private repository `oversayapp/web-api`: an Amazon Cognito user pool, an API Gateway HTTP API whose JWT authorizer checks Cognito's tokens before any code runs, AWS Lambda, and Neon Postgres, all as infra as code (SST) with `dev` and `prod` stages. Each row belongs to one Cognito user (`sub`); another user's deck is 404, so its id is never confirmed. Deleting the account removes the Cognito user and every row of theirs.
