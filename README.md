@@ -4,7 +4,7 @@ Oversay helps you give a talk or run a meeting on time. You plan what you want t
 
 It is a desktop app for macOS and Windows, built with [Tauri](https://tauri.app) v2 and [Svelte](https://svelte.dev) 5.
 
-> **Status: early.** Oversay has not had a public release yet. Builds are unsigned, so macOS Gatekeeper and Windows SmartScreen will warn you on first launch. The app does not check for updates yet.
+> **Status: early.** The macOS app is signed and notarized. The Windows installers are not signed yet, so SmartScreen warns you on first launch. The app checks for updates when it starts (Settings › Updates).
 
 ## What it does
 
@@ -15,6 +15,16 @@ It is a desktop app for macOS and Windows, built with [Tauri](https://tauri.app)
 - Installs an optional skill for AI coding assistants, so they can write decks for you.
 
 Your decks are plain files in `Documents/Oversay`.
+
+## Install
+
+On a Mac (Apple silicon or Intel), with [Homebrew](https://brew.sh):
+
+```bash
+brew install oversayapp/tap/oversay
+```
+
+Or download the installer for macOS or Windows from the [latest release](https://github.com/oversayapp/oversay/releases/latest).
 
 ## Build from source
 

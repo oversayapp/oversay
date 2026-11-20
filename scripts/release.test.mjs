@@ -5,6 +5,7 @@ import assert from 'node:assert/strict'
 import { validVersion, cargoVersion, setCargoVersion, setCargoLockVersion, checkTag, regenerateSkills, zipProblems } from './version.mjs'
 import { latestJson } from './latest-json.mjs'
 import { buildConfig, describe } from './build-config.mjs'
+import { caskVersion, compareVersions, dmgName, setCask } from './homebrew-cask.mjs'
 
 test('versions are plain X.Y.Z within what a Windows installer takes', () => {
   assert.equal(validVersion('0.2.0'), null)
@@ -130,4 +131,36 @@ test('a release\'s zips must carry the app\'s version (ADR 0049)', () => {
   assert.deepEqual(zipProblems('0.5.0', '{"version":"0.5.0"}', skill('0.5.0')), [])
   assert.match(zipProblems('0.5.0', '{"version":"0.4.0"}', skill('0.5.0'))[0], /plugin\.json has 0\.4\.0/)
   assert.match(zipProblems('0.5.0', '{"version":"0.5.0"}', skill('0.4.0'))[0], /SKILL\.md has 0\.4\.0/)
+})
+
+const CASK = `cask "oversay" do
+  version "0.4.0"
+  sha256 "444e6d2a876ee4f1e1ec1e717c7908e8a868006bcc9a730b2bd95e26c8c41b16"
+
+  url "https://github.com/oversayapp/oversay/releases/download/v#{version}/Oversay_#{version}_universal.dmg"
+  name "Oversay"
+end
+`
+
+test("the Homebrew cask's version and sha256 are set, and nothing else", () => {
+  const sha = 'a'.repeat(64)
+  const next = setCask(CASK, '0.5.0', sha)
+  assert.match(next, /^ {2}version "0\.5\.0"$/m)
+  assert.match(next, new RegExp(`^ {2}sha256 "${sha}"$`, 'm'))
+  assert.equal(next.replace(/0\.5\.0/, '0.4.0').replace(sha, '444e6d2a876ee4f1e1ec1e717c7908e8a868006bcc9a730b2bd95e26c8c41b16'), CASK)
+  assert.throws(() => setCask(CASK, 'v0.5.0', sha), /not a version/)
+  assert.throws(() => setCask(CASK, '0.5.0', 'abc'), /sha256/)
+  assert.throws(() => setCask('cask "oversay" do\nend\n', '0.5.0', sha), /version/)
+})
+
+test("the Homebrew cask's file name is the one the release job uploads", () => {
+  assert.equal(dmgName('0.5.0'), 'Oversay_0.5.0_universal.dmg')
+})
+
+test("the Homebrew cask's version is read, so an older release never replaces a newer one", () => {
+  assert.equal(caskVersion(CASK), '0.4.0')
+  assert.equal(caskVersion('cask "oversay" do\nend\n'), null)
+  assert.ok(compareVersions('0.4.0', '0.10.0') < 0)
+  assert.ok(compareVersions('1.0.0', '0.99.99') > 0)
+  assert.equal(compareVersions('0.5.0', '0.5.0'), 0)
 })
