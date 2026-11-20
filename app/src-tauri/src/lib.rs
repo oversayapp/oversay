@@ -102,6 +102,8 @@ pub fn run() {
             Ok(())
         })
         .on_window_event(|window, event| match event {
+            // Back in front: ask the cloud for changes made on another computer (slice 5).
+            WindowEvent::Focused(true) => sync::commands::focused(window.app_handle()),
             // Closing the manager quits the app, overlays included: decks save as they are typed,
             // so there is nothing unsaved to ask about (projects, which had Save, are gone: ADR 0039).
             WindowEvent::CloseRequested { .. } if window.label() == MANAGER_LABEL => {

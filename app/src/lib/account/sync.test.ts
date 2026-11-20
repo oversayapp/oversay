@@ -2,6 +2,7 @@ import { get } from 'svelte/store'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 const calls: string[] = []
+const handlers: Record<string, (e: { payload: unknown }) => void> = {}
 let reply: unknown
 vi.mock('@tauri-apps/api/core', () => ({
   invoke: async (cmd: string) => {
@@ -9,12 +10,18 @@ vi.mock('@tauri-apps/api/core', () => ({
     return reply
   },
 }))
+vi.mock('@tauri-apps/api/event', () => ({
+  listen: async (name: string, cb: (e: { payload: unknown }) => void) => {
+    handlers[name] = cb
+    return () => delete handlers[name]
+  },
+}))
 vi.mock('../log', () => ({ logAction: () => {}, logProblem: () => {} }))
 vi.mock('../decks/store', () => ({ loadDecks: async () => void calls.push('loadDecks') }))
 
-const { sync, loadSync, turnSyncOn, turnSyncOff, outcomeText } = await import('./sync')
+const { sync, loadSync, turnSyncOn, turnSyncOff, outcomeText, watchSync, activityText } = await import('./sync')
 
-const off = { on: false, working: false, last: null, problem: null }
+const off = { on: false, working: false, last: null, problem: null, activity: 'idle', held: 0 }
 
 beforeEach(() => {
   calls.length = 0
@@ -30,7 +37,7 @@ describe('Save decks to the cloud in Settings', () => {
   })
 
   it('turning it on asks Rust, shows what it did, and reads the decks folder again', async () => {
-    reply = { on: true, working: false, last: { uploaded: 5, downloaded: 0, leftAlone: 0, failed: 0 }, problem: null }
+    reply = { on: true, working: false, last: { uploaded: 5, downloaded: 0, leftAlone: 0, failed: 0 }, problem: null, activity: 'saved', held: 0 }
     await turnSyncOn()
     expect(calls).toEqual(['sync_turn_on', 'loadDecks'])
     expect(get(sync)?.on).toBe(true)
@@ -46,5 +53,20 @@ describe('Save decks to the cloud in Settings', () => {
     expect(outcomeText({ uploaded: 1, downloaded: 1, leftAlone: 2, failed: 1 })).toBe(
       "Saved 1 deck to the cloud and brought down 1 deck. 2 decks already in your cloud differ from the copy on this computer; both were left as they are. 1 deck couldn't be saved or brought down.",
     )
+  })
+
+  it('shows Saving, then Saved, as Rust says so', async () => {
+    await watchSync()
+    handlers['sync-changed']({ payload: { ...off, on: true, activity: 'saving' } })
+    expect(activityText(get(sync)!)).toBe('Saving…')
+    handlers['sync-changed']({ payload: { ...off, on: true, activity: 'saved' } })
+    expect(activityText(get(sync)!)).toBe('Saved.')
+  })
+
+  it('says when decks changed on two computers are being kept as they are', () => {
+    expect(activityText({ ...off, on: true, activity: 'saved', held: 2 })).toBe(
+      'Saved. 2 decks were changed on two computers; they are kept as they are here for now.',
+    )
+    expect(activityText({ ...off, on: true, activity: 'saved', held: 1 })).toContain('1 deck was changed on two computers; it is kept as it is here')
   })
 })

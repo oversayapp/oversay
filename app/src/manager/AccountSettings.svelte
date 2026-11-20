@@ -3,7 +3,7 @@
   // Sign in and Create account open Cognito's page in the browser; signed in, the email and Sign out.
   // Tokens stay in Rust: this only shows the status it gives.
   import { onMount } from 'svelte'
-  import { loadSync, outcomeText, sync, turnSyncOff, turnSyncOn } from '../lib/account/sync'
+  import { activityText, loadSync, outcomeText, sync, turnSyncOff, turnSyncOn, watchSync } from '../lib/account/sync'
   import { account, cancelSignIn, deleteAccount, loadAccount, signIn, signOut } from '../lib/account/account'
   import ConfirmDelete from './ConfirmDelete.svelte'
   import { attempt } from './errors'
@@ -21,7 +21,12 @@
     })
 
   // Manager.svelte keeps it current from then on (ACCOUNT_EVENT).
-  onMount(() => void attempt(loadAccount).then(() => attempt(loadSync)))
+  onMount(() => {
+    void attempt(loadAccount).then(() => attempt(loadSync))
+    // Saving, then Saved, as edits go up and changes from another computer come in.
+    const stop = watchSync().catch(() => () => {})
+    return () => void stop.then((off) => off())
+  })
   // Signed out elsewhere, or by Sign out: Rust turned saving off too.
   $effect(() => {
     if ($account?.state === 'signedOut') void attempt(loadSync)
@@ -56,6 +61,9 @@
         <p class="error" role="alert">{$sync.problem}</p>
       {:else if $sync.last}
         <p class="muted hint" role="status">{outcomeText($sync.last)}</p>
+      {/if}
+      {#if $sync.on && !$sync.working && activityText($sync)}
+        <p class="activity" role="status">{activityText($sync)}</p>
       {/if}
       <p class="muted hint">Saves each deck's cards and sessions to your account, so they're on your other computers too. Recordings, transcripts and resources stay on this computer.</p>
     </div>
@@ -102,6 +110,10 @@
   }
   .save {
     margin: 0 0 14px;
+  }
+  .activity {
+    margin: 6px 0 0;
+    font-size: 13px;
   }
   .check {
     display: flex;

@@ -71,6 +71,38 @@ impl Library for FolderLibrary {
         })
     }
 
+    fn replace(&self, expected: &LocalDeck, deck: &RemoteDeck) -> Result<(), String> {
+        if deck_id(&deck.deck_md).as_deref() != Some(deck.id.as_str()) {
+            return Err("its deck.md doesn't carry its id".into());
+        }
+        let (file, sessions) = deck_files_in(&self.0)
+            .into_iter()
+            .find(|(file, _)| {
+                fs::read_to_string(file)
+                    .ok()
+                    .and_then(|t| deck_id(&t))
+                    .as_deref()
+                    == Some(expected.id.as_str())
+            })
+            .ok_or("the deck is no longer here")?;
+        if is_link(&file) || is_link(&sessions) {
+            return Err("a link".into());
+        }
+        // Read again just before writing: an edit since the scan is never overwritten.
+        let now_md = fs::read_to_string(&file).map_err(|e| e.to_string())?;
+        let now_sessions = match fs::read_to_string(&sessions) {
+            Ok(text) if text.trim().is_empty() => NO_SESSIONS.to_string(),
+            Ok(text) => text,
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => NO_SESSIONS.to_string(),
+            Err(e) => return Err(e.to_string()),
+        };
+        if now_md != expected.deck_md || now_sessions != expected.sessions_json {
+            return Err("changed meanwhile".into());
+        }
+        write_atomically(&sessions, &deck.sessions_json).map_err(|e| e.to_string())?;
+        write_atomically(&file, &deck.deck_md).map_err(|e| e.to_string())
+    }
+
     fn add(&self, deck: &RemoteDeck) -> Result<(), String> {
         // The id in the file is the deck's identity (ADR 0037): a deck whose own text says another
         // id isn't made, so it can't land under the wrong one.
