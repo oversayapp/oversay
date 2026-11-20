@@ -9,6 +9,7 @@
   import ShortcutsSettings from './ShortcutsSettings.svelte'
   import RecordingsSettings from './RecordingsSettings.svelte'
   import AboutSection from './AboutSection.svelte'
+  import AccountSettings from './AccountSettings.svelte'
   import UpdatesSettings from './UpdatesSettings.svelte'
   import { supported } from '../lib/updates/store'
   import ThirdPartyLicences from './ThirdPartyLicences.svelte'
@@ -17,7 +18,7 @@
   import { library, restoreStarters } from '../lib/templates/library-store'
   import { onMount, tick, untrack } from 'svelte'
   import { nav as screen } from './route'
-  import { visibleSections, atScrollEnd, currentSection, type SettingsSectionId } from '../lib/settings/sections'
+  import { SETTINGS_SECTIONS, visibleSections, atScrollEnd, currentSection, type SettingsSectionId } from '../lib/settings/sections'
   import { logAction } from '../lib/log'
   import { installExampleDecks, missingExampleDecks } from '../lib/decks/examples'
 
@@ -55,7 +56,7 @@
   let root: HTMLElement
   let toc = $state<HTMLElement>()
   const sections = $derived(visibleSections($supported))
-  let current = $state<SettingsSectionId>('appearance')
+  let current = $state<SettingsSectionId>(SETTINGS_SECTIONS[0].id)
   let menuOpen = $state(false)
   let devOpen = $state(false)
   // About's third-party licences are a page of their own, in place of the sections (013/03).
@@ -186,6 +187,11 @@
   </nav>
 
   <div class="sections">
+  <section id="account">
+    <h2 tabindex="-1">Account</h2>
+    <AccountSettings />
+  </section>
+
   <section id="appearance">
     <h2 id="appearance-label" tabindex="-1">Appearance</h2>
     <div class="segmented" role="radiogroup" aria-labelledby="appearance-label">

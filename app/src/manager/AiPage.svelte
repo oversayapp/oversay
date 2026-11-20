@@ -322,7 +322,7 @@
 {#snippet stepText(app: ChatApp, i: number)}
   {#if app === 'claude-app'}
     {#if i === 0}{#if started[app]}Copied <code>{started[app]}</code>.{:else}Copy the marketplace address.{/if}
-    {:else if i === 1}In Claude, open <b>Customize › Plugins › Add › Add marketplace</b>, paste it, and install Oversay.
+    {:else if i === 1}In Claude, open <b>sidebar › Plugins › Add › Add marketplace</b>, paste it, and install Oversay.
     {:else}For Cowork, let the task work in <code>Documents/Oversay</code>.{/if}
   {:else if app === 'gemini-app'}
     {#if i === 0}{#if started[app]}Saved <code>{started[app]}</code>; it’s shown in Finder.{:else}Save the skill.{/if}
@@ -379,7 +379,7 @@
           <ul>
             <li>The plugin is kept on your Claude account, so it reaches chat, Cowork and Claude Code.</li>
             <li>Chat runs away from your computer: it gives you the note to download. Drop it on Oversay’s window.</li>
-            <li>No marketplace? <button class="link" onclick={() => saveZip('claude-plugin', app)}>Save the plugin as a file</button> for Add › Upload plugin, or <button class="link" onclick={() => saveZip('skill', app)}>the skill alone</button> for Customize › Skills.</li>
+            <li>No marketplace? <button class="link" onclick={() => saveZip('claude-plugin', app)}>Save the plugin as a file</button> for sidebar › Plugins › Add › Upload plugin, or <button class="link" onclick={() => saveZip('skill', app)}>the skill alone</button> for Customize › Skills.</li>
           </ul>
         {:else if app === 'gemini-app'}
           {@render steps(app)}

@@ -53,3 +53,9 @@ describe('the sections list', () => {
     expect(visibleSections(true).map((s) => s.id)).toContain('updates')
   })
 })
+
+describe('Account', () => {
+  it('is the first section, where an account is made or signed in to (ADR 0050)', () => {
+    expect(SETTINGS_SECTIONS[0]).toEqual({ id: 'account', label: 'Account' })
+  })
+})

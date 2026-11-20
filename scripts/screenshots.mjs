@@ -304,6 +304,11 @@ const fakeBridge = `(() => {
       // Updates: a build with a feed; the newer release turns up once a step sets window.__updateFound.
       if (cmd === 'update_support') return { enabled: true, kind: 'installer' };
       if (cmd === 'check_for_update') return window.__updateFound ? { state: 'available', kind: 'installer', release: { version: '0.3.0', date: '2026-12-01T10:00:00Z', page: null, notes: 'Overlay opacity: a slider in Settings\\nThe Edge strip keeps to the bottom edge\\nFixed: bold inside italic in talking points' } } : { state: 'upToDate' };
+      // The account (ADR 0050): signed out, unless a step sets what the next account command gives.
+      if (cmd === 'account_status') return window.__account ?? { state: 'signedOut', problem: null };
+      if (cmd === 'account_sign_in') return (window.__account = window.__accountNext ?? { state: 'signingIn' });
+      if (cmd === 'account_cancel_sign_in' || cmd === 'account_sign_out') return (window.__account = window.__accountNext ?? { state: 'signedOut', problem: null });
+      if (cmd === 'account_check_api') return 'GET /decks: 200, 2 decks';
       if (cmd === 'platform_info') return { os: 'macos', arch: 'aarch64' };
       if (cmd === 'paths_exist') return args.paths.map(() => true);
       // Workspaces (ADR 0040), from the list above.
@@ -468,6 +473,10 @@ const SCREENS = [
   ['templates-category-delete', `(async () => { [...document.querySelectorAll('main [role=menuitem]')].find((b) => b.textContent.includes('Delete category')).click(); await new Promise((r) => setTimeout(r, 200)) })()`],
   ['templates-template-delete', `(async () => { document.querySelector('[role=alertdialog] button').click(); await new Promise((r) => setTimeout(r, 150)); document.querySelector('main button[aria-label^="Delete "]').click(); await new Promise((r) => setTimeout(r, 200)) })()`],
   ['settings', `[...document.querySelectorAll('nav.rail button')].find((b) => b.textContent.includes('Settings')).click()`],
+  // Settings › Account (ADR 0050): waiting for the browser, a sign-in that didn't finish, then signed in.
+  ['settings-account-signing-in', `(async () => { [...document.querySelectorAll('#account button')].find((b) => b.textContent.trim() === 'Sign in').click(); await new Promise((r) => setTimeout(r, 150)) })()`],
+  ['settings-account-problem', `(async () => { window.__accountNext = { state: 'signedOut', problem: 'Sign-in did not finish. Try again.' }; [...document.querySelectorAll('#account button')].find((b) => b.textContent.trim() === 'Cancel').click(); await new Promise((r) => setTimeout(r, 150)) })()`],
+  ['settings-account-signed-in', `(async () => { window.__accountNext = { state: 'signedIn', email: 'john@example.com' }; [...document.querySelectorAll('#account button')].find((b) => b.textContent.trim() === 'Sign in').click(); await new Promise((r) => setTimeout(r, 150)); window.__accountNext = undefined })()`],
   // 013/02: the section list: jump to Shortcuts, scroll to the end, and (narrow) the open menu.
   // Each step runs at the widest size and the picture is then taken at each width.
   ['settings-overlays', `(async () => { [...document.querySelectorAll('.toc ul button')].find((b) => b.textContent.trim() === 'Overlays').click(); await new Promise((r) => setTimeout(r, 900)) })()`],

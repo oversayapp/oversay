@@ -18,7 +18,7 @@ Oversay helps you deliver a talk or run a meeting on time. You plan a talk as a 
 
 - Slide authoring or controlling slide software.
 - Third-party plugins.
-- Multi-user collaboration or a hosted service.
+- Multi-user collaboration and shared decks. The one hosted part is an optional account that saves a person's own decks to the cloud (§14, ADR 0050); without it nothing leaves the computer.
 - Mobile.
 
 ## 2. Domain model
@@ -143,7 +143,7 @@ The main window. A normal (non-overlay) window used to write decks and sort them
 - Invalid or unreadable files open with a clear error, never a blank screen.
 - **Quick notes and quick talks** are replaced by decks (§9, ADR 0036).
 - **Files written outside Oversay** (an AI, another editor) in Quick notes and Quick talks show up while it runs: New until opened, one banner on Home and Notes for the newest; an open note is read again, or, when typing was waiting, the other version is kept as "<name> (outside)" and you choose Keep both or Use theirs instead (ADR 0034).
-- **The AI page** (rail: AI, New until first opened) lists one row per AI app, one app at a time: its name, a line on what it does (writes notes straight into Oversay, or gives you a file), one button, and its details (where, steps, limits) when the row is opened. It installs the Oversay skill that comes with the app into Claude Code (`~/.claude/skills/oversay`), and Codex and Gemini CLI (`~/.agents/skills/oversay`, one copy both read), with this computer's Oversay folders written beside it: Install, then Ready with Remove, or Update available when the app is newer. For the Claude app it copies the marketplace address (`oversayapp/oversay`) to add at Customize › Plugins › Add › Add marketplace (the plugin can still be saved as a file), for the Gemini app it saves the skill, and for ChatGPT it copies instructions; the Claude Code and Codex rows also offer an install prompt that has the app add the same marketplace, which updates with each release once auto-update is on (ADR 0049: this repository is the marketplace, its one plugin is made from `skills/oversay`, and every release carries `oversay-skill.zip` and `oversay-plugin.zip`); the row opens on the steps and the person says "I've added it", which marks it Ready (Undo takes it back). The chat and desktop apps always come first, those whose desktop app is found on this computer at the top; the terminal tools (Claude Code, Codex, Gemini CLI) come after, all shown, because the page is aimed at people who don't work in a terminal. With no AI app at all a notice says to get Claude, ChatGPT or Gemini first (a chat in a browser works too). Once an app is Ready, Try it sits at the top with prompts to copy and watches for the first note; before then it is at the bottom. When Oversay starts on a newer version, it updates the copies it installed and says so. A chat app remembers which version of the skill it was given, and shows Update available when Oversay is newer. Home has a card with the three steps and Install, below everything else, until a skill is installed (in a terminal tool here, or a chat app marked added); then it moves to the top, above Pick up where you left off, with a prompt to try; × hides it for good. The empty Notes list links to the page (ADR 0033).
+- **The AI page** (rail: AI, New until first opened) lists one row per AI app, one app at a time: its name, a line on what it does (writes notes straight into Oversay, or gives you a file), one button, and its details (where, steps, limits) when the row is opened. It installs the Oversay skill that comes with the app into Claude Code (`~/.claude/skills/oversay`), and Codex and Gemini CLI (`~/.agents/skills/oversay`, one copy both read), with this computer's Oversay folders written beside it: Install, then Ready with Remove, or Update available when the app is newer. For the Claude app it copies the marketplace address (`oversayapp/oversay`) to add at sidebar › Plugins › Add › Add marketplace (menu names observed on the Claude desktop app 2026-11-19; the plugin can still be saved as a file), for the Gemini app it saves the skill, and for ChatGPT it copies instructions; the Claude Code and Codex rows also offer an install prompt that has the app add the same marketplace, which updates with each release once auto-update is on (ADR 0049: this repository is the marketplace, its one plugin is made from `skills/oversay`, and every release carries `oversay-skill.zip` and `oversay-plugin.zip`); the row opens on the steps and the person says "I've added it", which marks it Ready (Undo takes it back). The chat and desktop apps always come first, those whose desktop app is found on this computer at the top; the terminal tools (Claude Code, Codex, Gemini CLI) come after, all shown, because the page is aimed at people who don't work in a terminal. With no AI app at all a notice says to get Claude, ChatGPT or Gemini first (a chat in a browser works too). Once an app is Ready, Try it sits at the top with prompts to copy and watches for the first note; before then it is at the bottom. When Oversay starts on a newer version, it updates the copies it installed and says so. A chat app remembers which version of the skill it was given, and shows Update available when Oversay is newer. Home has a card with the three steps and Install, below everything else, until a skill is installed (in a terminal tool here, or a chat app marked added); then it moves to the top, above Pick up where you left off, with a prompt to try; × hides it for good. The empty Notes list links to the page (ADR 0033).
 - **Notes from any chat:** a `.md` file dropped anywhere on the window is copied into Quick notes (the file stays where it was; a taken name gets " 2"; Undo moves the copy to the Trash; other files are named and left out; a project file dropped on its own opens as Open file… does; nothing is added during a session). **Paste as note** on Notes (⌘⇧V / Ctrl+Shift+V) makes a note from Markdown on the clipboard, named after its `# ` title or first topic. The AI page's ChatGPT card copies instructions that teach a chat the note format (ADR 0031).
 - **Skill notes are checked** (ADR 0035): every note the skill makes says `made-with: Oversay skill <version>`. The skill checks each note it writes with `Oversay --check`, which lists, by line, what Oversay would show differently. The note editor shows the same list for a note with that line, and a note from an older skill offers **Update the skill**.
 - **`oversay://` links** open Oversay on Notes, a note or a quick talk by name (`oversay://notes/<name>`, `oversay://talks/<name>`), show a note (`…/show`) or open a quick talk's Get ready page (`…/ready`). Showing and Get ready ask once unless Settings › Links from other apps says Allow or Never; during a session they are refused. A link never writes, deletes or starts a talk (ADR 0032).
@@ -337,6 +337,10 @@ One overlay for every deck, with two views of the same run (ADR 0042): the **Car
 ### The Agenda view
 
 Every card as a rounded bar as wide as its time (the editor's plan bar, live): done cards faded, a playhead walking across the current one, and each card's title and start minute under its bar, never its points. The top row has the card's kind, name and the next card; its clock in a pill that fills as its time goes (amber in its last 10 seconds, red when over); and the time into the deck out of the whole. An untimed deck, or one with Timing off, has bars of equal width (Timing off keeps the planned widths), no minutes, a clock counting up and the card's position. It follows the deck's colour (by kind, or one colour), Dark or Light.
+
+### Saved to the cloud
+
+With an account and **Save decks to the cloud** on (§14), a deck's `deck.md` and `sessions.json` are also saved to the person's account, under its `id`; the folder stays the source of truth, and its `resources/`, `transcripts/` and `reviews/` stay on the computer (ADR 0050). Signed out, nothing about a deck leaves the computer.
 
 ### Sessions
 
@@ -547,7 +551,42 @@ What might come after phase 1, and the ideas for later, are kept in the private 
 7. **Displays:** overlays remember their display; first open is on the built-in/primary display.
 8. **Driving a session:** the deck widget's tab has Start, Pause, Next, Previous and Stop (ADR 0042), and the menu-bar/tray menu has the same with their keys (ADR 0051). The control panel at the top of the right edge, never captured, sets how the deck widget looks.
 
+### Decided (2026-11-18)
+
+1. **An optional account saves decks to the cloud** (§14, ADR 0050, epic oversayapp/web-api#1). A deck's `deck.md` and `sessions.json` sync, and workspaces' `workspace.json`; audio never does, and transcripts, reviews and resources stay local.
+2. **Sign-in returns through `oversay://auth`**, not a loopback address: the one link that writes, refused unless Oversay started that sign-in (ADR 0032, ADR 0050).
+3. **No phase:** accounts are not tied to a phase.
+
 ### Open
 
 1. How the AI is hooked up for analysis and timing suggestions: for a session's review, the person's own agent through the Oversay skill (ADR 0041, §11); timing suggestions are still open.
 2. ~~Recording format and storage~~: decided by ADR 0041 (§11): audio lives with the session in the deck's folder until it is transcribed.
+
+## 14. Account and cloud decks
+
+ADR 0050; epic oversayapp/web-api#1. An account is optional. Without one, Oversay is as described everywhere else in this spec, makes no request to Oversay's API, and never prompts for an account.
+
+### What it does
+
+- **Settings › Account** has **Sign in** and **Create account** (the same page, on its sign-up form). Each opens the sign-in page in the system browser: **Continue with Google**, **Continue with Apple** and **Continue with Microsoft** first, then email and password (sign-up with email verification; a password of at least 12 characters). Oversay never sees a password. Signing in with a provider whose email matches an existing account reaches that same account and its decks. When it is done, the browser hands back to Oversay through `oversay://auth`, and Settings › Account shows the account's email. Oversay stays signed in after it is quit and reopened.
+- **Save decks to the cloud** (off until turned on): every deck uploads, then each edit, in the editor or by the AI skill writing `deck.md`, is saved within a few seconds. The status reads Saving, Saved or Offline.
+- **A second computer** signed in to the same account brings every deck down into its `Decks/` folder, where it opens and runs as normal. Each computer picks up the other's changes when it starts, when its window comes to the front, and on a timer.
+- **The same deck changed on both computers** while one was offline: both versions are kept, one as a conflict copy, and Oversay names the deck.
+- **A deck moved to the Trash** on one computer is removed from the cloud and from the other computer.
+- **Sign out** removes the stored tokens and stops syncing. Every local deck stays.
+- **Delete account** (asks first) removes the account and everything of its in the cloud. Local decks stay.
+
+### What is saved, and what is not
+
+| Saved to the account | Stays on the computer |
+| --- | --- |
+| Each deck's `deck.md` (with its `id`) and `sessions.json`, byte for byte, with a revision per write | Recordings and all audio |
+| Each workspace's `workspace.json` | A deck's `transcripts/`, `reviews/` and `resources/` |
+| The account's email (in Cognito) | Settings, `oversay-local.json`, templates |
+
+### Signing in safely
+
+- Authorization code flow with PKCE (RFC 8252) on Cognito's hosted page.
+- `oversay://auth` is accepted only for the sign-in Oversay itself started: its `state` must match the attempt in progress, which lasts a few minutes and is used once. Any other `oversay://auth` link is refused, nothing is stored and the manager says sign-in did not finish (ADR 0032's one link that writes).
+- The refresh token is kept only in the OS keychain (Keychain on a Mac, Credential Manager on Windows), never in a file or in settings.
+- On the server, every deck belongs to one account; asking for another account's deck is "not found".

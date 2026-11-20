@@ -1,4 +1,5 @@
 mod about;
+mod account;
 mod check;
 mod control_panel;
 mod example_decks;
@@ -24,6 +25,9 @@ mod tray;
 mod tray_menu;
 mod updates;
 mod workspaces;
+
+#[cfg(test)]
+mod test_log;
 
 use tauri::{Manager, RunEvent, WindowEvent};
 use tauri_plugin_window_state::StateFlags;
@@ -86,6 +90,8 @@ pub fn run() {
             // The skill Oversay installed for Claude Code, Codex or Gemini CLI keeps up with it.
             skill::update_installed(app.handle());
             // Links an AI opens to show a note or open Oversay on it (ADR 0032).
+            // The optional account, restored from the keychain (ADR 0050); before links, which hand it oversay://auth.
+            account::commands::init(app.handle());
             links::init(app.handle());
             // Started from the jump list's Control panel with the app not yet running.
             if std::env::args().any(|a| a == platform::CONTROL_PANEL_ARG) {
@@ -145,6 +151,11 @@ pub fn run() {
             example_decks::missing_example_decks,
             example_decks::install_example_decks,
             links::take_links,
+            account::commands::account_status,
+            account::commands::account_sign_in,
+            account::commands::account_cancel_sign_in,
+            account::commands::account_sign_out,
+            account::commands::account_check_api,
             skill::skill_targets,
             skill::install_skill,
             skill::remove_skill,

@@ -31,3 +31,5 @@ task 154 planned a public source for `npx skills add` and a public mirror. John 
 - The app is not sandboxed today, so it can write to `~/.claude` and `~/.agents`. A Mac App Store build would lose this (as noted earlier).
 - After an app update, installed copies are older until the person presses Update. The AI page says so, and the skill names its version, so a mismatch can be seen.
 - Someone with the Claude plugin uploaded *and* the personal Claude Code copy has the skill twice in Claude Code. For Claude Code, Oversay suggests the copy: it needs no account and always matches the app. The README says to turn off the synced plugin in Claude Code (`/plugin`, Installed) when both are there.
+
+*Changed by ADR 0050: an optional account saves a person's decks (`deck.md`, `sessions.json`) and workspaces to a hosted service. The skill is still not hosted.*

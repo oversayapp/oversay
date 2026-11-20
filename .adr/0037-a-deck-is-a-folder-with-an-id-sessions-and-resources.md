@@ -47,3 +47,5 @@ A deck is one Markdown file, `Decks/<name>.md`, and its name is its identity: it
 - Epic 017 (project resources) is replaced: resources belong to decks, since projects are out of scope (ADR 0036).
 
 *Changed by ADR 0041: a session in `sessions.json` may have a `note`, the newest 20 are kept plus any with a note, a transcript or a review, and the deck's folder also holds `transcripts/` and `reviews/`.*
+
+*Changed by ADR 0050: with an account and Save decks to the cloud on, a deck's `deck.md` and `sessions.json` are also saved to the cloud, keyed by its id within the account; `resources/`, `transcripts/` and `reviews/` stay local.*

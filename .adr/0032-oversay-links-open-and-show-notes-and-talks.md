@@ -44,3 +44,5 @@ An AI that has written a note should be able to say "it's open in Oversay" or pu
 *Changed by ADR 0036: decks of flashcards replace the notes and talks links with oversay://decks/<name> and …/show.*
 
 *Changed by ADR 0037: a deck link names the deck by its id (oversay://decks/d_k3x9a2bq/show) as well as by its name, so it outlives a rename.*
+
+*Changed by ADR 0050: `oversay://auth` finishes a sign-in Oversay started, and so stores tokens: the one link that writes. It is refused unless its `state` matches the attempt in progress.*

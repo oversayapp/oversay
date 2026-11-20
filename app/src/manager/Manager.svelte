@@ -4,6 +4,7 @@
   import { onMount } from 'svelte'
   import { derived, get } from 'svelte/store'
   import { listen } from '@tauri-apps/api/event'
+  import { ACCOUNT_EVENT, loadAccount } from '../lib/account/account'
   import { logProblem } from '../lib/log'
   import { applyLookChange, changeOverlayOpacity, loadSettings, pinStarredDecks, pins, settings } from '../lib/settings/store'
   import { CONTROL_PANEL_LOOK_EVENT, OPACITY_CHANGES, OVERLAY_OPACITY_EVENT, checkLookChange, type OpacityChange } from '../lib/settings/overlays'
@@ -140,6 +141,8 @@
     const workspacesListener = listen(WORKSPACES_CHANGED_EVENT, () => attempt(loadWorkspaces))
     // oversay:// links an AI or another app opened while Oversay runs (ADR 0032).
     const linkListener = listen(LINK_EVENT, () => void followLinks())
+    // The account changed by itself: a sign-in came back, or its token was refused (ADR 0050).
+    const accountListener = listen(ACCOUNT_EVENT, () => attempt(loadAccount))
     return () => {
       stopNotes()
       stopSessions()
@@ -155,6 +158,7 @@
       folderListener.then((unlisten) => unlisten())
       workspacesListener.then((unlisten) => unlisten())
       linkListener.then((unlisten) => unlisten())
+      accountListener.then((unlisten) => unlisten())
     }
   })
 </script>
