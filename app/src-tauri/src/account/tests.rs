@@ -122,6 +122,14 @@ impl Api for FakeApi {
             r#"{"decks":[{"id":"d_a"},{"id":"d_b"}],"cursor":4}"#.into(),
         ))
     }
+    fn put(&self, path: &str, access_token: &str, _body: &str) -> Result<(u16, String), String> {
+        self.0
+            .lock()
+            .unwrap()
+            .api
+            .push((path.into(), access_token.into()));
+        Ok((200, "{}".into()))
+    }
 }
 
 fn account() -> (Account, Shared) {
@@ -739,4 +747,17 @@ fn a_sign_in_cancelled_while_the_keychain_is_written_takes_the_token_out_again()
     assert!(c.stored.is_none());
     assert_eq!(c.deletes, 1);
     assert_eq!(c.revoked, vec!["refresh-1".to_string()]);
+}
+
+#[test]
+fn signed_out_the_api_is_never_called() {
+    let (account, calls) = account();
+    let now = Instant::now();
+    assert_eq!(account.api_get(now, "/decks"), Err(AccountError::SignedOut));
+    assert_eq!(
+        account.api_put(now, "/decks/d_a", "{}"),
+        Err(AccountError::SignedOut)
+    );
+    assert!(!account.is_signed_in());
+    assert!(calls.lock().unwrap().api.is_empty());
 }

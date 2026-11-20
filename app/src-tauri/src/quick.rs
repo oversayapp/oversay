@@ -156,9 +156,44 @@ pub(crate) fn deck_names(dir: &Path) -> Vec<String> {
         .unwrap_or_default()
 }
 
+/// Every deck in a folder of its own in `dir`, as its `deck.md` (or only `.md`) and where its
+/// `sessions.json` is or would be. A lone deck file has no folder yet and isn't listed.
+pub(crate) fn deck_files_in(dir: &Path) -> Vec<(PathBuf, PathBuf)> {
+    list_in(dir, Kind::Decks)
+        .unwrap_or_default()
+        .into_iter()
+        .map(|f| PathBuf::from(f.path))
+        .filter(|file| in_own_folder(dir, file))
+        .map(|file| {
+            let sessions = sessions_file(dir, &file);
+            (file, sessions)
+        })
+        .collect()
+}
+
+/// A front matter value (`title`, say) of a deck's text, without surrounding quotes.
+pub(crate) fn front_value(text: &str, key: &str) -> Option<String> {
+    let mut lines = text.lines();
+    if lines.next().map(str::trim_end) != Some("---") {
+        return None;
+    }
+    lines
+        .take_while(|l| l.trim_end() != "---")
+        .find_map(|l| {
+            let (k, v) = l.split_once(':')?;
+            k.trim().eq_ignore_ascii_case(key).then(|| {
+                v.trim()
+                    .trim_matches(|c| c == '"' || c == '\'')
+                    .trim()
+                    .to_string()
+            })
+        })
+        .filter(|v| !v.is_empty())
+}
+
 /// The deck's own file in its folder, and its sessions beside it.
 const DECK_FILE: &str = "deck.md";
-const DECK_SESSIONS: &str = "sessions.json";
+pub(crate) const DECK_SESSIONS: &str = "sessions.json";
 
 /// The deck in `folder`: its `deck.md`, or else the folder's only `.md` file. None when it has
 /// neither, and so is not a deck.
@@ -682,7 +717,7 @@ fn holds_nothing(folder: &Path) -> bool {
 }
 
 /// The deck's id: a valid `id` in its front matter, if it has one.
-fn deck_id(text: &str) -> Option<String> {
+pub(crate) fn deck_id(text: &str) -> Option<String> {
     let mut lines = text.lines();
     if lines.next().map(str::trim_end) != Some("---") {
         return None;

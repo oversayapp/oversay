@@ -139,4 +139,15 @@ impl super::Api for HttpApi {
             .map_err(|e| format!("The API couldn't be reached: {e}"))?;
         read(response, 4 * 1024 * 1024, "The API")
     }
+
+    fn put(&self, path: &str, access_token: &str, body: &str) -> Result<(u16, String), String> {
+        let response = self
+            .agent
+            .put(format!("{}{path}", self.base))
+            .header("Authorization", format!("Bearer {access_token}"))
+            .header("Content-Type", "application/json")
+            .send(body)
+            .map_err(|e| format!("The API couldn't be reached: {e}"))?;
+        read(response, 4 * 1024 * 1024, "The API")
+    }
 }

@@ -187,6 +187,8 @@ pub trait SecretStore: Send + Sync {
 /// The stage's API: a GET with the access token, giving the status and body.
 pub trait Api: Send + Sync {
     fn get(&self, path: &str, access_token: &str) -> Result<(u16, String), String>;
+    /// A PUT with a JSON body (a deck, in `sync`).
+    fn put(&self, path: &str, access_token: &str, body: &str) -> Result<(u16, String), String>;
 }
 
 /// A string that never shows itself in a `{:?}`, so a token can't reach the log by accident.
@@ -655,6 +657,32 @@ impl Account {
             }
             Err(AuthError::Unreachable(why)) => Err(AccountError::Unreachable(why)),
         }
+    }
+
+    /// Whether the account is signed in: the only thing `sync` asks before it makes a request.
+    pub fn is_signed_in(&self) -> bool {
+        matches!(*self.state(), State::SignedIn(_))
+    }
+
+    /// A GET to the API with the account's token. Signed out, no request is made (V5).
+    pub fn api_get(&self, now: Instant, path: &str) -> Result<(u16, String), AccountError> {
+        let token = self.access_token(now)?;
+        self.api
+            .get(path, &token)
+            .map_err(AccountError::Unreachable)
+    }
+
+    /// A PUT to the API with the account's token. Signed out, no request is made (V5).
+    pub fn api_put(
+        &self,
+        now: Instant,
+        path: &str,
+        body: &str,
+    ) -> Result<(u16, String), AccountError> {
+        let token = self.access_token(now)?;
+        self.api
+            .put(path, &token, body)
+            .map_err(AccountError::Unreachable)
     }
 
     /// Developer tools only: `GET /decks` with the access token, to show the token works.
