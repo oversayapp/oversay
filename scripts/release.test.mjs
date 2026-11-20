@@ -5,7 +5,7 @@ import assert from 'node:assert/strict'
 import { validVersion, cargoVersion, setCargoVersion, setCargoLockVersion, checkTag, regenerateSkills, zipProblems } from './version.mjs'
 import { latestJson } from './latest-json.mjs'
 import { buildConfig, describe } from './build-config.mjs'
-import { dmgName, setCask } from './homebrew-cask.mjs'
+import { caskVersion, compareVersions, dmgName, setCask } from './homebrew-cask.mjs'
 
 test('versions are plain X.Y.Z within what a Windows installer takes', () => {
   assert.equal(validVersion('0.2.0'), null)
@@ -155,4 +155,12 @@ test("the Homebrew cask's version and sha256 are set, and nothing else", () => {
 
 test("the Homebrew cask's file name is the one the release job uploads", () => {
   assert.equal(dmgName('0.5.0'), 'Oversay_0.5.0_universal.dmg')
+})
+
+test("the Homebrew cask's version is read, so an older release never replaces a newer one", () => {
+  assert.equal(caskVersion(CASK), '0.4.0')
+  assert.equal(caskVersion('cask "oversay" do\nend\n'), null)
+  assert.ok(compareVersions('0.4.0', '0.10.0') < 0)
+  assert.ok(compareVersions('1.0.0', '0.99.99') > 0)
+  assert.equal(compareVersions('0.5.0', '0.5.0'), 0)
 })

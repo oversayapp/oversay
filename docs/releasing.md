@@ -67,14 +67,17 @@ A wrong tag can be deleted and pushed again (`git push --delete origin v0.2.0`) 
 
 Mac users install with `brew install oversayapp/tap/oversay`. The cask, `Casks/oversay.rb` in [oversayapp/homebrew-tap](https://github.com/oversayapp/homebrew-tap), names the release's `Oversay_X.Y.Z_universal.dmg` and its sha256. The app updates itself (`auto_updates true`); the cask has to be current for new installs and for `brew upgrade`.
 
-After **tagged-release**, the **homebrew** job runs `scripts/homebrew-cask.mjs` on the `.dmg` the macOS job built, which sets `version` and `sha256` in the cask, then commits and pushes it to the tap. It pushes with `HOMEBREW_TAP_TOKEN`, a secret in the `release` environment: a fine-grained token with **Contents: read and write** on `oversayapp/homebrew-tap` only. When the token expires, make a new one and replace the secret. If the job fails, the release is still published; re-run the job, or update the cask by hand:
+After **tagged-release**, the **homebrew** job runs `scripts/homebrew-cask.mjs` on the `.dmg` the macOS job built, which hashes it and sets `version` and `sha256` in the cask, then commits and pushes it to the tap. It pushes with `HOMEBREW_TAP_TOKEN`, a secret in the `release` environment: a fine-grained token with **Contents: read and write** on `oversayapp/homebrew-tap` only. When the token expires, make a new one and replace the secret. If the job fails, the release is still published; re-run the job, or update the cask by hand:
 
 ```bash
-gh repo clone oversayapp/homebrew-tap /tmp/homebrew-tap
-gh release download v0.5.0 -p 'Oversay_0.5.0_universal.dmg' -D /tmp
-node scripts/homebrew-cask.mjs --cask /tmp/homebrew-tap/Casks/oversay.rb --version 0.5.0 --dmg /tmp/Oversay_0.5.0_universal.dmg
-git -C /tmp/homebrew-tap commit -am "Oversay 0.5.0" && git -C /tmp/homebrew-tap push
+work=$(mktemp -d)
+gh repo clone oversayapp/homebrew-tap "$work/tap"
+gh release download v0.5.0 -p 'Oversay_0.5.0_universal.dmg' -D "$work"
+node scripts/homebrew-cask.mjs --cask "$work/tap/Casks/oversay.rb" --version 0.5.0 --dir "$work"
+git -C "$work/tap" commit -am "Oversay 0.5.0" && git -C "$work/tap" push
 ```
+
+The script leaves the cask alone when it already points at a newer version, so re-running an older release's job can't move it backwards.
 
 Check it with `brew update && brew upgrade oversay` on a Mac that has it, and `brew audit --cask --online oversayapp/tap/oversay` (Homebrew asks you to trust the tap first; `brew install oversayapp/tap/oversay` does that). `--new` also fails until Oversay is popular enough for Homebrew's own list, which is a later step.
 

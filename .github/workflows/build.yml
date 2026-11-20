@@ -434,10 +434,10 @@ jobs:
       - name: Update the cask and push it
         run: |
           version="${TAG#v}"
-          node scripts/homebrew-cask.mjs --cask tap/Casks/oversay.rb --version "$version" --dmg "dmg/Oversay_${version}_universal.dmg"
+          node scripts/homebrew-cask.mjs --cask tap/Casks/oversay.rb --version "$version" --dir dmg
           cd tap
           if git diff --quiet; then
-            echo "The cask already points at $TAG."
+            echo "The cask is unchanged."
             exit 0
           fi
           git config user.name "github-actions[bot]"
