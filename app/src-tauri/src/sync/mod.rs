@@ -9,9 +9,14 @@
 //! `sync_once` is one round (pull what changed since the cursor, then push what changed here);
 //! saver.rs decides when a round runs (a debounce after an edit, launch, focus, a timer).
 //!
-//! Not built yet: what to do when both computers changed a deck (slice 6). Such a deck is held:
-//! kept as it is locally and not uploaded. `Pushed::Conflict` and `Conflict` are where slice 6
-//! will go; nothing returns them now.
+//! Offline (slice 6): a round that can't reach the cloud is `CloudError::Unreachable`; the saver then
+//! says Offline, edits stay on this computer, and the next round that gets through uploads them.
+//!
+//! A deck changed on both computers keeps both versions (`settle`): this computer's files stay the
+//! deck, and the cloud's version is added beside it as a new deck titled "… (conflict copy)". The
+//! deck then goes up over the cloud's revision and the copy goes up as a new deck, so every
+//! computer ends with the same two decks. The cloud refuses a write over a revision the writer
+//! hadn't seen (409), which is how a conflict is found when the pull didn't see it.
 
 mod cloud;
 pub mod commands;
@@ -80,6 +85,8 @@ pub enum CloudError {
     Unreachable(String),
     /// The API said no to this request, with this status.
     Refused(u16),
+    /// A save was refused because the cloud's deck is newer than the revision it was based on.
+    Stale,
 }
 
 impl fmt::Display for CloudError {
@@ -88,6 +95,7 @@ impl fmt::Display for CloudError {
             CloudError::SignedOut => write!(f, "Not signed in."),
             CloudError::Unreachable(why) => write!(f, "{why}"),
             CloudError::Refused(status) => write!(f, "The cloud refused it ({status})."),
+            CloudError::Stale => write!(f, "The deck changed in the cloud."),
         }
     }
 }
@@ -100,8 +108,10 @@ pub trait Cloud {
     fn changes(&self, since: u64) -> Result<Changes, CloudError>;
     /// One deck, or None when the account has none with this id.
     fn get(&self, id: &str) -> Result<Option<RemoteDeck>, CloudError>;
-    /// Creates or replaces the deck; gives its new revision.
-    fn put(&self, deck: &LocalDeck) -> Result<u64, CloudError>;
+    /// Saves the deck; gives its new revision. `base` is the revision this computer last agreed
+    /// (0: it expects the cloud to have no such deck); the cloud answers `Stale` and changes
+    /// nothing when its revision is another.
+    fn put(&self, deck: &LocalDeck, base: u64) -> Result<u64, CloudError>;
 }
 
 /// What the Decks folder held.
@@ -125,21 +135,13 @@ pub trait Library {
     fn replace(&self, expected: &LocalDeck, deck: &RemoteDeck) -> Result<(), String>;
 }
 
-/// Both computers changed a deck (slice 6 settles it). Until then the deck is *held*: its local
-/// files are left as they are and it is not uploaded over the cloud's newer revision.
-#[derive(Debug, PartialEq)]
-pub struct Conflict {
-    pub id: String,
-}
-
 #[derive(Debug, PartialEq)]
 pub enum Pushed {
     Saved {
         revision: u64,
     },
-    /// Never returned yet (slice 6).
-    #[allow(dead_code)]
-    Conflict(Conflict),
+    /// The cloud's deck is newer than the one this save was based on.
+    Conflict,
 }
 
 /// What turning Save decks to the cloud on did.
@@ -147,9 +149,8 @@ pub enum Pushed {
 pub struct FirstSync {
     pub uploaded: usize,
     pub downloaded: usize,
-    /// Ids the cloud and this computer both have, with different contents. Neither side was
-    /// changed: which one wins is for the conflict slice (6) to settle, so nothing is overwritten
-    /// silently now.
+    /// Ids the cloud and this computer both have, with different contents: the first round after
+    /// this settles each (keeps both versions).
     pub left_alone: Vec<String>,
     /// Decks that couldn't be saved or brought down; the rest went ahead.
     pub failed: usize,
@@ -160,8 +161,8 @@ pub struct FirstSync {
 pub struct Round {
     pub uploaded: usize,
     pub downloaded: usize,
-    /// Decks changed on both sides, newly held back this round.
-    pub held: usize,
+    /// Titles of the conflict copies made this round (decks changed on both computers).
+    pub copies: Vec<String>,
     pub failed: usize,
 }
 
@@ -179,8 +180,6 @@ pub struct State {
     /// Where the cloud's changes were read up to. None: nothing synced yet.
     pub cursor: Option<u64>,
     pub decks: BTreeMap<String, Base>,
-    /// Decks changed on both sides, left alone until slice 6 settles them.
-    pub held: BTreeSet<String>,
 }
 
 pub fn hash_of(deck_md: &str, sessions_json: &str) -> String {
@@ -217,11 +216,14 @@ impl<C: Cloud, L: Library> Sync<C, L> {
         Sync { cloud, library }
     }
 
-    /// Saves one deck to the cloud.
-    pub fn push(&self, deck: &LocalDeck) -> Result<Pushed, CloudError> {
-        self.cloud
-            .put(deck)
-            .map(|revision| Pushed::Saved { revision })
+    /// Saves one deck to the cloud, based on the revision `state` last agreed (a new deck: 0).
+    pub fn push(&self, state: &State, deck: &LocalDeck) -> Result<Pushed, CloudError> {
+        let base = state.decks.get(&deck.id).map_or(0, |b| b.revision);
+        match self.cloud.put(deck, base) {
+            Ok(revision) => Ok(Pushed::Saved { revision }),
+            Err(CloudError::Stale) => Ok(Pushed::Conflict),
+            Err(e) => Err(e),
+        }
     }
 
     /// Turning it on: uploads the local decks the cloud lacks, brings down the cloud's decks this
@@ -240,7 +242,7 @@ impl<C: Cloud, L: Library> Sync<C, L> {
         };
         for deck in &local_decks {
             if !in_cloud.contains(deck.id.as_str()) {
-                match self.push(deck) {
+                match self.push(state, deck) {
                     Ok(Pushed::Saved { revision }) => {
                         state.decks.insert(
                             deck.id.clone(),
@@ -251,7 +253,8 @@ impl<C: Cloud, L: Library> Sync<C, L> {
                         );
                         report.uploaded += 1;
                     }
-                    Ok(Pushed::Conflict(_)) => {}
+                    // Made in the cloud meanwhile: the first round after this settles it.
+                    Ok(Pushed::Conflict) => report.left_alone.push(deck.id.clone()),
                     Err(CloudError::SignedOut) => return Err(CloudError::SignedOut),
                     Err(e) => {
                         log::warn!("sync.deck_failed step=upload id={} error={e}", deck.id);
@@ -263,7 +266,6 @@ impl<C: Cloud, L: Library> Sync<C, L> {
             match self.cloud.get(&deck.id) {
                 Ok(Some(theirs)) if !same_files(deck, &theirs) => {
                     log::debug!("sync.initial_differs id={}", deck.id);
-                    state.held.insert(deck.id.clone());
                     report.left_alone.push(deck.id.clone());
                 }
                 Ok(Some(theirs)) => {
@@ -306,8 +308,7 @@ impl<C: Cloud, L: Library> Sync<C, L> {
     /// down, then every local deck whose files differ from what was last agreed goes up. Run after
     /// an edit (a debounce later), on launch, on window focus and on a timer.
     ///
-    /// A deck changed on both sides is held: its local files are not touched and it is not
-    /// uploaded, so neither side's change is lost (slice 6 settles it). A file this round wrote
+    /// A deck changed on both sides keeps both versions (`settle`). A file this round wrote
     /// becomes the deck's agreed state, so it is never uploaded back.
     pub fn sync_once(&self, state: &mut State) -> Result<Round, CloudError> {
         let Some(since) = state.cursor else {
@@ -324,7 +325,7 @@ impl<C: Cloud, L: Library> Sync<C, L> {
         for change in &changes.items {
             match self.pull_one(state, &scan, change) {
                 Ok(Pulled::Down) => round.downloaded += 1,
-                Ok(Pulled::Held) => round.held += 1,
+                Ok(Pulled::Settled(title)) => round.copies.push(title),
                 Ok(Pulled::Nothing) => {}
                 Err(CloudError::SignedOut) => return Err(CloudError::SignedOut),
                 Err(_) => {
@@ -340,7 +341,7 @@ impl<C: Cloud, L: Library> Sync<C, L> {
         }
         let scan = self.library.scan().map_err(CloudError::Unreachable)?;
         for deck in &scan.decks {
-            match self.push_if_changed(state, deck) {
+            match self.push_if_changed(state, deck, &mut round) {
                 Ok(true) => round.uploaded += 1,
                 Ok(false) => {}
                 Err(CloudError::SignedOut) => return Err(CloudError::SignedOut),
@@ -356,7 +357,7 @@ impl<C: Cloud, L: Library> Sync<C, L> {
         Ok(Round {
             uploaded: first.uploaded,
             downloaded: first.downloaded,
-            held: first.left_alone.len(),
+            copies: vec![],
             failed: first.failed,
         })
     }
@@ -378,7 +379,7 @@ impl<C: Cloud, L: Library> Sync<C, L> {
         if base.is_some_and(|b| b.revision >= change.revision) {
             return Ok(Pulled::Nothing);
         }
-        if state.held.contains(id) || scan.unsyncable.contains(id) {
+        if scan.unsyncable.contains(id) {
             return Ok(Pulled::Nothing);
         }
         let Some(local) = scan.decks.iter().find(|d| &d.id == id) else {
@@ -388,15 +389,13 @@ impl<C: Cloud, L: Library> Sync<C, L> {
                 },
             );
         };
-        if base.is_none_or(|b| b.hash != local.hash()) {
-            // Changed here and in the cloud: keep the local files, upload nothing.
-            state.held.insert(id.clone());
-            log::warn!("sync.pull_held id={id} reason=changed_on_both check=epic-036/V12");
-            return Ok(Pulled::Held);
-        }
         let Some(theirs) = self.cloud.get(id)? else {
             return Ok(Pulled::Nothing);
         };
+        if base.is_none_or(|b| b.hash != local.hash()) {
+            // Changed here and in the cloud: both versions are kept.
+            return self.settle(state, local, &theirs).map(Pulled::Settled);
+        }
         match self.library.replace(local, &theirs) {
             Ok(()) => {
                 state.decks.insert(id.clone(), theirs.base());
@@ -432,33 +431,39 @@ impl<C: Cloud, L: Library> Sync<C, L> {
         }
     }
 
-    fn push_if_changed(&self, state: &mut State, deck: &LocalDeck) -> Result<bool, CloudError> {
-        if state.held.contains(&deck.id) {
-            return Ok(false);
-        }
+    fn push_if_changed(
+        &self,
+        state: &mut State,
+        deck: &LocalDeck,
+        round: &mut Round,
+    ) -> Result<bool, CloudError> {
         let hash = deck.hash();
         match state.decks.get(&deck.id) {
             Some(base) if base.hash == hash => return Ok(false),
             Some(_) => {}
             None => {
                 // Never agreed with the cloud: a new deck, unless the cloud already has one with
-                // this id, which is not overwritten.
+                // this id.
                 if let Some(theirs) = self.cloud.get(&deck.id)? {
                     if same_files(deck, &theirs) {
                         state.decks.insert(deck.id.clone(), theirs.base());
-                    } else {
-                        state.held.insert(deck.id.clone());
-                        log::warn!(
-                            "sync.pull_held id={} reason=changed_on_both check=epic-036/V12",
-                            deck.id
-                        );
+                        return Ok(false);
                     }
-                    return Ok(false);
+                    round.copies.push(self.settle(state, deck, &theirs)?);
                 }
             }
         }
         let started = Instant::now();
-        match self.push(deck) {
+        let mut pushed = self.push(state, deck);
+        if pushed == Ok(Pushed::Conflict) {
+            // The cloud moved on since this computer last looked: keep both, then try again.
+            let Some(theirs) = self.cloud.get(&deck.id)? else {
+                return Ok(false);
+            };
+            round.copies.push(self.settle(state, deck, &theirs)?);
+            pushed = self.push(state, deck);
+        }
+        match pushed {
             Ok(Pushed::Saved { revision }) => {
                 state.decks.insert(deck.id.clone(), Base { revision, hash });
                 log::debug!(
@@ -468,18 +473,85 @@ impl<C: Cloud, L: Library> Sync<C, L> {
                 );
                 Ok(true)
             }
-            Ok(Pushed::Conflict(_)) => Ok(false),
+            // Changed again in the cloud since: the next round settles that too.
+            Ok(Pushed::Conflict) => Ok(false),
             Err(e) => {
                 log::warn!("sync.deck_failed step=upload id={} error={e}", deck.id);
                 Err(e)
             }
         }
     }
+
+    /// Both computers changed the deck: this computer's files stay the deck, and the cloud's
+    /// version is added beside it as a new deck, "… (conflict copy)" (a new id, its own folder).
+    /// The deck is then agreed with the cloud's revision, so its next save goes over it, and the
+    /// copy goes up as a new deck. Gives the copy's title. Nothing is deleted or overwritten.
+    fn settle(
+        &self,
+        state: &mut State,
+        local: &LocalDeck,
+        theirs: &RemoteDeck,
+    ) -> Result<String, CloudError> {
+        let title = format!(
+            "{} (conflict copy)",
+            crate::quick::front_value(&theirs.deck_md, "title")
+                .unwrap_or_else(|| "Untitled deck".into())
+        );
+        let id = crate::ids::new_id(crate::ids::DECK_PREFIX);
+        let copy = RemoteDeck {
+            id: id.clone(),
+            deck_md: with_title(&crate::quick::with_id(&theirs.deck_md, &id), &title),
+            sessions_json: theirs.sessions_json.clone(),
+            revision: 0,
+        };
+        if self.library.add(&copy).is_err() {
+            log::warn!(
+                "sync.deck_failed step=conflict_copy id={} reason=not_saved",
+                local.id
+            );
+            return Err(CloudError::Unreachable("not saved".into()));
+        }
+        state.decks.insert(local.id.clone(), theirs.base());
+        log::warn!(
+            "sync.conflict id={} kept=both copy={id} check=epic-036/V12",
+            local.id
+        );
+        Ok(title)
+    }
+}
+
+/// `text` with its front matter `title:` saying `title`, added when there is none.
+fn with_title(text: &str, title: &str) -> String {
+    let mut in_front = false;
+    let mut done = false;
+    let mut out = String::new();
+    for (n, line) in text.split_inclusive('\n').enumerate() {
+        let bare = line.trim_end_matches(['\r', '\n']);
+        if bare == "---" {
+            if in_front && !done {
+                out.push_str(&format!("title: {title}\n"));
+                done = true;
+            }
+            in_front = n == 0;
+        } else if in_front
+            && !done
+            && bare
+                .split_once(':')
+                .is_some_and(|(k, _)| k.trim().eq_ignore_ascii_case("title"))
+        {
+            out.push_str(&format!("title: {title}{}", &line[bare.len()..]));
+            done = true;
+            continue;
+        }
+        out.push_str(line);
+    }
+    out
 }
 
 enum Pulled {
     Down,
-    Held,
+    /// Both versions kept; the conflict copy's title.
+    Settled(String),
     Nothing,
 }
 

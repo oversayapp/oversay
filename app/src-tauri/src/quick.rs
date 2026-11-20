@@ -732,7 +732,7 @@ pub(crate) fn deck_id(text: &str) -> Option<String> {
 }
 
 /// `text` with its `id` line saying `id` instead; the rest exactly as it was.
-fn with_id(text: &str, id: &str) -> String {
+pub(crate) fn with_id(text: &str, id: &str) -> String {
     let mut in_front = false;
     let mut done = false;
     text.split_inclusive('\n')

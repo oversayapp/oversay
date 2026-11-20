@@ -135,11 +135,17 @@ impl<T: Transport> Cloud for ApiCloud<T> {
         }))
     }
 
-    fn put(&self, deck: &LocalDeck) -> Result<u64, CloudError> {
-        let body = json!({ "deckMd": deck.deck_md, "sessionsJson": deck.sessions_json });
-        let saved = parse(&ok(self
-            .0
-            .put(&deck_path(&deck.id)?, &body.to_string())?)?)?;
-        revision(&saved)
+    fn put(&self, deck: &LocalDeck, base: u64) -> Result<u64, CloudError> {
+        let body = json!({
+            "deckMd": deck.deck_md,
+            "sessionsJson": deck.sessions_json,
+            "baseRevision": base,
+        });
+        let (status, text) = self.0.put(&deck_path(&deck.id)?, &body.to_string())?;
+        // The cloud's deck is at another revision than the one this save was based on.
+        if status == 409 {
+            return Err(CloudError::Stale);
+        }
+        revision(&parse(&ok((status, text))?)?)
     }
 }

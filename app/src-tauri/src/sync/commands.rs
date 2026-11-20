@@ -38,8 +38,9 @@ pub struct SyncStatus {
     pub problem: Option<String>,
     /// Saving while an edit waits to go up, Saved once it has.
     pub activity: Activity,
-    /// Decks changed on both computers, kept as they are here until they are settled (slice 6).
-    pub held: usize,
+    /// Titles of the conflict copies made, newest last: decks changed on both computers, both
+    /// versions kept. Shown to the user, never logged.
+    pub conflicts: Vec<String>,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
@@ -273,8 +274,12 @@ fn worker(app: AppHandle) {
         };
         write_state(&app, saver.state());
         let problem = match result {
-            Ok(_) => None,
-            Err(CloudError::SignedOut) => None,
+            Ok(round) => {
+                note_conflicts(&app, round.copies);
+                None
+            }
+            // Offline shows as the activity, not as a problem.
+            Err(CloudError::SignedOut | CloudError::Unreachable(_)) => None,
             Err(e) => {
                 log::warn!("sync.round_failed error={e}");
                 Some("Your decks couldn't be saved just now. Oversay will try again.".to_string())
@@ -282,6 +287,15 @@ fn worker(app: AppHandle) {
         };
         publish(&app, saver, Some(problem));
     }
+}
+
+/// Remembers the conflict copies a round made, for Settings to name (the last few).
+fn note_conflicts(app: &AppHandle, copies: Vec<String>) {
+    const KEEP: usize = 20;
+    let mut status = lock(app);
+    status.conflicts.extend(copies);
+    let extra = status.conflicts.len().saturating_sub(KEEP);
+    status.conflicts.drain(..extra);
 }
 
 /// Shows the saver's state in Settings: its activity, and (after a round) whether it had a problem.
@@ -292,7 +306,6 @@ fn publish(app: &AppHandle, saver: &Saver, problem: Option<Option<String>>) {
             return;
         }
         status.activity = saver.activity();
-        status.held = saver.state().held.len();
         if let Some(problem) = problem {
             status.problem = problem;
         }
@@ -360,7 +373,6 @@ pub async fn sync_turn_on(app: AppHandle) -> Result<SyncStatus, String> {
         Ok((report, state)) => {
             status.on = true;
             status.activity = Activity::Saved;
-            status.held = state.held.len();
             status.last = Some((&report).into());
             drop(status);
             write_state(&app, &state);

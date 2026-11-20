@@ -22,9 +22,9 @@ export interface SyncStatus {
   last: SyncOutcome | null
   problem: string | null
   /** Saving while an edit waits to go up or is going up; Saved once it has. */
-  activity: 'idle' | 'saving' | 'saved'
-  /** Decks changed on both computers: kept as they are here until they are settled. */
-  held: number
+  activity: 'idle' | 'saving' | 'saved' | 'offline'
+  /** Titles of the conflict copies made: decks changed on both computers, both versions kept. */
+  conflicts: string[]
 }
 
 /** Same name as `SYNC_CHANGED_EVENT` in src-tauri/src/sync/commands.rs. */
@@ -37,13 +37,13 @@ export async function watchSync(): Promise<() => void> {
 
 /** The line under the switch while saving is on. */
 export function activityText(s: SyncStatus): string {
-  const held =
-    s.held > 0
-      ? ` ${s.held} deck${s.held === 1 ? ' was' : 's were'} changed on two computers; ${s.held === 1 ? 'it is' : 'they are'} kept as ${s.held === 1 ? 'it is' : 'they are'} here for now.`
-      : ''
-  if (s.activity === 'saving') return 'Saving…'
-  if (s.activity === 'saved') return `Saved.${held}`
-  return held.trim()
+  const copies = s.conflicts
+    .map((t) => ` “${t.replace(/ \(conflict copy\)$/, '')}” was changed on two computers. Both versions are kept: the other computer's is “${t}”.`)
+    .join('')
+  if (s.activity === 'offline') return `Offline. Your decks are safe here and will be saved when you are back online.${copies}`
+  if (s.activity === 'saving') return `Saving…${copies}`
+  if (s.activity === 'saved') return `Saved.${copies}`
+  return copies.trim()
 }
 
 /** Null until Rust has been asked. */
