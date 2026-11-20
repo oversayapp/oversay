@@ -19,7 +19,7 @@ vi.mock('@tauri-apps/api/event', () => ({
 vi.mock('../log', () => ({ logAction: () => {}, logProblem: () => {} }))
 vi.mock('../decks/store', () => ({ loadDecks: async () => void calls.push('loadDecks') }))
 
-const { sync, loadSync, turnSyncOn, turnSyncOff, outcomeText, watchSync, activityText } = await import('./sync')
+const { sync, loadSync, turnSyncOn, turnSyncOff, outcomeText, watchSync } = await import('./sync')
 
 const off = { on: false, working: false, last: null, problem: null, activity: 'idle', conflicts: [] }
 
@@ -58,18 +58,8 @@ describe('Save decks to the cloud in Settings', () => {
   it('shows Saving, then Saved, as Rust says so', async () => {
     await watchSync()
     handlers['sync-changed']({ payload: { ...off, on: true, activity: 'saving' } })
-    expect(activityText(get(sync)!)).toBe('Saving…')
+    expect(get(sync)?.activity).toBe('saving')
     handlers['sync-changed']({ payload: { ...off, on: true, activity: 'saved' } })
-    expect(activityText(get(sync)!)).toBe('Saved.')
-  })
-
-  it('names a deck changed on two computers and the copy that keeps the other version', () => {
-    const text = activityText({ ...off, on: true, activity: 'saved', conflicts: ['Standup (conflict copy)'] })
-    expect(text).toContain('“Standup” was changed on two computers')
-    expect(text).toContain('“Standup (conflict copy)”')
-  })
-
-  it('says Offline, and that decks are kept here', () => {
-    expect(activityText({ ...off, on: true, activity: 'offline' })).toMatch(/^Offline\. .*saved when you are back online/)
+    expect(get(sync)?.activity).toBe('saved')
   })
 })

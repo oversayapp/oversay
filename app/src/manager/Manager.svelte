@@ -4,7 +4,8 @@
   import { onMount } from 'svelte'
   import { derived, get } from 'svelte/store'
   import { listen } from '@tauri-apps/api/event'
-  import { ACCOUNT_EVENT, loadAccount } from '../lib/account/account'
+  import { account, ACCOUNT_EVENT, loadAccount } from '../lib/account/account'
+  import { loadSync, watchSync } from '../lib/account/sync'
   import { logProblem } from '../lib/log'
   import { applyLookChange, changeOverlayOpacity, loadSettings, pinStarredDecks, pins, settings } from '../lib/settings/store'
   import { CONTROL_PANEL_LOOK_EVENT, OPACITY_CHANGES, OVERLAY_OPACITY_EVENT, checkLookChange, type OpacityChange } from '../lib/settings/overlays'
@@ -143,6 +144,12 @@
     const linkListener = listen(LINK_EVENT, () => void followLinks())
     // The account changed by itself: a sign-in came back, or its token was refused (ADR 0050).
     const accountListener = listen(ACCOUNT_EVENT, () => attempt(loadAccount))
+    // The rail's account item needs the account and how saving is going wherever the person is.
+    attempt(loadAccount)
+    const stopSyncWatch = watchSync().catch(() => () => {})
+    const stopAccount = account.subscribe((a) => {
+      if (a?.state === 'signedIn') attempt(loadSync)
+    })
     return () => {
       stopNotes()
       stopSessions()
@@ -159,6 +166,8 @@
       workspacesListener.then((unlisten) => unlisten())
       linkListener.then((unlisten) => unlisten())
       accountListener.then((unlisten) => unlisten())
+      stopAccount()
+      void stopSyncWatch.then((off) => off())
     }
   })
 </script>

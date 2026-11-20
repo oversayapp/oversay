@@ -1,4 +1,5 @@
 <script lang="ts">
+  import AccountMenu from './AccountMenu.svelte'
   import Icon from './Icon.svelte'
   import { logAction } from '../lib/log'
   import { updateAvailable } from '../lib/updates/store'
@@ -32,6 +33,8 @@
       <Icon name="arrow" size={22} /><span>Update</span>
     </button>
   {/if}
+  <!-- Who is signed in and how saving is going; Sign in when no one is (epic 036). -->
+  <AccountMenu />
   <button aria-current={$screen.view === 'settings' ? 'page' : undefined} onclick={() => goSettings()}>
     <Icon name="gear" size={22} /><span>Settings</span>
   </button>
