@@ -38,7 +38,7 @@ make check     # type checks, lint, tests, Rust checks and dependency audit
 
 ## Contributing and security
 
-See [CONTRIBUTING.md](CONTRIBUTING.md). To report a vulnerability, follow [SECURITY.md](SECURITY.md), not a public issue.
+See [CONTRIBUTING.md](CONTRIBUTING.md). To report a vulnerability, follow [SECURITY.md](SECURITY.md), not a public issue. What Oversay does with your data: [PRIVACY.md](PRIVACY.md).
 
 ## Licence
 
