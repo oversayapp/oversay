@@ -35,10 +35,10 @@ describe('open_overlay', () => {
     )
   })
 
-  it('names a Timeline style’s place and layout in the shape Rust reads', () => {
+  it('names a deck widget view’s place and layout in the shape Rust reads', () => {
     // Same JSON as the styled case in window_size_reads_the_frontend_shape in overlay.rs.
-    expect(JSON.stringify({ width: 250, height: 400, place: 'right-rail', layout: 'rail' })).toBe(
-      '{"width":250,"height":400,"place":"right-rail","layout":"rail"}',
+    expect(JSON.stringify({ width: 960, height: 180, place: 'bottom-centre', layout: 'deck-agenda' })).toBe(
+      '{"width":960,"height":180,"place":"bottom-centre","layout":"deck-agenda"}',
     )
   })
 })

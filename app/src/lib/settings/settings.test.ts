@@ -22,7 +22,7 @@ describe('parseSettings', () => {
       version: 1,
       appearance: 'dark',
       futureThing: [1, 2],
-      overlays: { timelineStyle: 'waveform', panel: 'dark', opacity: 75, solid: false },
+      overlays: { panel: 'dark', opacity: 75, solid: false },
       waveformMoved: true,
       seeThroughMoved: true,
     })
@@ -32,16 +32,16 @@ describe('parseSettings', () => {
 describe('moving everyone to the waveform once', () => {
   const read = (overlays: object, extra = {}) => parseSettings(JSON.stringify({ version: 1, appearance: 'system', overlays, seeThroughMoved: true, ...extra }))
 
-  it('moves a saved style to the waveform, made solid, keeps the panel, and marks the move', () => {
+  it('makes the panels solid, keeps the panel, and marks the move; a saved style is left for cleanOverlays to drop', () => {
     const s = read({ timelineStyle: 'clock', panel: 'dark', opacity: 60, solid: false, textSize: 'l' })
-    expect(s.overlays).toEqual({ timelineStyle: 'waveform', panel: 'dark', opacity: 60, solid: true, textSize: 'l' })
+    expect(s.overlays).toEqual({ timelineStyle: 'clock', panel: 'dark', opacity: 60, solid: true, textSize: 'l' })
     expect(s.waveformMoved).toBe(true)
-    expect(read({ panel: 'light', solid: false }).overlays).toEqual({ timelineStyle: 'waveform', panel: 'light', solid: true })
+    expect(read({ panel: 'light', solid: false }).overlays).toEqual({ panel: 'light', solid: true })
   })
 
   it('reads a panel saved as Minimal, the first try at this look, as Dark and drops its mark', () => {
     const s = read({ timelineStyle: 'wave', panel: 'minimal', solid: true }, { minimalMoved: true })
-    expect(s.overlays).toEqual({ timelineStyle: 'waveform', panel: 'dark', solid: true })
+    expect(s.overlays).toEqual({ timelineStyle: 'wave', panel: 'dark', solid: true })
     expect(s.minimalMoved).toBeUndefined()
   })
 

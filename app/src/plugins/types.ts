@@ -1,6 +1,5 @@
 import type { Readable } from 'svelte/store'
 import type { SessionState } from '../lib/session/clock'
-import type { LookBack } from '../lib/session/look-back'
 import type { Talk } from '../lib/project/types'
 import type { OverlaySettings } from '../lib/settings/overlays'
 import type { OverlayWindowSize } from '../lib/windows'
@@ -17,15 +16,8 @@ export interface OverlayPlugin {
   description: string
   /** Initial window size; users can resize, and the size is remembered. The minimum (if any) is what the plugin needs to fit. */
   window: OverlayWindowSize
-  /** The window for the current look, when it depends on it (the Timeline's style, 007/10); `window` otherwise. */
+  /** The window for the current look, when it depends on it (the deck widget's view, ADR 0042); `window` otherwise. */
   windowFor?(look: OverlaySettings): OverlayWindowSize
-  /**
-   * Whether it opens for this look; always when missing. Talking Points stays shut when the
-   * Timeline carries the notes itself, so the same words are never shown twice (ADR 0024).
-   */
-  opensWith?(look: OverlaySettings): boolean
-  /** Where it shows for this look, for the Get ready page (e.g. "its own overlay, top left"); its name says enough when missing. */
-  shownAs?(look: OverlaySettings): string
   /** Render into `target`; returns a function that tears it down. */
   mount(target: HTMLElement, ctx: PluginContext): () => void
 }
@@ -38,7 +30,7 @@ export interface PluginContext {
   now: Readable<number>
   /** The open session, or null; `sessionClock` (lib/session/clock.ts) turns it into times. */
   session: Readable<SessionState | null>
-  /** Drive the session, like the hotkeys; `lookBack` only tells the other overlays where the wave is held. */
+  /** Drive the session, like the hotkeys. */
   commands: {
     next(): void
     previous(): void
@@ -46,10 +38,7 @@ export interface PluginContext {
     end(): void
     /** A deck's card `from` has run its time: the next card, if it is still showing (Auto-advance). */
     advance(from: number): void
-    lookBack(look: LookBack | null): void
   }
-  /** Where the Timeline's waveform is held, so Talking Points can show that segment; null otherwise. */
-  lookBack: Readable<LookBack | null>
   /** How overlays look (Settings › Overlays, 007/02): changing one updates an open overlay without reopening it. */
   settings: Readable<OverlaySettings>
 }

@@ -12,7 +12,6 @@ const COMMANDS: &[&str] = &[
     "close_overlay",
     "set_hidden_from_capture",
     "set_overlay_settings",
-    "set_look_back",
     "keep_overlays_apart",
     "set_overlay_layout",
     "fit_overlay",
@@ -72,6 +71,7 @@ const COMMANDS: &[&str] = &[
     "session_close",
     "check_shortcut",
     "set_tray_title",
+    "set_tray_decks",
     "session_next",
     "session_advance",
     "session_preview_deck",
@@ -82,6 +82,7 @@ const COMMANDS: &[&str] = &[
     "set_panel_shortcut",
     "panel_shortcut",
     "control_panel_close",
+    "control_panel_fit",
     "control_panel_look",
     "control_panel_show_manager",
 ];

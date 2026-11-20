@@ -26,7 +26,6 @@
     "allow-session-previous",
     "allow-session-toggle-pause",
     "allow-set-hidden-from-capture",
-    "allow-set-look-back",
     "allow-set-overlay-layout",
     "allow-set-overlay-settings",
     "allow-set-panel-shortcut",

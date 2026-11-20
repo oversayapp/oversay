@@ -3,7 +3,7 @@
 // (src-tauri/src/hotkeys.rs). Accelerators use the browser's key codes, e.g. `Control+Alt+KeyE`.
 
 /** Same names as `ACTIONS` in hotkeys.rs (tested there). */
-export const SHORTCUT_ACTIONS = ['next', 'previous', 'pause', 'end', 'show', 'style', 'darker', 'lighter', 'panel'] as const
+export const SHORTCUT_ACTIONS = ['next', 'previous', 'pause', 'end', 'show', 'darker', 'lighter', 'panel'] as const
 export type ShortcutAction = (typeof SHORTCUT_ACTIONS)[number]
 export type Shortcuts = Record<ShortcutAction, string>
 
@@ -11,11 +11,10 @@ export const SHORTCUT_LABELS: Record<ShortcutAction, string> = {
   next: 'Start / Next',
   previous: 'Previous',
   pause: 'Pause / Resume',
-  end: 'End session',
+  end: 'Stop deck',
   show: 'Open Oversay window',
-  style: 'Next Timeline style',
-  darker: 'Overlays darker',
-  lighter: 'Overlays lighter',
+  darker: 'More solid',
+  lighter: 'More see-through',
   panel: 'Control panel',
 }
 
@@ -33,11 +32,10 @@ export const DEFAULT_SHORTCUTS: { mac: Shortcuts; other: Shortcuts } = {
     pause: 'Control+Alt+Space',
     end: 'Control+Alt+KeyE',
     show: 'Control+Alt+KeyO',
-    style: 'Control+Alt+KeyT',
     // ↑ and ↓: ← and → are Previous and Next.
     darker: 'Control+Alt+ArrowUp',
     lighter: 'Control+Alt+ArrowDown',
-    // The control panel (ADR 0028).
+    // The Look card (ADR 0051).
     panel: 'Control+Alt+KeyP',
   },
   other: {
@@ -46,7 +44,6 @@ export const DEFAULT_SHORTCUTS: { mac: Shortcuts; other: Shortcuts } = {
     pause: 'Control+Alt+Shift+Space',
     end: 'Control+Alt+Shift+KeyE',
     show: 'Control+Alt+Shift+KeyO',
-    style: 'Control+Alt+Shift+KeyT',
     darker: 'Control+Alt+Shift+ArrowUp',
     lighter: 'Control+Alt+Shift+ArrowDown',
     panel: 'Control+Alt+Shift+KeyP',
@@ -57,7 +54,7 @@ export const isMac = (): boolean => typeof navigator !== 'undefined' && /Mac/.te
 
 /**
  * The keys in use: the saved choices over this platform's defaults. A saved key for an action
- * that no longer exists (the Control Panel's, removed in epic 012) is left out.
+ * that no longer exists (Next Timeline style, ⌃⌥T, removed with the Timeline in epic 030) is left out.
  */
 export function effectiveShortcuts(saved: Partial<Shortcuts> | undefined, mac: boolean): Shortcuts {
   const keys = { ...(mac ? DEFAULT_SHORTCUTS.mac : DEFAULT_SHORTCUTS.other) }

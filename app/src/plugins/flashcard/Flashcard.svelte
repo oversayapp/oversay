@@ -25,7 +25,7 @@
   const look = $derived(ctx.settings)
   const model = $derived(flashcardModel($session))
   const card = $derived(model.card)
-  const kinds = $derived(model.options.colour === 'kinds')
+  const kinds = $derived(model.options.colour === 'kinds' && !$look.oneColour)
   const ready = $derived(model.status === 'ready')
   const now = $derived(ctx.now)
   const run = $derived($session && model.status !== 'finished' ? deckRun($session, $now, model.options.autoAdvance, model.options.timing) : null)

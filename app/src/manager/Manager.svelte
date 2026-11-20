@@ -2,15 +2,17 @@
   // The manager window (ADR 0039, 0041): Home, Library (decks and workspaces), Templates, Sessions, AI and Settings, with the
   // one search bar above every page. Decks are what Oversay shows; projects are gone.
   import { onMount } from 'svelte'
-  import { get } from 'svelte/store'
+  import { derived, get } from 'svelte/store'
   import { listen } from '@tauri-apps/api/event'
   import { ACCOUNT_EVENT, loadAccount } from '../lib/account/account'
   import { logProblem } from '../lib/log'
-  import { applyLookChange, changeOverlayOpacity, cycleTimelineStyle, loadSettings, pinStarredDecks, setOverlaySetting, settings } from '../lib/settings/store'
-  import { CONTROL_PANEL_LOOK_EVENT, CYCLE_TIMELINE_STYLE_EVENT, DECK_VIEW_EVENT, OPACITY_CHANGES, OVERLAY_OPACITY_EVENT, checkDeckView, checkLookChange, type OpacityChange } from '../lib/settings/overlays'
+  import { applyLookChange, changeOverlayOpacity, loadSettings, pinStarredDecks, pins, settings } from '../lib/settings/store'
+  import { CONTROL_PANEL_LOOK_EVENT, OPACITY_CHANGES, OVERLAY_OPACITY_EVENT, checkLookChange, type OpacityChange } from '../lib/settings/overlays'
   import { installExampleDecksOnFirstRun } from '../lib/decks/examples'
-  import { syncTrayTitle } from '../lib/session/tray'
-  import { followLook } from '../lib/session/overlays'
+  import { TRAY_EVENT, checkTrayChoice, pinnedDecks, syncTrayDecks, syncTrayTitle, type TrayChoice } from '../lib/session/tray'
+  import { showDeckOnScreen } from '../lib/decks/show'
+  import { readQuickFile } from '../lib/notes/files'
+  import { parseNoteDoc } from '../lib/notes/format'
   import { closeFinishedNotes } from '../lib/notes/show'
   import { QUICK_FILES_CHANGED_EVENT, type QuickKind } from '../lib/notes/files'
   import { checkOpenNote } from '../lib/notes/store'
@@ -23,7 +25,7 @@
   import DropZone from './DropZone.svelte'
   import { loadLibrary } from '../lib/templates/library-store'
   import { attempt, notice } from './errors'
-  import { goSession, nav } from './route'
+  import { goLibrary, goSession, goSettings, nav } from './route'
   import Home from './Home.svelte'
   import LibraryPage from './LibraryPage.svelte'
   import SessionsPage from './SessionsPage.svelte'
@@ -55,9 +57,25 @@
     await loadDecks()
   }
 
+  /** Settings, the Library, or a pinned deck put on screen, from the menu-bar / tray menu. */
+  async function trayChose(choice: TrayChoice): Promise<void> {
+    if (choice.kind === 'settings') return goSettings()
+    if (choice.kind === 'library') return goLibrary()
+    const deck = get(decks)?.find((d) => d.path === choice.id)
+    if (!deck) throw new Error('That deck is no longer in your Library.')
+    await showDeckOnScreen(parseNoteDoc(await readQuickFile('decks', deck.path)), deck.name, deck.path)
+  }
+
   onMount(() => {
     // The time beside the session's menu-bar/tray icon (006/08).
     const stopTray = syncTrayTitle()
+    // Show a deck ▸ in the menu lists the pinned decks (ADR 0051).
+    const stopTrayDecks = syncTrayDecks(derived([pins, decks], ([p, d]) => pinnedDecks(p, d)))
+    // A menu item that needs this window: it has come forward already (tray.rs).
+    const trayListener = listen<unknown>(TRAY_EVENT, (e) => {
+      const choice = checkTrayChoice(e.payload)
+      if (choice) attempt(() => trayChose(choice))
+    })
     // Settings first: they say whether the example decks were already added.
     attempt(async () => {
       await loadSettings()
@@ -83,24 +101,15 @@
       await followLinks()
     })
     attempt(loadLibrary)
-    // The Next Timeline style hotkey and menu item (the manager owns the saved settings).
-    const styleListener = listen(CYCLE_TIMELINE_STYLE_EVENT, () => attempt(cycleTimelineStyle))
     // An overlay's ⋯ menu and the darker / lighter hotkeys, through Rust.
     const opacityListener = listen<string>(OVERLAY_OPACITY_EVENT, (e) => {
       if ((OPACITY_CHANGES as readonly string[]).includes(e.payload)) attempt(() => changeOverlayOpacity(e.payload as OpacityChange))
     })
-    // The control panel changes the look through here: the manager owns the saved settings (ADR 0028).
+    // The Look card and the menu change the look through here: the manager owns the saved settings (ADR 0051).
     const lookListener = listen<unknown>(CONTROL_PANEL_LOOK_EVENT, (e) => {
       const change = checkLookChange(e.payload)
       if (change) attempt(() => applyLookChange(change))
     })
-    // The deck widget's switch: the view it went to is the one the next deck opens in (ADR 0042).
-    const deckViewListener = listen<unknown>(DECK_VIEW_EVENT, (e) => {
-      const view = checkDeckView(e.payload)
-      if (view) attempt(() => setOverlaySetting('deckView', view))
-    })
-    // Style E hides Talking Points during a session, and leaving E shows it again (ADR 0024).
-    const stopFollowing = followLook()
     // A shown deck's session closes as soon as its widget is closed.
     const stopNotes = closeFinishedNotes()
     // A deck that ends opens its session's page (John, 7 Nov): its times, and its recording
@@ -142,15 +151,14 @@
       stopJustRan()
       stopDecks()
       stopTray()
-      styleListener.then((unlisten) => unlisten())
+      stopTrayDecks()
+      trayListener.then((unlisten) => unlisten())
       opacityListener.then((unlisten) => unlisten())
       lookListener.then((unlisten) => unlisten())
-      deckViewListener.then((unlisten) => unlisten())
       folderListener.then((unlisten) => unlisten())
       workspacesListener.then((unlisten) => unlisten())
       linkListener.then((unlisten) => unlisten())
       accountListener.then((unlisten) => unlisten())
-      stopFollowing()
     }
   })
 </script>

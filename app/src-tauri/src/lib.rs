@@ -22,6 +22,7 @@ mod skill;
 mod state;
 mod transcriber;
 mod tray;
+mod tray_menu;
 mod updates;
 mod workspaces;
 
@@ -56,8 +57,8 @@ pub fn run() {
         .plugin(
             tauri_plugin_window_state::Builder::default()
                 .with_state_flags(StateFlags::POSITION | StateFlags::SIZE | StateFlags::MAXIMIZED)
-                // The Timeline remembers a frame per style itself (overlay::Layouts).
-                .with_denylist(&["overlay-timeline", control_panel::LABEL])
+                // The Look card is placed afresh each time it opens.
+                .with_denylist(&[control_panel::LABEL])
                 .build(),
         )
         .setup(|app| {
@@ -78,8 +79,8 @@ pub fn run() {
             }
             platform::log_native_exceptions();
             settings::apply_saved_appearance(app.handle());
-            // The icon is there from the start, for the control panel (ADR 0028).
-            tray::show_idle(app.handle());
+            // The icon is there from the start, with its menu and the Look card (ADR 0051).
+            tray::refresh(app.handle());
             platform::install_dock_menu(app.handle());
             platform::install_jump_list(app.handle());
             // Files written outside Oversay (an AI, another editor) show up as they land (ADR 0034).
@@ -116,14 +117,14 @@ pub fn run() {
                 // A shown note's only overlay, or a deck's card: closing it closes the note or deck.
                 session::overlay_closed(window.app_handle(), window.label());
             }
-            // The control panel is hidden, never closed, like an overlay.
+            // The Look card is hidden, never closed, like an overlay.
             WindowEvent::CloseRequested { api, .. } if window.label() == control_panel::LABEL => {
                 api.prevent_close();
                 if let Err(e) = control_panel::close(window.app_handle()) {
-                    log::warn!("control panel not hidden: {e}");
+                    log::warn!("Look card not hidden: {e}");
                 }
             }
-            // A strip stays against the bottom edge once it stops moving; a layout's place is kept.
+            // A layout's place is kept once it stops moving.
             WindowEvent::Moved(_) | WindowEvent::Resized(_)
                 if window.label().starts_with(overlay::LABEL_PREFIX) =>
             {
@@ -141,7 +142,6 @@ pub fn run() {
             overlay::close_overlay,
             overlay::set_hidden_from_capture,
             overlay::set_overlay_settings,
-            overlay::set_look_back,
             overlay::keep_overlays_apart,
             overlay::set_overlay_layout,
             overlay::fit_overlay,
@@ -201,6 +201,7 @@ pub fn run() {
             session::session_close,
             hotkeys::check_shortcut,
             tray::set_tray_title,
+            tray::set_tray_decks,
             session::session_next,
             session::session_advance,
             session::session_preview_deck,
@@ -211,6 +212,7 @@ pub fn run() {
             hotkeys::set_panel_shortcut,
             hotkeys::panel_shortcut,
             control_panel::control_panel_close,
+            control_panel::control_panel_fit,
             control_panel::control_panel_look,
             control_panel::control_panel_show_manager,
         ])

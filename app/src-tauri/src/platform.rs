@@ -200,21 +200,15 @@ pub fn restart_now(app: &AppHandle) -> ! {
     tauri::process::restart(&app.env())
 }
 
-/// Sets the text beside the session's icon: in the menu bar on a Mac, and as the tooltip
-/// elsewhere (the Windows tray has no room for text). The tooltip is set on every platform.
-pub fn set_tray_text(tray: &tauri::tray::TrayIcon, text: &str) {
+/// Sets the text beside the icon in the menu bar on a Mac (`set_title` works there only); the
+/// Windows tray has no room for text, so the time goes in its tooltip (`tray::refresh`).
+pub fn set_tray_title(tray: &tauri::tray::TrayIcon, text: &str) {
     #[cfg(target_os = "macos")]
     if let Err(e) = tray.set_title(Some(text)) {
-        log::warn!("session icon title not set: {e}");
+        log::warn!("icon title not set: {e}");
     }
-    let tooltip = if text.is_empty() {
-        "Oversay".to_string()
-    } else {
-        format!("Oversay · {text}")
-    };
-    if let Err(e) = tray.set_tooltip(Some(tooltip)) {
-        log::warn!("session icon tooltip not set: {e}");
-    }
+    #[cfg(not(target_os = "macos"))]
+    let _ = (tray, text);
 }
 
 /// The session's icon: the one-colour app icon. On a Mac it is a template image, which
@@ -229,15 +223,40 @@ pub fn tray_icon() -> tauri::Result<tauri::image::Image<'static>> {
     tauri::image::Image::from_bytes(include_bytes!("../icons/tray-black.png"))
 }
 
-/// Sets the session's icon again on Windows, so it follows a change of taskbar theme since it was
-/// made. A Mac's template image follows the menu bar by itself.
-pub fn refresh_tray_icon(tray: &tauri::tray::TrayIcon) {
-    #[cfg(windows)]
-    if let Err(e) = tray_icon().and_then(|icon| tray.set_icon(Some(icon))) {
-        log::warn!("session icon not refreshed: {e}");
+/// Whether the icon's glyph should be white. A Mac's plain icon is a template image macOS colours
+/// itself; with a dot it is drawn in colour, white on a dark menu bar, which follows the system's
+/// appearance (not Oversay's own, which `set_theme` may override), so it is read only then
+/// (`coloured`). On Windows the icon is white on a dark taskbar, read every time so the icon
+/// follows a change of taskbar theme.
+#[cfg(target_os = "macos")]
+pub fn tray_glyph_is_white(coloured: bool) -> bool {
+    coloured && system_is_dark()
+}
+
+#[cfg(windows)]
+pub fn tray_glyph_is_white(_coloured: bool) -> bool {
+    !taskbar_is_light()
+}
+
+#[cfg(not(any(target_os = "macos", windows)))]
+pub fn tray_glyph_is_white(_coloured: bool) -> bool {
+    false
+}
+
+/// Whether macOS is in Dark Mode: the global `AppleInterfaceStyle` default is "Dark".
+#[cfg(target_os = "macos")]
+fn system_is_dark() -> bool {
+    use objc2::runtime::AnyObject;
+    use objc2::{class, msg_send};
+    use objc2_foundation::NSString;
+    let key = NSString::from_str("AppleInterfaceStyle");
+    let dark = NSString::from_str("Dark");
+    // SAFETY: plain NSUserDefaults reads; `stringForKey:` returns nil when the key is unset (Light).
+    unsafe {
+        let defaults: *mut AnyObject = msg_send![class!(NSUserDefaults), standardUserDefaults];
+        let value: *mut AnyObject = msg_send![defaults, stringForKey: &*key];
+        !value.is_null() && msg_send![value, isEqualToString: &*dark]
     }
-    #[cfg(not(windows))]
-    let _ = tray;
 }
 
 /// Whether the taskbar is light: Settings › Personalisation › Colours › "Choose your default
@@ -363,7 +382,7 @@ fn jump_list() -> windows::core::Result<()> {
     Ok(())
 }
 
-/// Puts "Control panel" in the Dock icon's right-click menu (ADR 0028), so the panel opens with
+/// Puts "Control panel" in the Dock icon's right-click menu (ADR 0028, ADR 0051), so the card opens with
 /// nothing running and without the menu bar. Tauri has no Dock menu, so the app delegate (tao's)
 /// gets `applicationDockMenu:` and the item's action added at run time. Elsewhere nothing: the
 /// taskbar button's menu is `windows_jump_list`.
@@ -405,7 +424,7 @@ mod dock {
 
     extern "C-unwind" fn toggle_panel(_this: *mut AnyObject, _cmd: Sel, _sender: *mut AnyObject) {
         if let Some(app) = APP.get() {
-            log::info!("Dock menu: control panel");
+            log::info!("Dock menu: Control panel");
             if let Err(e) = crate::session::act(app, crate::session::Action::TogglePanel) {
                 log::warn!("Dock menu: {e}");
             }

@@ -38,7 +38,7 @@ export const canRecord = (s: SessionState | null): boolean => !!s?.deck && !s.pr
 const startOf = (s: SessionState): string | null => s.events.find((e) => e.type === 'start')?.at ?? null
 
 /** Whether the deck records from Start: its own Record on start (ADR 0047), else Auto record. */
-function recordsAtStart(s: SessionState, auto: boolean): boolean {
+export function recordsAtStart(s: SessionState, auto: boolean): boolean {
   const own = (s.talk as { deck?: { recordOnStart?: string } } | null)?.deck?.recordOnStart
   return own === 'on' ? true : own === 'off' ? false : auto
 }
@@ -123,10 +123,17 @@ export function recordFromWidget(s: SessionState): void {
 /**
  * What the record button shows for the run `s`: on every running deck, red while it records
  * (dimmed while paused), grey when it doesn't, struck through when the microphone was refused;
- * nothing before the start or in a preview.
+ * before the start, and in a preview, a ring that says whether Start will record (`armed`) or not (`idle`).
  */
-export function recordButton(s: SessionState | null, now: RecordingState | null): 'recording' | 'paused' | 'stopped' | 'refused' | null {
-  if (!s || s.status !== 'running' || !canRecord(s)) return null
+export function recordButton(
+  s: SessionState | null,
+  now: RecordingState | null,
+  auto = false,
+): 'recording' | 'paused' | 'stopped' | 'refused' | 'armed' | 'idle' | null {
+  if (!s?.deck || s.status === 'finished') return null
+  // Before the start, and in a preview: what pressing Start would do, which a click doesn't change.
+  if (s.status !== 'running' || s.preview) return recordsAtStart(s, auto) ? 'armed' : 'idle'
+  if (!canRecord(s)) return null
   if (!now || now.deck !== deckPathOf(s)) return 'stopped'
   if (now.state === 'recording' || now.state === 'paused' || now.state === 'refused') return now.state
   return 'stopped'

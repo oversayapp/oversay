@@ -4,7 +4,7 @@ import { derived, get, writable } from 'svelte/store'
 import { favouriteLabel, parseFavourites, withFavourite, withRefreshedNames, type FavouriteTalk } from './favourites'
 import { parseLastRun, type LastRun } from './last-run'
 import { logAction } from '../log'
-import { changeOpacity, cleanOverlays, nextTimelineStyle, parseOverlaySettings, type LookChange, type OpacityChange, type OverlaySettings } from './overlays'
+import { changeOpacity, cleanOverlays, parseOverlaySettings, type LookChange, type OpacityChange, type OverlaySettings } from './overlays'
 import {
   parseOpened,
   parsePins,
@@ -64,10 +64,10 @@ async function readSettings(): Promise<void> {
 
 /** Overlays are other windows: they get the look through Rust (overlay.rs), and a new overlay finds it there. */
 async function sendOverlaySettings(s: Settings): Promise<void> {
-  await invoke('set_overlay_settings', { settings: parseOverlaySettings(s.overlays) })
+  await invoke('set_overlay_settings', { settings: { ...parseOverlaySettings(s.overlays), autoRecord: !!s.autoRecord } })
 }
 
-/** The control panel's key is registered all the time, not only in a session (ADR 0028). */
+/** The Look card's key is registered all the time, not only in a session (ADR 0028, ADR 0051). */
 async function sendPanelShortcut(s: Settings): Promise<void> {
   const accelerator = effectiveShortcuts(s.shortcuts as Partial<Shortcuts> | undefined, isMac()).panel
   await invoke('set_panel_shortcut', { accelerator }).catch(() => {})
@@ -112,15 +112,6 @@ export function setOverlaySetting<K extends keyof OverlaySettings>(key: K, value
   return inTurn(() => applyOverlaySetting(key, value))
 }
 
-/** The hotkey / menu item: the next Timeline style, from the one chosen when its turn comes. */
-export function cycleTimelineStyle(): Promise<void> {
-  return inTurn(async () => {
-    const next = nextTimelineStyle(parseOverlaySettings(get(settings).overlays).timelineStyle)
-    logAction('overlay timelineStyle', next)
-    await applyOverlaySetting('timelineStyle', next)
-  })
-}
-
 /**
  * Settings › Overlays › Overlay opacity: the slider sets how see-through the panels are, so it
  * also leaves solid.
@@ -150,13 +141,13 @@ export function changeOverlayOpacity(change: OpacityChange): Promise<void> {
 }
 
 async function applyOverlaySetting<K extends keyof OverlaySettings>(key: K, value: OverlaySettings[K]): Promise<void> {
-  // Choosing Waveform makes the panels solid: its one colour needs its opposite behind it.
-  await applyOverlaySettings(key === 'timelineStyle' && value === 'waveform' ? { timelineStyle: 'waveform', solid: true } : { [key]: value })
+  await applyOverlaySettings({ [key]: value })
 }
 
 async function applyOverlaySettings(changes: Partial<OverlaySettings>): Promise<void> {
   const current = get(settings)
-  // Unusable saved values (a hand-edited unbuilt style) are dropped, so the file says what Settings shows.
+  // Unusable or retired saved values (the Timeline's style, Talking Points' text size) are dropped,
+  // so the file says what Settings shows.
   const next = { ...current, overlays: { ...cleanOverlays(current.overlays), ...changes } }
   // The open overlay follows the choice shown in Settings even if the file couldn't be written.
   try {
@@ -391,11 +382,12 @@ export function moveTalkReferences(
   })
 }
 
-/** One change to the look, from the Get ready page or the control panel. */
+/** One change to the look, from the Look card or the menu (ADR 0051). */
 export function applyLookChange(change: LookChange): Promise<void> {
   if (change.key === 'opacityPreview') return previewOverlayOpacity(change.value as number)
   if (change.key === 'opacity') return setOverlayOpacity(change.value as number)
   if (change.key === 'solid') return changeOverlayOpacity(change.value ? 'solid' : 'see-through')
+  if (change.key === 'autoRecord') return setAutoRecord(change.value as boolean)
   return setOverlaySetting(change.key, change.value as never)
 }
 
@@ -435,7 +427,13 @@ export function noteUpdateCheck(at: Date): Promise<void> {
 export function setAutoRecord(on: boolean): Promise<void> {
   logAction('auto record', String(on))
   return inTurn(async () => {
-    await save({ ...get(settings), autoRecord: on })
+    const next = { ...get(settings), autoRecord: on }
+    try {
+      await save(next)
+    } finally {
+      // The control panel shows it too.
+      await sendOverlaySettings(next)
+    }
   })
 }
 

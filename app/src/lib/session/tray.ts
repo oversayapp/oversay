@@ -1,5 +1,10 @@
-// The time beside the session's menu-bar/tray icon (006/08), kept up to date by the manager.
+// The menu-bar / tray icon's part that only the manager knows (ADR 0051): the card's time left
+// beside the icon (006/08; the tooltip on Windows), the pinned decks for Show a deck ▸, and the
+// menu items that need the main window.
 import { invoke } from '@tauri-apps/api/core'
+import type { Pin } from '../settings/quick'
+import type { DeckEntry } from '../decks/store'
+import { libraryGroups } from '../library/groups'
 import { formatElapsed, segmentReadout, sessionClock, type SessionState } from './clock'
 import type { Readable } from 'svelte/store'
 import { session } from './store'
@@ -21,13 +26,11 @@ export function syncTrayTitle(source: Readable<SessionState | null> = session): 
   let shown = ''
   const stop = source.subscribe((s) => {
     latest = s
-    // The icon goes when the session is over; the next session's icon starts with no text.
-    if (!s || s.status === 'finished') shown = ''
   })
   const timer = setInterval(() => {
-    // The control panel's preview isn't a run: the icon keeps no time for it.
-    if (!latest || latest.status === 'finished' || latest.preview) return
-    const title = trayTitle(latest, Date.now())
+    // Nothing running, or only a preview (the Look card's or the editor's): no text beside the icon.
+    const running = latest && latest.status !== 'finished' && !latest.preview
+    const title = running ? trayTitle(latest!, Date.now()) : ''
     if (title === shown) return
     shown = title
     void invoke('set_tray_title', { title }).catch(() => {})
@@ -36,4 +39,43 @@ export function syncTrayTitle(source: Readable<SessionState | null> = session): 
     stop()
     clearInterval(timer)
   }
+}
+
+/** Sent by Rust when a menu item needs the main window. Same name as `TRAY_EVENT` in src-tauri/src/tray.rs. */
+export const TRAY_EVENT = 'tray-choice'
+
+export type TrayChoice = { kind: 'settings' } | { kind: 'library' } | { kind: 'deck'; id: string }
+
+/** The menu's choice, or null when the event isn't one (it is checked, not trusted). */
+export function checkTrayChoice(value: unknown): TrayChoice | null {
+  if (typeof value !== 'object' || value === null) return null
+  const { kind, id } = value as { kind?: unknown; id?: unknown }
+  if (kind === 'settings' || kind === 'library') return { kind }
+  if (kind === 'deck' && typeof id === 'string' && id !== '') return { kind, id }
+  return null
+}
+
+/** A pinned deck in the menu: its file (the item's id) and its name. Same shape as `PinnedDeck` in tray_menu.rs. */
+export interface PinnedDeck {
+  id: string
+  name: string
+}
+
+/** The pinned decks as the Library's Pinned lists them (newest pin first, skipping any it can't read): the menu's Show a deck ▸. */
+export function pinnedDecks(pins: readonly Pin[], decks: readonly DeckEntry[] | null): PinnedDeck[] {
+  if (!decks) return []
+  return libraryGroups({ decks, workspaces: [], pins, opened: [], workspaceNav: { pins: [], opened: [] }, now: 0 }).pinned.flatMap((r) =>
+    r.kind === 'deck' ? [{ id: r.deck.path, name: r.deck.name }] : [],
+  )
+}
+
+/** Sends the pinned decks to the menu whenever they change; returns a function that stops. */
+export function syncTrayDecks(source: Readable<PinnedDeck[]>): () => void {
+  let sent = ''
+  return source.subscribe((list) => {
+    const text = JSON.stringify(list)
+    if (text === sent) return
+    sent = text
+    void invoke('set_tray_decks', { decks: list }).catch(() => {})
+  })
 }

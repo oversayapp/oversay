@@ -178,18 +178,29 @@ end (any time) ──▶ finished
   | Start / Next | `⌃⌥→` | `Ctrl+Alt+Shift+→` |
   | Previous | `⌃⌥←` | `Ctrl+Alt+Shift+←` |
   | Pause / Resume | `⌃⌥Space` | `Ctrl+Alt+Shift+Space` |
-  | End | `⌃⌥E` | `Ctrl+Alt+Shift+E` |
-  | Open Oversay window | `⌃⌥O` | `Ctrl+Alt+Shift+O` |
-  | Next Timeline style | `⌃⌥T` | `Ctrl+Alt+Shift+T` |
+  | Stop deck | `⌃⌥E` | `Ctrl+Alt+Shift+E` |
+  | Open Oversay | `⌃⌥O` | `Ctrl+Alt+Shift+O` |
+  | More solid / More see-through | `⌃⌥↑` / `⌃⌥↓` | `Ctrl+Alt+Shift+↑` / `↓` |
+  | Control panel | `⌃⌥P` | `Ctrl+Alt+Shift+P` |
 
   (Windows defaults avoid `Ctrl+Alt+arrow`, which some graphics drivers use to rotate the screen.)
 - Overlay buttons for the same actions on the Timeline: Previous, Start (then Pause / Resume), Next, and End. End asks for a second click, since a talk may stop before its last segment and a stray click must not end it.
 - The session opens in `ready` and the clock starts on the first Start or Next, so the overlays can be arranged ahead of time.
 - Presentation clickers are not supported in phase 1.
 
-### Menu-bar icon
+### Menu-bar icon and the control panel
 
-The Timeline has the session's buttons (ADR 0020). The **Control Panel** (ADR 0028) is a window docked to the right edge of the display, never shown in a screen share, for how the overlays look and what is on screen; which overlays open and hiding from screen sharing are chosen on the **Get ready** page. For the whole session a menu-bar (Mac) / system-tray (Windows) icon shows the clock beside it, and its menu has Open Oversay window (also a hotkey; brings the main window back, maximised, from minimised or hidden, for changing Settings › Overlays in the middle of a run; Settings is on the left rail as ever, and an open overlay follows a change straight away), then Next Timeline style (also a hotkey; cycles through the Timeline styles and round, saved like a choice in Settings), then Start / Next, Previous, Pause / Resume and End session, each with its hotkey, so the session can be driven when every overlay is hidden.
+The Oversay icon is in the menu bar (Mac) or the system tray (Windows) for the life of the app (ADR 0051). Its menu is flat, in five groups, each item showing its key:
+
+1. What is running, greyed: the deck and *Card 2 of 6 · Pollination* (*· paused*), *Ready · press Start*, or *No deck running*.
+2. The run: Start or Pause / Resume, Next, Previous and Stop deck (which stops at once); with nothing running, **Show a deck ▸** with the pinned decks and Open Library….
+3. The look: See-through (with its opacity) / Solid, **Opacity ▸** (90, 75, 60, 50, 40%, More solid, More see-through), Dark panel / Light panel, Card view / Agenda view.
+4. Hide from screen sharing.
+5. Control panel, Open Oversay, Settings…, then Quit Oversay (which asks first while a deck runs).
+
+On a Mac the card's time left is beside the icon. Windows has no text beside a tray icon, so the time is in its tooltip and the icon has a dot while a deck runs. Both have an amber dot while the deck widget is visible in screen shares. The deck widget is the only overlay, so it always shows while a deck runs: there is no on/off for it.
+
+The **Control panel** is a small card at the top of the right edge, never in a screen share and never taking focus: Opacity (a slider) with See-through / Solid, Dark / Light, Card / Agenda (the deck widget's view, also in the menu), Single colour (every card and block in the panel's one colour, whatever the deck says), Auto record (the same setting as Settings › Recordings: with it on, Start records) and Hide from screen sharing. It opens from Control panel in the menu, `⌃⌥P` (`Ctrl+Alt+Shift+P`), or a left-click on the Windows tray icon. With nothing running it puts a sample deck on screen while it is open, so the look can be set against a slide.
 
 ### Screen sharing and displays
 
@@ -307,7 +318,7 @@ made-with: Oversay skill 0.1.0
 
 One overlay for every deck, with two views of the same run (ADR 0042): the **Card view** and the **Agenda view**.
 
-- **The switch**, a small glyph of the other view left of ✕, shown while pointed at, moves the widget to the other view's own remembered place and size; nothing about the run changes. Show and Preview on screen always start in the **Card view** (John, 7 Nov); the switch then goes to the Agenda view. The Card view first opens in the upper left, in from the corner (near the camera); the Agenda view along the bottom, in the middle, 960 px wide.
+- **The Look button**, a small sliders glyph left of ✕, shown while pointed at, opens the control panel. **Shared**, an amber badge left of the buttons, shows all the time while the widget is visible in screen shares (the panel's green "Not shared", the other way round). The **record button** is there from the first sight of a deck, before Start too: a ring that is filled red when Start will record (Auto record, or the deck's own Record on start) and grey when it won't; it only becomes a button once the deck runs (John, 20 Nov: it replaces the view switch). The view is chosen in the menu, **Card view / Agenda view**, and moves the widget to that view's own remembered place and size; nothing about the run changes. Show and Preview on screen always start in the **Card view** (John, 7 Nov); the menu then goes to the Agenda view. The Card view first opens in the upper left, in from the corner (near the camera); the Agenda view along the bottom, in the middle, 960 px wide.
 - **The tab:** Previous, Start / Pause / Resume (Stop once the last card is over) and Next, then a Stop square apart at the end (the first click turns it into a red "Stop?" for 3 seconds, the second stops the deck; a preview or a deck not yet started closes at once), with the deck's name, in a tab that slides out from under the panel's bottom edge while the pointer is over the widget, on both views; 40 × 34 px, Previous and Next 52 px wide, Next filled once the deck runs.
 - **Recording:** on every deck, the record button sits left of the switch on both views, always shown once the deck runs (never in a preview): a red dot in a ring while recording, dimmed while paused, a grey dot when not recording, struck through when the microphone was refused (its tooltip says how to allow it). A click toggles it; recording again adds to the run's recording (§11).
 - Both views start see-through at 75%, with the other overlays (Dark / Light, opacity, hiding from screen sharing).
@@ -538,7 +549,7 @@ What might come after phase 1, and the ideas for later, are kept in the private 
 5. **Hidden from screen capture by default**, with a per-session switch (ticket `002/07`).
 6. **Full-screen slideshows** are checked early (ticket `002/05`).
 7. **Displays:** overlays remember their display; first open is on the built-in/primary display.
-8. **Driving a session:** the Timeline has Start, Pause, Next, Previous and End (ADR 0020), and the menu-bar/tray icon has the same in its menu. The Control Panel is a window docked at the right edge, never captured (ADR 0028), for how the overlays look and what is on screen.
+8. **Driving a session:** the deck widget's tab has Start, Pause, Next, Previous and Stop (ADR 0042), and the menu-bar/tray menu has the same with their keys (ADR 0051). The control panel at the top of the right edge, never captured, sets how the deck widget looks.
 
 ### Decided (2026-11-18)
 

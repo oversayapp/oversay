@@ -1,9 +1,7 @@
 import { derived } from 'svelte/store'
-import { invoke } from '@tauri-apps/api/core'
 import { channel } from '../lib/channel'
 import { OVERLAY_SETTINGS_CHANNEL, parseOverlaySettings } from '../lib/settings/overlays'
 import { ticking } from '../lib/session/clock'
-import { LOOK_BACK_CHANNEL, parseLookBack } from '../lib/session/look-back'
 import { session, sessionCommands } from '../lib/session/store'
 import { logProblem } from '../lib/log'
 import type { PluginContext } from './types'
@@ -43,15 +41,12 @@ export function createPluginContext(): PluginContext & { ready: Promise<void> } 
     settings: derived(look, parseOverlaySettings),
     session,
     talk: derived(session, (s) => s?.talk ?? null),
-    // Through Rust like the look, so every overlay window hears it.
-    lookBack: derived(channel<unknown>(LOOK_BACK_CHANNEL, null), parseLookBack),
     commands: {
       next: () => run('next'),
       previous: () => run('previous'),
       togglePause: () => run('togglePause'),
       end: () => run('end'),
       advance: (from) => void sessionCommands.advance(from).catch((e) => logProblem('session advance', String(e))),
-      lookBack: (look) => void invoke('set_look_back', { look }).catch((e) => logProblem('look back', String(e))),
     },
   }
 }

@@ -12,12 +12,13 @@
 
   let { ctx }: { ctx: PluginContext } = $props()
   const session = $derived(ctx.session)
+  const look = $derived(ctx.settings)
   const now = $derived(ctx.now)
   const model = $derived(flashcardModel($session))
   const card = $derived(model.card)
   const ready = $derived(model.status === 'ready')
   const run = $derived($session && model.status !== 'finished' ? deckRun($session, $now, model.options.autoAdvance, model.options.timing) : null)
-  const kinds = $derived(model.options.colour === 'kinds')
+  const kinds = $derived(model.options.colour === 'kinds' && !$look.oneColour)
   // Minutes and a total only mean something when some card is timed and timing is on.
   const timed = $derived(model.options.timing && !!$session?.plan.some((p) => !p.openEnded))
   const clock = $derived(!run ? '' : run.mode === 'over' ? `+${formatDuration(run.seconds)}` : formatDuration(run.seconds))

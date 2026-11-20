@@ -89,8 +89,9 @@ export function parseSettings(text: string | null): Settings {
 
 /**
  * Waveform became the first and default Timeline style (ADR 0029). Oversay isn't
- * released, so everyone moves to it once and is made solid, as choosing it does; the panel stays
- * Dark or Light. A panel saved as Minimal (this epic's first try, when Minimal was a panel) is read
+ * released, so everyone moved to it once and was made solid, as choosing it did; the panel stays
+ * Dark or Light. The Timeline has gone since (Control Panel v2, epic 030), so the move no longer
+ * writes a style; it still makes the panel Dark or Light and marks the move. A panel saved as Minimal (this epic's first try, when Minimal was a panel) is read
  * as Dark, and its mark is dropped. The new mark is saved with the next change, so a style chosen
  * after this stays chosen.
  */
@@ -98,7 +99,7 @@ export function movedToWaveform(settings: Settings): Settings {
   if (settings.waveformMoved === true) return settings
   const overlays = settings.overlays ?? {}
   const panel = overlays.panel === 'light' ? 'light' : 'dark'
-  const moved: Settings = { ...settings, overlays: { ...overlays, timelineStyle: 'waveform', panel, solid: true }, waveformMoved: true }
+  const moved: Settings = { ...settings, overlays: { ...overlays, panel, solid: true }, waveformMoved: true }
   delete moved.minimalMoved
   return moved
 }

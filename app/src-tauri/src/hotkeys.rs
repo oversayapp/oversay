@@ -14,13 +14,12 @@ use crate::session::Action;
 
 /// The actions a shortcut can be set for, by name. Same names, in the same order, as
 /// `SHORTCUT_ACTIONS` in shortcuts.ts; the session icon's menu items use them as ids.
-pub const ACTIONS: [(&str, Action); 9] = [
+pub const ACTIONS: [(&str, Action); 8] = [
     ("next", Action::Next),
     ("previous", Action::Previous),
     ("pause", Action::TogglePause),
     ("end", Action::End),
     ("show", Action::ShowManager),
-    ("style", Action::CycleStyle),
     ("darker", Action::Darker),
     ("lighter", Action::Lighter),
     ("panel", Action::TogglePanel),
@@ -62,23 +61,39 @@ pub fn register(app: &AppHandle, shortcuts: &BTreeMap<String, String>) -> Vec<St
     unavailable
 }
 
-/// The control panel's key, kept while no session is open so the panel opens any time (ADR 0028).
+/// The Look card's key, kept while no session is open so the card opens any time (ADR 0028, ADR 0051).
 static PANEL_KEY: Mutex<Option<String>> = Mutex::new(None);
 
-/// The control panel's key, for the icon's menu while no session is open.
+/// The Look card's key, for the menu while no session is open.
 pub fn panel_key() -> Option<String> {
     PANEL_KEY.lock().unwrap().clone()
 }
 
-/// With no session open, only the control panel's key is registered.
-pub fn register_idle(app: &AppHandle) {
-    let shortcuts: BTreeMap<String, String> = panel_key()
+/// The keys wanted with no session open: only the Look card's (ADR 0028).
+fn idle_shortcuts() -> BTreeMap<String, String> {
+    panel_key()
         .map(|key| BTreeMap::from([("panel".to_string(), key)]))
-        .unwrap_or_default();
-    register(app, &shortcuts);
+        .unwrap_or_default()
 }
 
-/// The manager says which key opens the control panel (settings.json, or the default); it is
+/// Whether the Look card's key couldn't be registered (another app has it).
+static IDLE_TAKEN: Mutex<bool> = Mutex::new(false);
+
+/// The keys registered with no session open, for the menu: the Look card's, unless another app has it.
+pub fn idle_keys() -> BTreeMap<String, String> {
+    if *IDLE_TAKEN.lock().unwrap() {
+        return BTreeMap::new();
+    }
+    idle_shortcuts()
+}
+
+/// With no session open, only the Look card's key is registered.
+pub fn register_idle(app: &AppHandle) {
+    let taken = !register(app, &idle_shortcuts()).is_empty();
+    *IDLE_TAKEN.lock().unwrap() = taken;
+}
+
+/// The manager says which key opens the Look card (settings.json, or the default); it is
 /// registered now unless a session (not the panel's preview) has registered its own keys, this
 /// one among them.
 #[tauri::command]
@@ -86,12 +101,12 @@ pub async fn set_panel_shortcut(app: AppHandle, accelerator: String) -> Result<(
     let changed = PANEL_KEY.lock().unwrap().replace(accelerator.clone()) != Some(accelerator);
     if changed && !crate::session::holds_keys(&app) {
         register_idle(&app);
-        crate::tray::show_idle(&app);
+        crate::tray::refresh(&app);
     }
     Ok(())
 }
 
-/// The control panel's key, shown on the panel.
+/// The Look card's key, shown on the card.
 #[tauri::command]
 pub async fn panel_shortcut() -> Option<String> {
     panel_key()
@@ -134,7 +149,6 @@ mod tests {
             "Control+Alt+Space",
             "Control+Alt+KeyE",
             "Control+Alt+KeyO",
-            "Control+Alt+KeyT",
             "Control+Alt+ArrowUp",
             "Control+Alt+ArrowDown",
             "Control+Alt+KeyP",
@@ -143,7 +157,6 @@ mod tests {
             "Control+Alt+Shift+Space",
             "Control+Alt+Shift+KeyE",
             "Control+Alt+Shift+KeyO",
-            "Control+Alt+Shift+KeyT",
             "Control+Alt+Shift+ArrowUp",
             "Control+Alt+Shift+ArrowDown",
             "Control+Alt+Shift+KeyP",
@@ -159,7 +172,7 @@ mod tests {
         assert_eq!(
             names,
             [
-                "next", "previous", "pause", "end", "show", "style", "darker", "lighter", "panel"
+                "next", "previous", "pause", "end", "show", "darker", "lighter", "panel"
             ]
         );
         assert!(matches!(action_for("pause"), Some(Action::TogglePause)));

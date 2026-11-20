@@ -30,9 +30,9 @@
     void ctx.ready.then(() => {
       if (gone) return
       unmount = plugin.mount(host, ctx)
-      // The window follows the look (the Timeline's style, 007/10): the native side leaves it
+      // The window follows the look (the deck widget's view, ADR 0042): the native side leaves it
       // alone when it already has that layout, so the first value costs nothing.
-      // Only when the window it asks for changes (the style, say): not for every setting, which
+      // Only when the window it asks for changes (the view, say): not for every setting, which
       // would settle a window the person has just placed.
       if (plugin.windowFor) {
         let asked = ''
@@ -53,23 +53,12 @@
     }
   })
 
-  // The ⋯ menu that was here is now the control panel's How it looks (ADR 0028); the darker /
-  // lighter hotkeys still work. Only ✕ is left in the corner.
-
-  // A window too short for the corner over its panel (the edge strip): the ✕ gets a backing.
-  let short = $state(false)
-  const measure = () => (short = window.innerHeight < 80)
-  onMount(() => {
-    measure()
-    window.addEventListener('resize', measure)
-    return () => window.removeEventListener('resize', measure)
-  })
+  // The look is set on the Look card and in the menu (ADR 0051); the darker / lighter hotkeys
+  // still work. Only ✕ is left in the corner.
 
   // Frameless window: dragging anywhere except on a button moves it.
-  // A part marked `data-hold` keeps its press too: the waveform is held to look back,
-  // and the window moves by the rest of the overlay.
   function startDrag(event: MouseEvent) {
-    if (event.button !== 0 || (event.target as Element).closest('button, [data-hold]')) return
+    if (event.button !== 0 || (event.target as Element).closest('button')) return
     appWindow.startDragging()
   }
 </script>
@@ -83,8 +72,8 @@
       <p class="error">Unknown plugin “{pluginId}”</p>
     </div>
   {/if}
-  {#if $session?.preview}<span class="pvtag" title="The control panel's preview: nothing is running">Preview</span>{/if}
-  <div class="corner" class:short>
+  {#if $session?.preview}<span class="pvtag" title="A preview: nothing is running">Preview</span>{/if}
+  <div class="corner">
     <button class="close" type="button" aria-label="Close overlay" onclick={() => appWindow.close()}>×</button>
   </div>
 </div>
@@ -127,14 +116,6 @@
 
   .host:hover .corner {
     opacity: 1;
-  }
-
-  /* Over the slide rather than a panel (the edge strip): a backing so it reads on a light slide. */
-  .corner.short {
-    padding: 1px 2px;
-    border-radius: 8px;
-    background: var(--panel-bg);
-    box-shadow: 0 0 0 1px var(--panel-border);
   }
 
   .close {
