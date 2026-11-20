@@ -9,10 +9,11 @@ use super::{Change, Changes, Cloud, CloudError, Listing, LocalDeck, RemoteDeck, 
 use crate::account::{Account, AccountError};
 use crate::ids::{DECK_PREFIX, is_valid_id};
 
-/// A GET or PUT to the API as the signed-in account: the status and body, or why not.
+/// A GET, PUT or DELETE to the API as the signed-in account: the status and body, or why not.
 pub trait Transport {
     fn get(&self, path: &str) -> Result<(u16, String), CloudError>;
     fn put(&self, path: &str, body: &str) -> Result<(u16, String), CloudError>;
+    fn delete(&self, path: &str) -> Result<(u16, String), CloudError>;
 }
 
 /// The account's own token and API. Signed out, `SignedOut` with no request made (V5).
@@ -32,6 +33,11 @@ impl Transport for AccountTransport {
     fn put(&self, path: &str, body: &str) -> Result<(u16, String), CloudError> {
         self.0
             .api_put(Instant::now(), path, body)
+            .map_err(account_error)
+    }
+    fn delete(&self, path: &str) -> Result<(u16, String), CloudError> {
+        self.0
+            .api_delete(Instant::now(), path)
             .map_err(account_error)
     }
 }
@@ -144,8 +150,18 @@ impl<T: Transport> Cloud for ApiCloud<T> {
         let (status, text) = self.0.put(&deck_path(&deck.id)?, &body.to_string())?;
         // The cloud's deck is at another revision than the one this save was based on.
         if status == 409 {
-            return Err(CloudError::Stale);
+            // The body says which revision the cloud has (a deleted deck keeps its own).
+            let stored = parse(&text).and_then(|v| revision(&v))?;
+            return Err(CloudError::Stale(stored));
         }
         revision(&parse(&ok((status, text))?)?)
+    }
+
+    fn delete(&self, id: &str) -> Result<(), CloudError> {
+        match self.0.delete(&deck_path(id)?)? {
+            // 404: no live deck with that id, so it is as deleted as it can be.
+            (204 | 404, _) => Ok(()),
+            (status, _) => Err(CloudError::Refused(status)),
+        }
     }
 }

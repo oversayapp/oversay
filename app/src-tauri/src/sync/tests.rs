@@ -15,7 +15,11 @@ struct CloudState {
     /// Ids whose PUT is refused.
     refuse_put: Vec<String>,
     /// The account's changes, oldest first: (change number, id, revision). The cursor is the last.
-    log: Vec<(u64, String, u64)>,
+    log: Vec<(u64, String, u64, bool)>,
+    /// Deleted decks keep their revision, as the real API does.
+    tombstones: BTreeMap<String, u64>,
+    /// Ids whose DELETE answers 401 (a deleted account's token).
+    refuse_delete: Vec<String>,
 }
 
 /// A fake server: what the real API does for one account, without the network.
@@ -37,7 +41,7 @@ impl FakeCloud {
             );
             let mut st = cloud.0.lock().unwrap();
             let n = st.log.len() as u64 + 1;
-            st.log.push((n, d.id.clone(), 1));
+            st.log.push((n, d.id.clone(), 1, false));
         }
         cloud
     }
@@ -89,7 +93,7 @@ impl Cloud for FakeCloud {
                 .map(|l| Change {
                     id: l.1.clone(),
                     revision: l.2,
-                    deleted: false,
+                    deleted: l.3,
                 })
                 .collect(),
             cursor,
@@ -106,13 +110,18 @@ impl Cloud for FakeCloud {
         if s.unreachable {
             return Err(CloudError::Unreachable("offline".into()));
         }
-        if s.decks.get(&deck.id).map_or(0, |d| d.revision) != base {
-            return Err(CloudError::Stale);
+        let stored = s.decks.get(&deck.id).map_or_else(
+            || s.tombstones.get(&deck.id).copied().unwrap_or(0),
+            |d| d.revision,
+        );
+        if stored != base {
+            return Err(CloudError::Stale(stored));
         }
         if s.refuse_put.contains(&deck.id) {
             return Err(CloudError::Refused(413));
         }
-        let revision = s.decks.get(&deck.id).map_or(0, |d| d.revision) + 1;
+        let revision = stored + 1;
+        s.tombstones.remove(&deck.id);
         s.decks.insert(
             deck.id.clone(),
             RemoteDeck {
@@ -123,20 +132,73 @@ impl Cloud for FakeCloud {
             },
         );
         let n = s.log.last().map_or(0, |l| l.0) + 1;
-        s.log.push((n, deck.id.clone(), revision));
+        s.log.push((n, deck.id.clone(), revision, false));
         Ok(revision)
+    }
+    fn delete(&self, id: &str) -> Result<(), CloudError> {
+        let s = &mut *self.0.lock().unwrap();
+        s.requests.push(format!("delete {id}"));
+        if s.unreachable {
+            return Err(CloudError::Unreachable("offline".into()));
+        }
+        if s.refuse_delete.contains(&id.to_string()) {
+            return Err(CloudError::Refused(401));
+        }
+        let Some(gone) = s.decks.remove(id) else {
+            return Ok(());
+        };
+        let revision = gone.revision + 1;
+        s.tombstones.insert(id.to_string(), revision);
+        let n = s.log.last().map_or(0, |l| l.0) + 1;
+        s.log.push((n, id.to_string(), revision, true));
+        Ok(())
     }
 }
 
 #[derive(Clone, Default)]
-struct FakeLibrary(Arc<Mutex<Vec<LocalDeck>>>, Arc<Mutex<Vec<String>>>);
+/// Decks, ids of unsyncable decks, and what was moved to the Trash.
+struct FakeLibrary(
+    Arc<Mutex<Vec<LocalDeck>>>,
+    Arc<Mutex<Vec<String>>>,
+    Arc<Mutex<Vec<LocalDeck>>>,
+    Arc<Mutex<bool>>,
+);
 
 impl FakeLibrary {
     fn with(decks: Vec<LocalDeck>) -> Self {
-        FakeLibrary(Arc::new(Mutex::new(decks)), Arc::default())
+        FakeLibrary(
+            Arc::new(Mutex::new(decks)),
+            Arc::default(),
+            Arc::default(),
+            Arc::default(),
+        )
     }
     fn all(&self) -> Vec<LocalDeck> {
         self.0.lock().unwrap().clone()
+    }
+    /// The user moves a deck's folder to the Trash.
+    fn trash_by_hand(&self, id: &str) {
+        let mut all = self.0.lock().unwrap();
+        let at = all.iter().position(|d| d.id == id).unwrap();
+        let gone = all.remove(at);
+        self.2.lock().unwrap().push(gone);
+    }
+    /// The user puts a deck back from the Trash.
+    fn restore_by_hand(&self, id: &str) {
+        let gone = {
+            let mut bin = self.2.lock().unwrap();
+            let at = bin.iter().position(|d| d.id == id).unwrap();
+            bin.remove(at)
+        };
+        self.0.lock().unwrap().push(gone);
+    }
+    fn trashed(&self) -> Vec<String> {
+        self.2
+            .lock()
+            .unwrap()
+            .iter()
+            .map(|d| d.id.clone())
+            .collect()
     }
     /// Someone (the editor, an AI skill) rewrites a deck's files here.
     fn edit(&self, id: &str, deck_md: &str) {
@@ -150,6 +212,7 @@ impl Library for FakeLibrary {
         Ok(Scan {
             decks: self.all(),
             unsyncable: self.1.lock().unwrap().clone(),
+            incomplete: *self.3.lock().unwrap(),
         })
     }
     fn replace(&self, expected: &LocalDeck, deck: &RemoteDeck) -> Result<(), String> {
@@ -160,6 +223,16 @@ impl Library for FakeLibrary {
         }
         here.deck_md = deck.deck_md.clone();
         here.sessions_json = deck.sessions_json.clone();
+        Ok(())
+    }
+    fn trash(&self, expected: &LocalDeck) -> Result<(), String> {
+        let mut all = self.0.lock().unwrap();
+        let at = all.iter().position(|d| d.id == expected.id).ok_or("gone")?;
+        if &all[at] != expected {
+            return Err("changed meanwhile".into());
+        }
+        let gone = all.remove(at);
+        self.2.lock().unwrap().push(gone);
         Ok(())
     }
     fn add(&self, deck: &RemoteDeck) -> Result<(), String> {
@@ -349,7 +422,7 @@ fn push_saves_one_deck_and_says_its_revision() {
     );
     assert_eq!(s.push(&state, &d).unwrap(), Pushed::Saved { revision: 2 });
     // Based on a revision the cloud has moved past: refused, nothing changes.
-    assert_eq!(s.push(&state, &d).unwrap(), Pushed::Conflict);
+    assert_eq!(s.push(&state, &d).unwrap(), Pushed::Conflict(2));
 }
 
 #[test]
@@ -393,6 +466,13 @@ mod api {
                 .lock()
                 .unwrap()
                 .push(("PUT".into(), path.into(), body.into()));
+            Ok(self.reply.lock().unwrap().clone())
+        }
+        fn delete(&self, path: &str) -> Result<(u16, String), CloudError> {
+            self.sent
+                .lock()
+                .unwrap()
+                .push(("DELETE".into(), path.into(), String::new()));
             Ok(self.reply.lock().unwrap().clone())
         }
     }
@@ -487,11 +567,30 @@ mod api {
     }
 
     #[test]
+    fn delete_sends_a_delete_to_the_decks_own_path_and_a_404_counts_as_gone() {
+        let (cloud, wire) = wire(204, "");
+        assert_eq!(cloud.delete("d_k3x9a2bq"), Ok(()));
+        assert_eq!(
+            wire.sent.lock().unwrap()[0],
+            ("DELETE".into(), "/decks/d_k3x9a2bq".into(), String::new())
+        );
+        let (cloud, _) = wire_with(404);
+        assert_eq!(cloud.delete("d_k3x9a2bq"), Ok(()));
+        let (cloud, w) = wire_with(401);
+        assert_eq!(cloud.delete("d_k3x9a2bq"), Err(CloudError::Refused(401)));
+        assert_eq!(cloud.delete("../x"), Err(CloudError::Refused(400)));
+        assert_eq!(w.sent.lock().unwrap().len(), 1);
+    }
+    fn wire_with(status: u16) -> (ApiCloud<Arc<FakeWire>>, Arc<FakeWire>) {
+        wire(status, r#"{"error":"x"}"#)
+    }
+
+    #[test]
     fn a_409_is_stale_so_the_save_is_not_a_failure() {
         let (cloud, _) = wire(409, r#"{"error":"x","revision":5}"#);
         assert_eq!(
             cloud.put(&deck("d_k3x9a2bq", "T"), 3),
-            Err(CloudError::Stale)
+            Err(CloudError::Stale(5))
         );
     }
 
@@ -672,6 +771,29 @@ mod folder {
         );
         assert!(dir.join("One 2026-11-20/resources/keep.pdf").exists());
         let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn trash_refuses_a_deck_edited_since_it_was_read_and_a_folder_that_cannot_be_listed_hides_nothing()
+     {
+        let dir = temp("trash");
+        write(&dir, "One/deck.md", "---\nid: d_aaaaaaa1\n---\n## one\n");
+        let lib = crate::sync::library::FolderLibrary(dir.clone());
+        let scan = lib.scan().unwrap();
+        assert!(!scan.incomplete);
+        write(
+            &dir,
+            "One/deck.md",
+            "---\nid: d_aaaaaaa1\n---\n## typed since\n",
+        );
+        assert_eq!(
+            lib.trash(&scan.decks[0]),
+            Err("changed meanwhile".to_string())
+        );
+        assert!(dir.join("One/deck.md").exists());
+        let missing = crate::sync::library::FolderLibrary(dir.join("nope"));
+        assert!(missing.scan().unwrap().incomplete);
+        let _ = std::fs::remove_dir_all(dir);
     }
 
     #[test]
@@ -978,6 +1100,9 @@ mod keeping {
             fn replace(&self, e: &LocalDeck, d: &RemoteDeck) -> Result<(), String> {
                 self.0.replace(e, d)
             }
+            fn trash(&self, e: &LocalDeck) -> Result<(), String> {
+                self.0.trash(e)
+            }
         }
         let racy = Sync::new(cloud.clone(), Racy(a.library.clone()));
         let round = racy.sync_once(&mut a.state).unwrap();
@@ -1008,6 +1133,9 @@ mod keeping {
             }
             fn replace(&self, e: &LocalDeck, d: &RemoteDeck) -> Result<(), String> {
                 self.0.replace(e, d)
+            }
+            fn trash(&self, e: &LocalDeck) -> Result<(), String> {
+                self.0.trash(e)
             }
         }
         let s = Sync::new(cloud.clone(), Refusing(a.library.clone(), Mutex::new(true)));
@@ -1150,11 +1278,257 @@ mod keeping {
             fn put(&self, _: &LocalDeck, _: u64) -> Result<u64, CloudError> {
                 Err(CloudError::SignedOut)
             }
+            fn delete(&self, _: &str) -> Result<(), CloudError> {
+                Err(CloudError::SignedOut)
+            }
         }
         let s = Sync::new(SignedOut, FakeLibrary::with(five()));
         assert_eq!(
             s.sync_once(&mut State::default()).unwrap_err(),
             CloudError::SignedOut
         );
+    }
+}
+
+// ---- deletes and the Trash (slice 7)
+
+mod trashing {
+    use super::*;
+
+    struct Computer {
+        library: FakeLibrary,
+        state: State,
+    }
+
+    /// A has a deck and has saved it; B has pulled it.
+    fn shared() -> (FakeCloud, Computer, Computer) {
+        let cloud = FakeCloud::default();
+        let library = FakeLibrary::with(vec![deck("d_aaaaaaa1", "One"), deck("d_aaaaaaa2", "Two")]);
+        let mut state = State::default();
+        sync(&cloud, &library).first_sync(&mut state).unwrap();
+        let a = Computer { library, state };
+        let library = FakeLibrary::with(vec![]);
+        let mut state = State::default();
+        sync(&cloud, &library).first_sync(&mut state).unwrap();
+        let b = Computer { library, state };
+        assert_eq!(b.library.all().len(), 2);
+        (cloud, a, b)
+    }
+
+    fn round(cloud: &FakeCloud, c: &mut Computer) -> Round {
+        sync(cloud, &c.library).sync_once(&mut c.state).unwrap()
+    }
+
+    fn deleted_lines(id: &str) -> usize {
+        test_log::lines()
+            .iter()
+            .filter(|l| l.contains(&format!("sync.deck_deleted id={id}")))
+            .count()
+    }
+
+    #[test]
+    fn a_deck_trashed_on_a_is_deleted_from_the_cloud_and_trashed_on_b() {
+        let (cloud, mut a, mut b) = shared();
+        a.library.trash_by_hand("d_aaaaaaa1");
+        let r = round(&cloud, &mut a);
+        assert_eq!(r.deleted, 1);
+        assert_eq!(cloud.ids(), vec!["d_aaaaaaa2".to_string()]);
+        assert!(!a.state.decks.contains_key("d_aaaaaaa1"));
+        assert_eq!(deleted_lines("d_aaaaaaa1"), 1);
+        assert!(
+            test_log::lines()
+                .iter()
+                .any(|l| l.contains("sync.deck_deleted id=d_aaaaaaa1")
+                    && l.contains("check=epic-036/V13"))
+        );
+
+        let r = round(&cloud, &mut b);
+        assert_eq!(r.deleted, 1);
+        // Moved to the Trash (recoverable), never removed outright; the other deck is untouched.
+        assert_eq!(b.library.trashed(), vec!["d_aaaaaaa1".to_string()]);
+        assert_eq!(b.library.all().len(), 1);
+        assert!(!b.state.decks.contains_key("d_aaaaaaa1"));
+        assert!(
+            test_log::lines()
+                .iter()
+                .any(|l| l.contains("sync.deck_deleted id=d_aaaaaaa1 side=local")
+                    && l.contains("check=epic-036/V13"))
+        );
+        // Nothing bounces back: both computers and the cloud now agree.
+        assert_eq!(round(&cloud, &mut a), Round::default());
+        assert_eq!(round(&cloud, &mut b), Round::default());
+        assert_eq!(cloud.ids(), vec!["d_aaaaaaa2".to_string()]);
+    }
+
+    #[test]
+    fn a_deck_trashed_while_offline_is_deleted_when_the_cloud_is_back() {
+        let (cloud, mut a, _b) = shared();
+        cloud.0.lock().unwrap().unreachable = true;
+        a.library.trash_by_hand("d_aaaaaaa1");
+        assert!(sync(&cloud, &a.library).sync_once(&mut a.state).is_err());
+        assert!(a.state.decks.contains_key("d_aaaaaaa1"));
+        cloud.0.lock().unwrap().unreachable = false;
+        assert_eq!(round(&cloud, &mut a).deleted, 1);
+        assert_eq!(cloud.ids(), vec!["d_aaaaaaa2".to_string()]);
+    }
+
+    #[test]
+    fn a_deck_edited_on_b_and_trashed_on_a_is_kept_and_comes_back_on_a() {
+        let (cloud, mut a, mut b) = shared();
+        b.library.edit(
+            "d_aaaaaaa1",
+            "---\nid: d_aaaaaaa1\ntitle: One\n---\n## B edit\n",
+        );
+        round(&cloud, &mut b);
+        // A hasn't pulled B's edit when the deck goes to the Trash there.
+        a.library.trash_by_hand("d_aaaaaaa1");
+        let r = round(&cloud, &mut a);
+        assert_eq!(r.deleted, 0);
+        assert!(cloud.ids().contains(&"d_aaaaaaa1".to_string()));
+        assert!(
+            a.library
+                .all()
+                .iter()
+                .any(|d| d.deck_md.contains("## B edit"))
+        );
+    }
+
+    #[test]
+    fn a_delete_that_races_an_edit_asks_the_cloud_first_and_loses_nothing() {
+        // B's edit reached the cloud after A's last pull but A's cursor is already past it (a
+        // pull that missed it): the check before the delete sees the newer revision.
+        let (cloud, mut a, mut b) = shared();
+        a.library.trash_by_hand("d_aaaaaaa1");
+        b.library.edit(
+            "d_aaaaaaa1",
+            "---\nid: d_aaaaaaa1\ntitle: One\n---\n## B edit\n",
+        );
+        round(&cloud, &mut b);
+        // Skip A's pull: its cursor is already past nothing, so the pull would see the edit; the
+        // delete step's own check is what is under test here.
+        let s = sync(&cloud, &a.library);
+        let scan = a.library.scan().unwrap();
+        assert!(scan.decks.iter().all(|d| d.id != "d_aaaaaaa1"));
+        let r = s.sync_once(&mut a.state).unwrap();
+        assert_eq!(r.deleted, 0);
+        assert!(cloud.ids().contains(&"d_aaaaaaa1".to_string()));
+    }
+
+    #[test]
+    fn a_deck_edited_on_b_and_trashed_on_a_first_is_kept_on_b() {
+        let (cloud, mut a, mut b) = shared();
+        a.library.trash_by_hand("d_aaaaaaa1");
+        round(&cloud, &mut a);
+        b.library.edit(
+            "d_aaaaaaa1",
+            "---\nid: d_aaaaaaa1\ntitle: One\n---\n## B edit\n",
+        );
+        let r = round(&cloud, &mut b);
+        // The edit wins: the deck stays on B, goes back up, and is not trashed.
+        assert_eq!(r.deleted, 0);
+        assert!(b.library.trashed().is_empty());
+        assert!(
+            cloud.0.lock().unwrap().decks["d_aaaaaaa1"]
+                .deck_md
+                .contains("## B edit")
+        );
+        assert!(
+            test_log::lines()
+                .iter()
+                .any(|l| l.contains("sync.deck_delete_kept id=d_aaaaaaa1"))
+        );
+        // And A gets it back at its next sync.
+        round(&cloud, &mut a);
+        assert!(
+            a.library
+                .all()
+                .iter()
+                .any(|d| d.deck_md.contains("## B edit"))
+        );
+    }
+
+    #[test]
+    fn a_deck_restored_from_the_trash_goes_back_up_and_down() {
+        let (cloud, mut a, mut b) = shared();
+        a.library.trash_by_hand("d_aaaaaaa1");
+        round(&cloud, &mut a);
+        round(&cloud, &mut b);
+        assert_eq!(b.library.all().len(), 1);
+        a.library.restore_by_hand("d_aaaaaaa1");
+        let r = round(&cloud, &mut a);
+        assert_eq!(r.uploaded, 1);
+        assert!(cloud.ids().contains(&"d_aaaaaaa1".to_string()));
+        let r = round(&cloud, &mut b);
+        assert_eq!(r.downloaded, 1);
+        assert_eq!(b.library.all().len(), 2);
+    }
+
+    #[test]
+    fn the_other_computer_trashes_only_a_deck_it_has_not_edited() {
+        let (cloud, mut a, mut b) = shared();
+        a.library.trash_by_hand("d_aaaaaaa1");
+        round(&cloud, &mut a);
+        // B edited the deck but hasn't synced: the tombstone doesn't take it away.
+        b.library.edit(
+            "d_aaaaaaa1",
+            "---\nid: d_aaaaaaa1\ntitle: One\n---\n## local\n",
+        );
+        let before = b.library.all();
+        let r = sync(&cloud, &b.library);
+        // Pull only (the push is what brings it back, which the test above covers).
+        let _ = r.sync_once(&mut b.state);
+        assert!(b.library.trashed().is_empty());
+        assert!(before.iter().all(|d| b.library.all().contains(d)));
+    }
+
+    #[test]
+    fn an_unreadable_folder_never_looks_like_every_deck_was_trashed() {
+        let (cloud, mut a, _b) = shared();
+        a.library.0.lock().unwrap().clear();
+        *a.library.3.lock().unwrap() = true;
+        let r = round(&cloud, &mut a);
+        assert_eq!(r.deleted, 0);
+        assert_eq!(cloud.ids().len(), 2);
+    }
+
+    #[test]
+    fn an_unsyncable_deck_is_not_a_deleted_one() {
+        let (cloud, mut a, _b) = shared();
+        a.library.trash_by_hand("d_aaaaaaa1");
+        a.library.1.lock().unwrap().push("d_aaaaaaa1".into());
+        assert_eq!(round(&cloud, &mut a).deleted, 0);
+        assert_eq!(cloud.ids().len(), 2);
+    }
+
+    #[test]
+    fn a_refused_delete_keeps_the_deck_in_the_state_to_try_again() {
+        // A deleted account's token (slice 9): the DELETE is refused, nothing is forgotten.
+        let (cloud, mut a, _b) = shared();
+        cloud
+            .0
+            .lock()
+            .unwrap()
+            .refuse_delete
+            .push("d_aaaaaaa1".into());
+        a.library.trash_by_hand("d_aaaaaaa1");
+        let r = round(&cloud, &mut a);
+        assert_eq!(r.deleted, 0);
+        assert_eq!(r.failed, 1);
+        assert!(a.state.decks.contains_key("d_aaaaaaa1"));
+        assert_eq!(cloud.ids().len(), 2);
+    }
+
+    #[test]
+    fn the_delete_logs_have_ids_only() {
+        let (cloud, mut a, mut b) = shared();
+        a.library.trash_by_hand("d_aaaaaaa1");
+        round(&cloud, &mut a);
+        round(&cloud, &mut b);
+        for l in test_log::lines() {
+            assert!(
+                !l.contains("Secret card text") && !l.contains("title"),
+                "{l}"
+            );
+        }
     }
 }

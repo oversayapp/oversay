@@ -17,6 +17,13 @@
 //! deck then goes up over the cloud's revision and the copy goes up as a new deck, so every
 //! computer ends with the same two decks. The cloud refuses a write over a revision the writer
 //! hadn't seen (409), which is how a conflict is found when the pull didn't see it.
+//!
+//! Deletes (slice 7): a deck agreed with the cloud that is gone from the Decks folder was moved
+//! to the Trash, so it is deleted from the cloud (`delete_trashed`; offline it stays in the state
+//! and is asked again). A tombstone from the cloud moves the deck to this computer's Trash
+//! (`pull_deleted`), never a hard delete. An edit is never lost to a delete: a deck edited here
+//! stays and goes back up over the tombstone; a deck the cloud changed since is brought back
+//! instead of deleted. A folder that couldn't be fully read (`Scan::incomplete`) deletes nothing.
 
 mod cloud;
 pub mod commands;
@@ -85,8 +92,9 @@ pub enum CloudError {
     Unreachable(String),
     /// The API said no to this request, with this status.
     Refused(u16),
-    /// A save was refused because the cloud's deck is newer than the revision it was based on.
-    Stale,
+    /// A save was refused because the cloud's deck is at another revision than the one it was
+    /// based on; this is the stored one (a deleted deck keeps its revision).
+    Stale(u64),
 }
 
 impl fmt::Display for CloudError {
@@ -95,7 +103,7 @@ impl fmt::Display for CloudError {
             CloudError::SignedOut => write!(f, "Not signed in."),
             CloudError::Unreachable(why) => write!(f, "{why}"),
             CloudError::Refused(status) => write!(f, "The cloud refused it ({status})."),
-            CloudError::Stale => write!(f, "The deck changed in the cloud."),
+            CloudError::Stale(_) => write!(f, "The deck changed in the cloud."),
         }
     }
 }
@@ -112,6 +120,9 @@ pub trait Cloud {
     /// (0: it expects the cloud to have no such deck); the cloud answers `Stale` and changes
     /// nothing when its revision is another.
     fn put(&self, deck: &LocalDeck, base: u64) -> Result<u64, CloudError>;
+    /// Deletes the deck; the cloud keeps a tombstone so other computers learn of it. A deck the
+    /// cloud no longer has counts as deleted.
+    fn delete(&self, id: &str) -> Result<(), CloudError>;
 }
 
 /// What the Decks folder held.
@@ -123,6 +134,9 @@ pub struct Scan {
     /// large): they are not uploaded, and the cloud's deck with the same id is not brought down
     /// beside them.
     pub unsyncable: Vec<String>,
+    /// Something in the folder couldn't be read, so a deck missing from `decks` may only be
+    /// unread: nothing is taken to be deleted from this scan.
+    pub incomplete: bool,
 }
 
 /// The Decks folder.
@@ -133,6 +147,9 @@ pub trait Library {
     /// Writes the cloud's files over the deck's own, only if the deck is still exactly `expected`:
     /// an edit made since it was read is never overwritten.
     fn replace(&self, expected: &LocalDeck, deck: &RemoteDeck) -> Result<(), String>;
+    /// Moves the deck's folder to the Trash (recoverable), only if the deck is still exactly
+    /// `expected`: an edit made since it was read is never trashed.
+    fn trash(&self, expected: &LocalDeck) -> Result<(), String>;
 }
 
 #[derive(Debug, PartialEq)]
@@ -140,8 +157,8 @@ pub enum Pushed {
     Saved {
         revision: u64,
     },
-    /// The cloud's deck is newer than the one this save was based on.
-    Conflict,
+    /// The cloud's deck is at this other revision than the one this save was based on.
+    Conflict(u64),
 }
 
 /// What turning Save decks to the cloud on did.
@@ -163,6 +180,9 @@ pub struct Round {
     pub downloaded: usize,
     /// Titles of the conflict copies made this round (decks changed on both computers).
     pub copies: Vec<String>,
+    /// Decks deleted from the cloud because they were moved to the Trash here, plus decks moved
+    /// to the Trash here because they were deleted elsewhere.
+    pub deleted: usize,
     pub failed: usize,
 }
 
@@ -221,7 +241,7 @@ impl<C: Cloud, L: Library> Sync<C, L> {
         let base = state.decks.get(&deck.id).map_or(0, |b| b.revision);
         match self.cloud.put(deck, base) {
             Ok(revision) => Ok(Pushed::Saved { revision }),
-            Err(CloudError::Stale) => Ok(Pushed::Conflict),
+            Err(CloudError::Stale(stored)) => Ok(Pushed::Conflict(stored)),
             Err(e) => Err(e),
         }
     }
@@ -234,6 +254,7 @@ impl<C: Cloud, L: Library> Sync<C, L> {
         let Scan {
             decks: local_decks,
             unsyncable,
+            ..
         } = self.library.scan().map_err(CloudError::Unreachable)?;
         let in_cloud: BTreeSet<&str> = listing.decks.iter().map(|r| r.id.as_str()).collect();
         let mut report = FirstSync {
@@ -254,7 +275,7 @@ impl<C: Cloud, L: Library> Sync<C, L> {
                         report.uploaded += 1;
                     }
                     // Made in the cloud meanwhile: the first round after this settles it.
-                    Ok(Pushed::Conflict) => report.left_alone.push(deck.id.clone()),
+                    Ok(Pushed::Conflict(_)) => report.left_alone.push(deck.id.clone()),
                     Err(CloudError::SignedOut) => return Err(CloudError::SignedOut),
                     Err(e) => {
                         log::warn!("sync.deck_failed step=upload id={} error={e}", deck.id);
@@ -326,6 +347,7 @@ impl<C: Cloud, L: Library> Sync<C, L> {
             match self.pull_one(state, &scan, change) {
                 Ok(Pulled::Down) => round.downloaded += 1,
                 Ok(Pulled::Settled(title)) => round.copies.push(title),
+                Ok(Pulled::Trashed) => round.deleted += 1,
                 Ok(Pulled::Nothing) => {}
                 Err(CloudError::SignedOut) => return Err(CloudError::SignedOut),
                 Err(_) => {
@@ -340,6 +362,7 @@ impl<C: Cloud, L: Library> Sync<C, L> {
             state.cursor = Some(changes.cursor);
         }
         let scan = self.library.scan().map_err(CloudError::Unreachable)?;
+        self.delete_trashed(state, &scan, &mut round)?;
         for deck in &scan.decks {
             match self.push_if_changed(state, deck, &mut round) {
                 Ok(true) => round.uploaded += 1,
@@ -351,6 +374,66 @@ impl<C: Cloud, L: Library> Sync<C, L> {
         Ok(round)
     }
 
+    /// A deck this computer agreed with the cloud that is no longer in the Decks folder was moved
+    /// to the Trash: it is deleted from the cloud, so the other computers trash it too. A deck
+    /// that couldn't be deleted (offline) stays in `state`, so the next round asks again. A scan
+    /// that couldn't read everything deletes nothing, and a deck the cloud has since changed is
+    /// brought back rather than deleted: the edit is kept.
+    fn delete_trashed(
+        &self,
+        state: &mut State,
+        scan: &Scan,
+        round: &mut Round,
+    ) -> Result<(), CloudError> {
+        if scan.incomplete {
+            return Ok(());
+        }
+        let gone: Vec<String> = state
+            .decks
+            .keys()
+            .filter(|id| !scan.decks.iter().any(|d| &d.id == *id) && !scan.unsyncable.contains(id))
+            .cloned()
+            .collect();
+        for id in gone {
+            match self.delete_one(state, &id) {
+                Ok(true) => round.deleted += 1,
+                Ok(false) => {}
+                Err(CloudError::SignedOut) => return Err(CloudError::SignedOut),
+                Err(e) => {
+                    log::warn!("sync.deck_failed step=delete id={id} error={e}");
+                    round.failed += 1;
+                }
+            }
+        }
+        Ok(())
+    }
+
+    /// True when the cloud's deck was deleted.
+    fn delete_one(&self, state: &mut State, id: &str) -> Result<bool, CloudError> {
+        let agreed = state.decks.get(id).map_or(0, |b| b.revision);
+        match self.cloud.get(id)? {
+            Some(theirs) if theirs.revision > agreed => {
+                // Edited on another computer since: it comes back here, nothing is lost.
+                if self.library.add(&theirs).is_ok() {
+                    state.decks.insert(id.to_string(), theirs.base());
+                    log::debug!("sync.deck_delete_kept id={id} reason=edited_elsewhere");
+                }
+                Ok(false)
+            }
+            Some(_) => {
+                self.cloud.delete(id)?;
+                state.decks.remove(id);
+                log::debug!("sync.deck_deleted id={id} side=cloud check=epic-036/V13");
+                Ok(true)
+            }
+            // Already gone from the cloud (another computer deleted it first).
+            None => {
+                state.decks.remove(id);
+                Ok(false)
+            }
+        }
+    }
+
     fn start_over(&self, state: &mut State) -> Result<Round, CloudError> {
         *state = State::default();
         let first = self.first_sync(state)?;
@@ -358,6 +441,7 @@ impl<C: Cloud, L: Library> Sync<C, L> {
             uploaded: first.uploaded,
             downloaded: first.downloaded,
             copies: vec![],
+            deleted: 0,
             failed: first.failed,
         })
     }
@@ -370,9 +454,7 @@ impl<C: Cloud, L: Library> Sync<C, L> {
     ) -> Result<Pulled, CloudError> {
         let id = &change.id;
         if change.deleted {
-            // Deletes and the Trash are slice 7: nothing local is removed yet.
-            log::debug!("sync.deck_delete_ignored id={id}");
-            return Ok(Pulled::Nothing);
+            return self.pull_deleted(state, scan, change);
         }
         let base = state.decks.get(id);
         // Our own upload, seen again.
@@ -404,6 +486,54 @@ impl<C: Cloud, L: Library> Sync<C, L> {
             }
             // Edited while the cloud's copy was being read: asked for again next round.
             Err(_) => Err(CloudError::Unreachable("changed meanwhile".into())),
+        }
+    }
+
+    /// The cloud deleted a deck: this computer moves it to the Trash, unless it was edited here
+    /// since it was last agreed. That edit is kept: the deck stays, based on the tombstone, and the
+    /// next upload brings it back to the cloud.
+    fn pull_deleted(
+        &self,
+        state: &mut State,
+        scan: &Scan,
+        change: &Change,
+    ) -> Result<Pulled, CloudError> {
+        let id = &change.id;
+        let Some(base) = state.decks.get(id) else {
+            return Ok(Pulled::Nothing);
+        };
+        // A delete this computer already knows of.
+        if base.revision >= change.revision || scan.unsyncable.contains(id) {
+            return Ok(Pulled::Nothing);
+        }
+        let Some(local) = scan.decks.iter().find(|d| &d.id == id) else {
+            // Trashed here too.
+            state.decks.remove(id);
+            return Ok(Pulled::Nothing);
+        };
+        if base.hash != local.hash() {
+            let hash = base.hash.clone();
+            state.decks.insert(
+                id.clone(),
+                Base {
+                    revision: change.revision,
+                    hash,
+                },
+            );
+            log::debug!("sync.deck_delete_kept id={id} reason=edited_here");
+            return Ok(Pulled::Nothing);
+        }
+        match self.library.trash(local) {
+            Ok(()) => {
+                state.decks.remove(id);
+                log::debug!("sync.deck_deleted id={id} side=local check=epic-036/V13");
+                Ok(Pulled::Trashed)
+            }
+            // Edited while the round ran, or not movable: asked for again next round.
+            Err(_) => {
+                log::warn!("sync.deck_failed step=trash id={id} reason=not_moved");
+                Err(CloudError::Unreachable("not moved".into()))
+            }
         }
     }
 
@@ -455,13 +585,25 @@ impl<C: Cloud, L: Library> Sync<C, L> {
         }
         let started = Instant::now();
         let mut pushed = self.push(state, deck);
-        if pushed == Ok(Pushed::Conflict) {
-            // The cloud moved on since this computer last looked: keep both, then try again.
-            let Some(theirs) = self.cloud.get(&deck.id)? else {
-                return Ok(false);
+        if let Ok(Pushed::Conflict(stored)) = pushed {
+            // The cloud moved on since this computer last looked.
+            pushed = match self.cloud.get(&deck.id)? {
+                // Deleted elsewhere, but edited here (or brought back from the Trash): saved again
+                // over the tombstone, so no edit is lost.
+                None => {
+                    log::debug!("sync.deck_delete_kept id={} reason=edited_here", deck.id);
+                    match self.cloud.put(deck, stored) {
+                        Ok(revision) => Ok(Pushed::Saved { revision }),
+                        Err(CloudError::Stale(other)) => Ok(Pushed::Conflict(other)),
+                        Err(e) => Err(e),
+                    }
+                }
+                // Both changed: keep both, then try again.
+                Some(theirs) => {
+                    round.copies.push(self.settle(state, deck, &theirs)?);
+                    self.push(state, deck)
+                }
             };
-            round.copies.push(self.settle(state, deck, &theirs)?);
-            pushed = self.push(state, deck);
         }
         match pushed {
             Ok(Pushed::Saved { revision }) => {
@@ -474,7 +616,7 @@ impl<C: Cloud, L: Library> Sync<C, L> {
                 Ok(true)
             }
             // Changed again in the cloud since: the next round settles that too.
-            Ok(Pushed::Conflict) => Ok(false),
+            Ok(Pushed::Conflict(_)) => Ok(false),
             Err(e) => {
                 log::warn!("sync.deck_failed step=upload id={} error={e}", deck.id);
                 Err(e)
@@ -550,6 +692,8 @@ fn with_title(text: &str, title: &str) -> String {
 
 enum Pulled {
     Down,
+    /// Moved to the Trash because the cloud deleted it.
+    Trashed,
     /// Both versions kept; the conflict copy's title.
     Settled(String),
     Nothing,
