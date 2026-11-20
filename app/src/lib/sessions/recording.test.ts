@@ -60,8 +60,22 @@ describe('the deck widget\'s record button (ADR 0042)', () => {
     expect(recordButton(deck(), now('recording', '/Decks/Other/deck.md'))).toBe('stopped')
   })
 
-  it('is not there before the start or in a preview', () => {
-    expect(recordButton(deck({ status: 'ready', events: [] }), now('recording'))).toBeNull()
-    expect(recordButton(deck({ preview: true }), now('recording'))).toBeNull()
+  it('is there before the start and in a preview, armed when the deck will record from Start', () => {
+    const ready = deck({ status: 'ready', events: [] })
+    expect(recordButton(ready, null, true)).toBe('armed')
+    expect(recordButton(ready, null, false)).toBe('idle')
+    // The deck's own Record on start wins over Auto record.
+    const on = deck({ status: 'ready', events: [], talk: { deck: { recordOnStart: 'on' } } as never })
+    const off = deck({ status: 'ready', events: [], talk: { deck: { recordOnStart: 'off' } } as never })
+    expect(recordButton(on, null, false)).toBe('armed')
+    expect(recordButton(off, null, true)).toBe('idle')
+    // A preview never records, but shows what a run would do.
+    expect(recordButton(deck({ preview: true }), now('recording'), true)).toBe('armed')
+  })
+
+  it('is not there with nothing on screen, after the run, or for a note', () => {
+    expect(recordButton(null, null, true)).toBeNull()
+    expect(recordButton(deck({ status: 'finished' }), null, true)).toBeNull()
+    expect(recordButton(deck({ deck: false, status: 'ready', events: [] }), null, true)).toBeNull()
   })
 })

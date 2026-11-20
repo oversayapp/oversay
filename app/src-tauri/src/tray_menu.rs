@@ -204,7 +204,7 @@ pub fn menu(state: &MenuState) -> Vec<Entry> {
     m.push(check(
         state,
         "panel",
-        "Look panel",
+        "Control panel",
         Some("panel"),
         state.panel_open,
         true,
@@ -527,7 +527,7 @@ mod tests {
                 "---",
                 "[x] Hide from screen sharing",
                 "---",
-                "[ ] Look panel  ⟨Control+Alt+KeyP⟩",
+                "[ ] Control panel  ⟨Control+Alt+KeyP⟩",
                 "Open Oversay  ⟨Control+Alt+KeyO⟩",
                 "Settings…",
                 "---",
@@ -658,7 +658,7 @@ mod tests {
         let mut s = state(None);
         s.keys = BTreeMap::from([("panel".to_string(), "Control+Alt+KeyP".to_string())]);
         let t = text(&menu(&s));
-        assert!(t.contains(&"[ ] Look panel  ⟨Control+Alt+KeyP⟩".to_string()));
+        assert!(t.contains(&"[ ] Control panel  ⟨Control+Alt+KeyP⟩".to_string()));
         assert!(t.contains(&"Open Oversay".to_string()));
     }
 
@@ -668,7 +668,7 @@ mod tests {
         s.panel_open = true;
         s.hidden = false;
         let t = text(&menu(&s));
-        assert!(t.contains(&"[x] Look panel  ⟨Control+Alt+KeyP⟩".to_string()));
+        assert!(t.contains(&"[x] Control panel  ⟨Control+Alt+KeyP⟩".to_string()));
         assert!(t.contains(&"[ ] Hide from screen sharing".to_string()));
     }
 

@@ -1,6 +1,6 @@
 <script lang="ts">
   // The Look card (ADR 0051, Control Panel v2): what is judged by eye against a slide, at the top
-  // of the right edge. Opacity with See-through / Solid first, then Dark / Light, then Card / Agenda, Single colour, then Hide from
+  // of the right edge. Opacity with See-through / Solid first, then Dark / Light, then Card / Agenda, Single colour, Auto record, then Hide from
   // screen sharing. The run, the keys and the app are in the menu-bar / tray menu. It is never in a
   // screen share, never takes focus from the slides, and with nothing running it puts a sample deck
   // on screen while it is open.
@@ -15,7 +15,7 @@
   import { session, openSession } from '../lib/session/store'
   import { shortcutText, isMac } from '../lib/session/shortcuts'
   import { sampleDeckTalk } from '../lib/session/preview'
-  import { MIN_OVERLAY_OPACITY, OVERLAY_SETTINGS_CHANNEL, parseOverlaySettings, type LookChange } from '../lib/settings/overlays'
+  import { MIN_OVERLAY_OPACITY, OVERLAY_SETTINGS_CHANNEL, autoRecordOf, parseOverlaySettings, type LookChange } from '../lib/settings/overlays'
   import { CONTROL_PANEL_OPEN_EVENT, closeOverlay, hiddenFromCapture, openOverlay, setHiddenFromCapture } from '../lib/windows'
   import { flashcard } from '../plugins/flashcard'
   import { overlayWindow } from '../plugins/registry'
@@ -28,6 +28,7 @@
 
   const lookChannel = channel<unknown>(OVERLAY_SETTINGS_CHANNEL, null)
   const look = $derived(parseOverlaySettings($lookChannel))
+  const autoRecord = $derived(autoRecordOf($lookChannel))
   // While the slider moves, the card shows where it is before the manager answers.
   let dragging = $state<number | null>(null)
   const shown = $derived(dragging ?? (look.solid ? 100 : look.opacity))
@@ -84,11 +85,11 @@
   const close = () => invoke('control_panel_close')
 </script>
 
-<aside class="look" aria-label="Look" bind:this={card}>
+<aside class="look" aria-label="Control panel" bind:this={card}>
   <header class="lh">
-    <b>Look</b>
+    <b>Control panel</b>
     <span class="cap" title="Never shown in a screen share or recording">Not shared</span>
-    <button class="ib" title={panelKey ? `Close (${panelKey})` : 'Close'} aria-label="Close the Look card" onclick={close}><Icon name="close" size={15} /></button>
+    <button class="ib" title={panelKey ? `Close (${panelKey})` : 'Close'} aria-label="Close the control panel" onclick={close}><Icon name="close" size={15} /></button>
   </header>
 
   <section class="sec">
@@ -144,6 +145,23 @@
         aria-checked={look.oneColour}
         aria-label="Single colour"
         onclick={() => change({ key: 'oneColour', value: !look.oneColour })}
+      ></button>
+    </div>
+  </section>
+
+  <section class="sec">
+    <div class="row">
+      <div class="t">
+        <b>Auto record</b>
+        <small>{autoRecord ? 'Your voice is recorded as soon as you press Start.' : 'Press the record button on the deck to record your voice.'}</small>
+      </div>
+      <button
+        class="tog"
+        class:on={autoRecord}
+        role="switch"
+        aria-checked={autoRecord}
+        aria-label="Auto record"
+        onclick={() => change({ key: 'autoRecord', value: !autoRecord })}
       ></button>
     </div>
   </section>

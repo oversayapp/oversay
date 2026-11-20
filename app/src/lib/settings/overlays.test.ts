@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import {
   DEFAULT_OVERLAY_SETTINGS,
   checkLookChange,
+  autoRecordOf,
   MIN_OVERLAY_OPACITY,
   OVERLAY_SETTINGS_CHANNEL,
   cleanOverlays,
@@ -26,6 +27,12 @@ describe('parseOverlaySettings', () => {
   it('reads the deck widget\'s view last used, and falls back to the Card view', () => {
     expect(parseOverlaySettings({ deckView: 'agenda' }).deckView).toBe('agenda')
     expect(parseOverlaySettings({ deckView: 'wave' }).deckView).toBe('card')
+  })
+
+  it('reads Auto record from what the manager sends with the look', () => {
+    expect(autoRecordOf({ opacity: 60, autoRecord: true })).toBe(true)
+    expect(autoRecordOf({ autoRecord: 1 })).toBe(false)
+    expect(autoRecordOf(null)).toBe(false)
   })
 
   it('reads the single-colour choice, off unless saved on', () => {
@@ -148,6 +155,9 @@ describe('checkLookChange', () => {
     expect(checkLookChange({ key: 'opacity', value: 60 })).toEqual({ key: 'opacity', value: 60 })
     expect(checkLookChange({ key: 'solid', value: true })).toEqual({ key: 'solid', value: true })
     expect(checkLookChange({ key: 'panel', value: 'blue' })).toBeNull()
+    // The card's Auto record switch.
+    expect(checkLookChange({ key: 'autoRecord', value: true })).toEqual({ key: 'autoRecord', value: true })
+    expect(checkLookChange({ key: 'autoRecord', value: 'yes' })).toBeNull()
     // The menu's Card view / Agenda view.
     expect(checkLookChange({ key: 'deckView', value: 'agenda' })).toEqual({ key: 'deckView', value: 'agenda' })
     expect(checkLookChange({ key: 'deckView', value: 'wave' })).toBeNull()

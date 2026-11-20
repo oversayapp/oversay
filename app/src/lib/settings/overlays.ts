@@ -65,15 +65,21 @@ export const OVERLAY_OPACITY_EVENT = 'overlay-opacity'
  */
 export const CONTROL_PANEL_LOOK_EVENT = 'control-panel-look'
 
+/**
+ * Auto record (Settings › Recordings) rides along with the look the manager sends the other windows,
+ * so the control panel can show and set it; it is saved with the settings, not with the overlays.
+ */
+export const autoRecordOf = (sent: unknown): boolean => asObject(sent).autoRecord === true
+
 /** One change to the look: a setting and its value; `opacityPreview` while the slider moves, `opacity` when it is let go. */
-export type LookChange = { key: keyof OverlaySettings | 'opacityPreview'; value: unknown }
+export type LookChange = { key: keyof OverlaySettings | 'opacityPreview' | 'autoRecord'; value: unknown }
 
 /** A change as it can be applied, or null when it isn't one (the panel's event is checked, not trusted). */
 export function checkLookChange(change: unknown): LookChange | null {
   if (typeof change !== 'object' || change === null) return null
   const { key, value } = change as { key?: unknown; value?: unknown }
   if (key === 'opacityPreview' || key === 'opacity') return typeof value === 'number' && Number.isFinite(value) ? { key, value } : null
-  if (key === 'solid') return typeof value === 'boolean' ? { key, value } : null
+  if (key === 'solid' || key === 'autoRecord') return typeof value === 'boolean' ? { key, value } : null
   if (typeof key !== 'string' || !(key in DEFAULT_OVERLAY_SETTINGS)) return null
   // A value the parser keeps is a valid one.
   const parsed = parseOverlaySettings({ [key]: value }) as unknown as Record<string, unknown>

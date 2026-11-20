@@ -15,7 +15,7 @@ export const SHORTCUT_LABELS: Record<ShortcutAction, string> = {
   show: 'Open Oversay window',
   darker: 'More solid',
   lighter: 'More see-through',
-  panel: 'Look panel',
+  panel: 'Control panel',
 }
 
 /** Actions not wired up yet, so their keys aren't taken from other apps until they are. */

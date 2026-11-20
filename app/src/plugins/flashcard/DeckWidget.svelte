@@ -1,13 +1,14 @@
 <script lang="ts">
   // The deck widget (ADR 0042): one window, two views of the
   // same run. The Card view is the flashcard widget; the Agenda view is every card along the bottom.
-  // The Look button left of the host's ✕ opens the Look card. The view is chosen in the menu (Card
+  // The Control panel button left of the host's ✕ opens the control panel. The view is chosen in the menu (Card
   // view / Agenda view): the manager saves it as the view last used, and the host moves the window
   // to that view's remembered place and size (`windowFor`).
   import { deckRun } from '../../lib/decks/run'
   import { recordButton, recordFromWidget, recording, stopRecordingThisRun } from '../../lib/sessions/recording'
-  import type { DeckView } from '../../lib/settings/overlays'
-  import { toggleControlPanel } from '../../lib/windows'
+  import { OVERLAY_SETTINGS_CHANNEL, autoRecordOf, type DeckView } from '../../lib/settings/overlays'
+  import { hiddenFromCapture, toggleControlPanel } from '../../lib/windows'
+  import { channel } from '../../lib/channel'
   import AgendaView from './AgendaView.svelte'
   import type { PluginContext } from '../types'
   import DeckTab from './DeckTab.svelte'
@@ -62,10 +63,19 @@
   // Record my voice (ADR 0041, 0042): on every running deck the button is shown left of the
   // switch: red while recording, dimmed while paused, grey when not, struck through when the
   // microphone was refused; a click toggles it (Auto record, in Settings, starts it at Start).
-  const rec = $derived(recordButton($session, $recording))
+  // Auto record rides along with the look (the control panel sets it).
+  const sent = channel<unknown>(OVERLAY_SETTINGS_CHANNEL, null)
+  const rec = $derived(recordButton($session, $recording, autoRecordOf($sent)))
+  // The widget can be seen in a screen share: say so on the widget, as the control panel does.
+  const shared = $derived(!$hiddenFromCapture)
+  const ahead = $derived(rec === 'armed' || rec === 'idle')
   const onWindows = typeof navigator !== 'undefined' && /Windows/.test(navigator.userAgent)
   const recTitle = $derived(
-    rec === 'refused'
+    rec === 'armed'
+      ? 'Your voice will be recorded when you press Start (Auto record is on)'
+      : rec === 'idle'
+        ? 'Your voice won’t be recorded from Start. Turn on Auto record in the control panel, or press this once the deck runs'
+        : rec === 'refused'
       ? `Oversay can’t use the microphone. Allow it in ${onWindows ? 'Settings › Privacy & security › Microphone' : 'System Settings › Privacy & Security › Microphone'}, then click to record`
       : rec === 'stopped'
         ? 'Not recording. Click to record your voice'
@@ -80,7 +90,7 @@
   }
 </script>
 
-<div class="dw" class:hidden class:ink-light={$look.panel === 'light'} style:--tab="{TAB_HEIGHT}px" style:--corner={rec ? '78px' : null}>
+<div class="dw" class:hidden class:ink-light={$look.panel === 'light'} style:--tab="{TAB_HEIGHT}px" style:--corner={shared ? (rec ? '152px' : '124px') : rec ? '78px' : null}>
   <div class="view">
     {#if view === 'agenda'}
       <div class="agenda" class:light={$look.panel === 'light'} class:one={model.options.colour === 'one' || $look.oneColour}>
@@ -95,13 +105,15 @@
     <button
       class="rec"
       class:paused={rec === 'paused'}
-      class:off={rec === 'stopped'}
+      class:off={rec === 'stopped' || rec === 'idle'}
+      class:armed={rec === 'armed'}
       class:refused={rec === 'refused'}
       type="button"
       title={recTitle}
-      aria-label={recordingNow ? 'Stop recording your voice' : 'Record your voice'}
-      aria-pressed={recordingNow}
-      onclick={toggleRecording}
+      aria-label={ahead ? (rec === 'armed' ? 'Will record your voice from Start' : 'Won’t record your voice from Start') : recordingNow ? 'Stop recording your voice' : 'Record your voice'}
+      aria-pressed={ahead ? undefined : recordingNow}
+      aria-disabled={ahead}
+      onclick={() => !ahead && toggleRecording()}
     >
       <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"
         ><circle class="ring" cx="8" cy="8" r="6.6" fill="none" stroke-width="1.6" /><circle class="dot" cx="8" cy="8" r="3.8" />{#if rec === 'refused'}<path
@@ -113,7 +125,10 @@
       >
     </button>
   {/if}
-  <button class="look" type="button" title="Look panel" aria-label="Look panel" onclick={() => void toggleControlPanel()}>
+  {#if shared}
+    <span class="shared" title="Your audience can see this deck widget in a screen share. Hide it in the control panel.">Shared</span>
+  {/if}
+  <button class="look" type="button" title="Control panel" aria-label="Control panel" onclick={() => void toggleControlPanel()}>
     <svg width="16" height="14" viewBox="0 0 16 14" aria-hidden="true"
       ><path d="M1.5 3.5h7M12 3.5h2.5M1.5 10.5h2.5M7.5 10.5h7" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" /><circle
         cx="10.2"
@@ -236,6 +251,34 @@
   .rec.paused .dot {
     opacity: 0.35;
     animation: none;
+  }
+
+  .rec.armed .dot {
+    animation: none;
+  }
+
+  .rec[aria-disabled='true'] {
+    cursor: default;
+  }
+
+  .rec[aria-disabled='true']:hover {
+    background: transparent;
+  }
+
+  /* Shown all the time while the audience can see the widget (the control panel's "Not shared", the other way). */
+  .shared {
+    position: absolute;
+    z-index: 2;
+    top: 9px;
+    right: 84px;
+    padding: 1px 8px;
+    border-radius: 99px;
+    font-size: 11px;
+    font-weight: 700;
+    line-height: 16px;
+    color: #4a2e00;
+    background: #f5b13d;
+    pointer-events: none;
   }
 
   .rec.off .ring {

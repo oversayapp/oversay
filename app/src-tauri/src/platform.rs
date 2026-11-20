@@ -299,7 +299,7 @@ pub fn move_to_trash(path: &std::path::Path) -> Result<(), trash::Error> {
     trash::delete(path)
 }
 
-/// The argument the taskbar button's "Look panel" task starts the app with (Windows).
+/// The argument the taskbar button's "Control panel" task starts the app with (Windows).
 pub const CONTROL_PANEL_ARG: &str = "--control-panel";
 
 /// `Oversay --check` prints to the terminal it was run from. A Windows release build is a GUI app
@@ -330,7 +330,7 @@ pub fn single_instance(builder: tauri::Builder<tauri::Wry>) -> tauri::Builder<ta
     builder
 }
 
-/// Puts "Look panel" in the taskbar button's right-click menu (its jump list, under Tasks) on
+/// Puts "Control panel" in the taskbar button's right-click menu (its jump list, under Tasks) on
 /// Windows (ADR 0028): a task that starts the app with `CONTROL_PANEL_ARG`. Elsewhere nothing.
 pub fn install_jump_list(app: &AppHandle) {
     #[cfg(windows)]
@@ -359,7 +359,7 @@ fn jump_list() -> windows::core::Result<()> {
 
     let exe = std::env::current_exe()
         .map_err(|_| windows::core::Error::from_hresult(windows::Win32::Foundation::E_FAIL))?;
-    let title = "Look panel";
+    let title = "Control panel";
     // SAFETY: COM calls on the main thread, where the webview has already initialised COM.
     unsafe {
         let list: ICustomDestinationList =
@@ -382,7 +382,7 @@ fn jump_list() -> windows::core::Result<()> {
     Ok(())
 }
 
-/// Puts "Look panel" in the Dock icon's right-click menu (ADR 0028, ADR 0051), so the card opens with
+/// Puts "Control panel" in the Dock icon's right-click menu (ADR 0028, ADR 0051), so the card opens with
 /// nothing running and without the menu bar. Tauri has no Dock menu, so the app delegate (tao's)
 /// gets `applicationDockMenu:` and the item's action added at run time. Elsewhere nothing: the
 /// taskbar button's menu is `windows_jump_list`.
@@ -424,7 +424,7 @@ mod dock {
 
     extern "C-unwind" fn toggle_panel(_this: *mut AnyObject, _cmd: Sel, _sender: *mut AnyObject) {
         if let Some(app) = APP.get() {
-            log::info!("Dock menu: Look panel");
+            log::info!("Dock menu: Control panel");
             if let Err(e) = crate::session::act(app, crate::session::Action::TogglePanel) {
                 log::warn!("Dock menu: {e}");
             }
@@ -460,7 +460,7 @@ mod dock {
             );
 
             let menu: *mut AnyObject = msg_send![class!(NSMenu), new];
-            let title = NSString::from_str("Look panel");
+            let title = NSString::from_str("Control panel");
             let key = NSString::from_str("");
             let item: *mut AnyObject = msg_send![class!(NSMenuItem), alloc];
             let item: *mut AnyObject = msg_send![item, initWithTitle: &*title, action: sel!(oversayToggleControlPanel:), keyEquivalent: &*key];

@@ -64,7 +64,7 @@ async function readSettings(): Promise<void> {
 
 /** Overlays are other windows: they get the look through Rust (overlay.rs), and a new overlay finds it there. */
 async function sendOverlaySettings(s: Settings): Promise<void> {
-  await invoke('set_overlay_settings', { settings: parseOverlaySettings(s.overlays) })
+  await invoke('set_overlay_settings', { settings: { ...parseOverlaySettings(s.overlays), autoRecord: !!s.autoRecord } })
 }
 
 /** The Look card's key is registered all the time, not only in a session (ADR 0028, ADR 0051). */
@@ -387,6 +387,7 @@ export function applyLookChange(change: LookChange): Promise<void> {
   if (change.key === 'opacityPreview') return previewOverlayOpacity(change.value as number)
   if (change.key === 'opacity') return setOverlayOpacity(change.value as number)
   if (change.key === 'solid') return changeOverlayOpacity(change.value ? 'solid' : 'see-through')
+  if (change.key === 'autoRecord') return setAutoRecord(change.value as boolean)
   return setOverlaySetting(change.key, change.value as never)
 }
 
@@ -426,7 +427,13 @@ export function noteUpdateCheck(at: Date): Promise<void> {
 export function setAutoRecord(on: boolean): Promise<void> {
   logAction('auto record', String(on))
   return inTurn(async () => {
-    await save({ ...get(settings), autoRecord: on })
+    const next = { ...get(settings), autoRecord: on }
+    try {
+      await save(next)
+    } finally {
+      // The control panel shows it too.
+      await sendOverlaySettings(next)
+    }
   })
 }
 

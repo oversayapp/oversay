@@ -87,7 +87,7 @@ pub fn run() {
             skill::update_installed(app.handle());
             // Links an AI opens to show a note or open Oversay on it (ADR 0032).
             links::init(app.handle());
-            // Started from the jump list's Look panel with the app not yet running.
+            // Started from the jump list's Control panel with the app not yet running.
             if std::env::args().any(|a| a == platform::CONTROL_PANEL_ARG) {
                 let _ = session::act(app.handle(), session::Action::TogglePanel);
             }
