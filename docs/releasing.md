@@ -71,7 +71,7 @@ A wrong tag can be deleted and pushed again (`git push --delete origin v0.2.0`) 
 
 - The package points at the per-user installer, `Oversay_X.Y.Z_x64-setup.exe` (NSIS, `InstallerType: nullsoft`, `Scope: user`), by its release URL and the SHA256 GitHub shows for the asset (`gh release view vX.Y.Z --json assets`; winget wants it in capitals).
 - To update, from a Windows machine with [wingetcreate](https://github.com/microsoft/winget-create): `wingetcreate update Oversay.Oversay --version X.Y.Z --urls https://github.com/oversayapp/oversay/releases/download/vX.Y.Z/Oversay_X.Y.Z_x64-setup.exe --submit`. Without Windows, copy the newest folder under `manifests/o/Oversay/Oversay/` to `X.Y.Z/` in a fork of `microsoft/winget-pkgs`, change `PackageVersion` in all three files, the installer's URL and SHA256, `ReleaseDate`, `LicenseUrl` and `ReleaseNotesUrl`, and open the pull request titled `Update: Oversay.Oversay version X.Y.Z`. Run `winget validate --manifest <folder>` first where you can; the pull request's own checks run it too.
-- The first submission, 0.5.0, is [microsoft/winget-pkgs#485866](https://github.com/microsoft/winget-pkgs/pull/485866) (a new package; it was not validated on Windows before submitting). The Microsoft CLA bot asks the submitter to sign once.
+- The first submission, 0.5.0, is [microsoft/winget-pkgs#485875](https://github.com/microsoft/winget-pkgs/pull/485875) (a new package, from the `oversayapp` fork; it was not validated on Windows before submitting). The Microsoft CLA bot asks the submitter to sign once.
 - Check it with `winget show Oversay.Oversay` after the pull request is merged; it can take a day or two to appear.
 
 ## Homebrew
