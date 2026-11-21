@@ -22,7 +22,14 @@
   const installed = $derived((info?.targets.some((t) => t.installedVersion !== null) ?? false) || addedChatApps($settings.aiAdded).length > 0)
   const found = $derived(info?.targets.filter((t) => t.found && t.installedVersion === null) ?? [])
 
-  const PROMPT = 'Create an Oversay note for my catch-up with Sam tomorrow: hiring, her promotion case, the offsite. Then show it.'
+  const PROMPT = 'Add a two-minute point about the offsite to my catch-up with Sam.'
+
+  /** "Claude Code and Codex": the apps on this computer that have the skill. */
+  const installedIn = $derived.by(() => {
+    const names = (info?.targets ?? []).filter((t) => t.installedVersion !== null).map((t) => TARGET_LABELS[t.id].name)
+    if (names.length === 0) return 'Installed in your AI app'
+    return `Installed in ${names.length > 1 ? `${names.slice(0, -1).join(', ')} and ${names[names.length - 1]}` : names[0]}`
+  })
 
   function install(target: SkillTarget) {
     logAction('install skill from home', target)
@@ -47,16 +54,16 @@
       <span class="kicon"><Icon name="ai" size={18} /></span>
       <div class="grow">
         {#if installed}
-          <h2>Your AI can write notes</h2>
-          <p class="muted">Ask it for a note; it appears in Notes, even when Oversay is closed.</p>
+          <h2>Your AI can manage your decks</h2>
+          <p class="muted">{installedIn}. Ask it to make a deck, change one, add to it or find one.</p>
         {:else}
-          <h2>Let your AI write your meeting notes</h2>
+          <h2>Manage your decks from your AI app</h2>
           <p class="muted">
-            Tell Claude, Codex or ChatGPT what the meeting is about. It writes the note into Oversay, ready to show on screen during the call.
+            Add the Oversay skill to Claude, Codex or ChatGPT. Then ask it to make a deck, change one, add points to it, or find one, including your
+            workspaces.
           </p>
         {/if}
       </div>
-      {#if installed}<button class="ghost" onclick={goAi}>Manage</button>{/if}
       <button class="x" title="Hide" aria-label="Hide" onclick={() => attempt(hideAiCard)}><Icon name="close" size={15} /></button>
     </div>
     {#if installed}
@@ -64,11 +71,15 @@
         <span class="grow">“{PROMPT}”</span>
         <button class="x" title={copied ? 'Copied' : 'Copy'} aria-label="Copy" onclick={copy}><Icon name={copied ? 'check' : 'copy'} size={15} /></button>
       </div>
+      <div class="apps">
+        <span class="pill"><Icon name="check" size={13} /> Installed</span>
+        <button class="ghost" onclick={goAi}>Manage</button>
+      </div>
     {:else}
       <div class="how3">
-        <div><b>1 · Install</b>Add the Oversay skill to your AI app. One click for apps on this computer.</div>
-        <div><b>2 · Ask</b>“Create a note for my catch-up with Sam: hiring, her promotion case, the offsite.”</div>
-        <div><b>3 · Show it</b>The note is in Notes. Show puts it beside the call, hidden from screen sharing.</div>
+        <div><b>1 · Add the skill</b>One click for apps on this computer.</div>
+        <div><b>2 · Ask</b>“Make a deck for my catch-up with Sam: hiring, her promotion case, the offsite.”</div>
+        <div><b>3 · Show it</b>Put the deck beside your call. It stays hidden from screen sharing.</div>
       </div>
       <div class="apps">
         {#if found.length > 0}<span class="muted small">On this computer:</span>{/if}
@@ -87,7 +98,7 @@
 <style>
   .aicard {
     border: 1px solid var(--line);
-    border-left: 4px solid var(--c-note);
+    border-left: 4px solid var(--ok);
     border-radius: 14px;
     background: var(--card);
     padding: 16px 18px;
@@ -131,8 +142,8 @@
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    background: var(--c-note-bg);
-    color: var(--c-note);
+    background: var(--ok-bg);
+    color: var(--ok);
     flex: none;
   }
 
@@ -216,6 +227,19 @@
     background: none;
     padding: 4px;
     color: var(--muted);
+  }
+
+  .pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    font-size: 12px;
+    font-weight: 600;
+    border-radius: 99px;
+    padding: 2px 9px;
+    background: var(--ok-bg);
+    color: var(--ok);
+    white-space: nowrap;
   }
 
   .say {
