@@ -8,7 +8,7 @@ PORT ?= 1420
 # matching the shell that runs it.
 HERE := [/]$(patsubst /%,%,$(CURDIR))
 
-.PHONY: help setup doctor dev dev-fg logs stop crash check pr-checks hooks skills skill-try shots fetch build verify-mac clean clean-rust
+.PHONY: help setup doctor dev prod dev-fg logs stop crash check pr-checks hooks skills skill-try shots fetch build verify-mac clean clean-rust
 
 help: ## List targets
 	@grep -E '^[a-z-]+:.*## ' $(MAKEFILE_LIST) | awk -F':.*## ' '{printf "  make %-10s %s\n", $$1, $$2}'
@@ -33,6 +33,10 @@ dev: ## Start the app from source in the background (PORT=1420); log in out/dev.
 	@cd app && { [ -d node_modules ] || npm ci; }
 	@cd app && nohup sh -c '$(subst ','"'"',$(TAURI_DEV))' > ../out/dev.log 2>&1 < /dev/null &
 	@echo "Starting on port $(PORT). make logs to follow it, make stop to stop it. Log: out/dev.log"
+
+prod: ## Build the release app (signs in to the prod cloud stage, unsigned) and open it; slow the first time
+	@cd app && { [ -d node_modules ] || npm ci; } && mise exec -- npm run tauri build -- --bundles app
+	@open app/src-tauri/target/release/bundle/macos/Oversay.app
 
 dev-fg: ## Run the app from source in this terminal (Ctrl+C stops it); also logs to out/dev.log
 	@$(RUNNING_CHECK)

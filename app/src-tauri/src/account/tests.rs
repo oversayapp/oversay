@@ -849,3 +849,30 @@ fn deleting_the_account_when_signed_out_makes_no_request() {
     );
     assert!(calls.lock().unwrap().api_deletes.is_empty());
 }
+
+#[test]
+fn a_debug_build_signs_in_to_dev_and_a_release_build_to_prod_unless_told_otherwise() {
+    assert_eq!(stage_for(None, false), Some(DEV));
+    assert_eq!(stage_for(None, true), Some(PROD));
+}
+
+#[test]
+fn a_stage_named_at_build_time_wins_in_either_kind_of_build() {
+    for release in [false, true] {
+        assert_eq!(stage_for(Some("dev"), release), Some(DEV));
+        assert_eq!(stage_for(Some("prod"), release), Some(PROD));
+    }
+}
+
+#[test]
+fn a_stage_the_table_does_not_know_has_no_account() {
+    assert_eq!(stage_for(Some("staging"), false), None);
+    assert_eq!(stage_for(Some("staging"), true), None);
+}
+
+#[test]
+fn the_stages_do_not_share_a_pool_a_client_or_an_api() {
+    assert_ne!(DEV.hosted_page, PROD.hosted_page);
+    assert_ne!(DEV.client_id, PROD.client_id);
+    assert_ne!(DEV.api, PROD.api);
+}
