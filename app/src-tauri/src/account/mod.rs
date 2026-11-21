@@ -40,12 +40,29 @@ pub const DEV: Stage = Stage {
     api: "https://wf4garww7g.execute-api.eu-west-1.amazonaws.com",
 };
 
-/// The stage this build signs in to: `OVERSAY_ACCOUNT_STAGE` when it was built, `dev` by default.
-/// A build for a stage this table doesn't know has no account at all. `prod` comes with epic 036's
-/// prod slice.
+/// The `prod` stage (web-api's `sst.config.ts` outputs for `--stage prod`: hostedUi, desktopClientId,
+/// api). A separate pool, client and database from `dev`.
+pub const PROD: Stage = Stage {
+    name: "prod",
+    hosted_page: "https://oversay-prod.auth.eu-west-1.amazoncognito.com",
+    client_id: "35e5b7f06jq6afrs4mpoev8dbc",
+    api: "https://og4icgd802.execute-api.eu-west-1.amazonaws.com",
+};
+
+/// The stage this build signs in to: `OVERSAY_ACCOUNT_STAGE` when it was built, else `dev` for a
+/// debug build (`make dev`, the tests) and `prod` for a release build, so development can't reach
+/// real accounts by accident. A stage this table doesn't know has no account at all.
 pub fn built_stage() -> Option<Stage> {
-    match option_env!("OVERSAY_ACCOUNT_STAGE").unwrap_or("dev") {
+    stage_for(
+        option_env!("OVERSAY_ACCOUNT_STAGE"),
+        !cfg!(debug_assertions),
+    )
+}
+
+fn stage_for(named: Option<&str>, release: bool) -> Option<Stage> {
+    match named.unwrap_or(if release { "prod" } else { "dev" }) {
         "dev" => Some(DEV),
+        "prod" => Some(PROD),
         _ => None,
     }
 }
