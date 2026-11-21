@@ -1833,20 +1833,24 @@ mod workspace_folder {
         assert!(scan.decks.is_empty() && scan.incomplete);
         let _ = fs::remove_dir_all(&dir);
 
-        let dir = temp("link");
-        let outside = temp("link-target");
-        write(&outside, "secret.json", &json("w_aaaaaaa2", "Elsewhere"));
-        fs::create_dir_all(dir.join("Linked")).unwrap();
+        // Making a link needs a Unix computer here (Windows makes them only with special rights),
+        // so the half that follows runs there.
         #[cfg(unix)]
-        std::os::unix::fs::symlink(
-            outside.join("secret.json"),
-            dir.join("Linked/workspace.json"),
-        )
-        .unwrap();
-        let scan = WorkspaceFolder(dir.clone()).scan().unwrap();
-        assert!(scan.decks.is_empty() && scan.incomplete);
-        let _ = fs::remove_dir_all(dir);
-        let _ = fs::remove_dir_all(outside);
+        {
+            let dir = temp("link");
+            let outside = temp("link-target");
+            write(&outside, "secret.json", &json("w_aaaaaaa2", "Elsewhere"));
+            fs::create_dir_all(dir.join("Linked")).unwrap();
+            std::os::unix::fs::symlink(
+                outside.join("secret.json"),
+                dir.join("Linked/workspace.json"),
+            )
+            .unwrap();
+            let scan = WorkspaceFolder(dir.clone()).scan().unwrap();
+            assert!(scan.decks.is_empty() && scan.incomplete);
+            let _ = fs::remove_dir_all(dir);
+            let _ = fs::remove_dir_all(outside);
+        }
     }
 
     #[test]
