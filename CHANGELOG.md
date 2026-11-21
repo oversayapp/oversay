@@ -6,7 +6,66 @@ Notable changes to Oversay, newest first. The format follows [Keep a Changelog](
 
 ## [Unreleased]
 
-### Fixed
+## [0.5.0] · 2026-11-21
+
+Cloud saving, a Library, a new deck editor and a simpler control panel. Everything below landed after 0.4.0.
+
+### Account: optional cloud saving · 2026-11-19 ([epic 036](https://github.com/oversayapp/oversay/issues/54), [oversayapp/web-api#1](https://github.com/oversayapp/web-api/issues/1))
+
+#### Added
+- **Settings › Account**: create an account or sign in (Google, Apple, Microsoft or email) on a hosted page in your browser; Oversay never sees a password. Signed out, Oversay makes no request and works exactly as before. An account item sits on the rail above Settings.
+- **Save decks to the cloud** (off until you turn it on): each deck's cards and sessions, and each workspace, are kept in step between computers. Edits upload within seconds, offline edits wait until you are back online, a deck edited on two computers keeps both versions (the second as "(conflict copy)"), and moving a deck to the Trash deletes it from the cloud and the other computer's Library. Audio, transcripts, reviews and resources stay on the computer.
+- **Delete account** removes the account and its cloud copy; local decks stay.
+- Signing in means agreeing to the Terms and the Privacy policy; `PRIVACY.md` summarises the policy.
+
+### Library: decks and workspaces in one place · 2026-11-18 ([epic 036 (#54)](https://github.com/oversayapp/oversay/issues/54))
+
+#### Added
+- **Library** on the rail replaces Decks and Workspaces: Recent, Pinned and This week, Unsorted, each workspace, then All decks (workspaces A to Z). One **+ New** (⌘N) and a command bar (⌘K) that finds and acts.
+- A calmer **Home**: welcome, four shortcuts, Pick up where you left off, Recent and Pinned.
+- **Templates** start decks: their segments become cards with kinds and times.
+- Four example decks and two example workspaces on the first run.
+
+#### Changed
+- A workspace's description is edited in place and searched. Deleting a template or deck says first whether it can be brought back.
+
+#### Removed
+- The Workspaces page's tag rename, merge, delete and colour screens, which have no place in the Library.
+
+### Editors: resources in the workspace, a new deck editor · 2026-11-18 ([epic 037 (#59)](https://github.com/oversayapp/oversay/issues/59))
+
+#### Added
+- The **deck editor**: a plan bar across the middle over **Cards | Settings**, a slim left column with the preview and the deck's facts, and Settings in four groups.
+- **Record on start**: a deck can switch recording on or off for itself, overriding **Auto record** (written to the deck's `deck.md`).
+- Resources belong to the workspace, and **Add resource to workspace** is in the editor.
+
+### Control panel: the Look card and a flat menu · 2026-11-20 ([epic 030 (#29)](https://github.com/oversayapp/oversay/issues/29))
+
+#### Added
+- The **Look card** at the right edge: opacity (See-through to Solid), dark or light panel, Card or Agenda view. The menu-bar and tray menu is one flat list: what is running, Start or Pause, Next, Previous, Stop, the look, Hide from screen sharing. The card's time shows beside the Mac menu-bar icon, and in the Windows tray tooltip.
+
+#### Changed
+- The 50% opacity floor is gone: opacity goes down to 40%. Quit asks first while a deck runs.
+
+#### Removed
+- The **Timeline** (Waveform, Edge strip and look-back), its shortcut ⌃⌥T and its settings. Saved values for the Timeline style, Buttons, Edge strip, text size and Shows are ignored and dropped the next time settings are saved, so going back to 0.4.0 forgets them.
+
+### Sessions: one filtered list · 2026-11-18 ([epic 029 (#28)](https://github.com/oversayapp/oversay/issues/28))
+
+#### Changed
+- **Sessions** is one list, newest first, with tabs (All, This week, Needs a review) and saved views, chips for workspace, deck, status and date, and grouping by day or month. Rows show ran against planned as a bar. Choosing one deck shows its Record on start setting, run stats and a planned-versus-actual trend. Search also finds sessions by workspace and note.
+
+### AI skill: installing and the Home banner · 2026-11-19 ([epic 038](https://github.com/oversayapp/design/issues/10))
+
+#### Added
+- The Oversay skill installs from a marketplace and a plugin that match the app's version, with copy buttons for the Claude app, Claude Code and Codex, and a zip to save. The Home banner offers it and, once installed, shows a Manage button and a prompt to copy.
+
+### Install and update
+
+#### Added
+- `brew install oversayapp/tap/oversay` on a Mac; a release now updates the Homebrew cask.
+
+#### Fixed
 - The portable Windows build's **Open the release page** button now has a page to open when an update is found: the update feed names the release.
 
 ## [0.4.0] · 2026-11-17
@@ -237,5 +296,6 @@ Work on how Oversay is built, checked and tracked, newest first.
 - 2026-10-12: Work is tracked in GitHub Issues, with the history of the earlier tickets kept.
 - 2026-10-06: Builds for macOS and Windows in CI; checks on every pull request; actions logged without their content in development builds.
 
-[Unreleased]: https://github.com/oversayapp/oversay/compare/v0.4.0...main
+[Unreleased]: https://github.com/oversayapp/oversay/compare/v0.5.0...main
+[0.5.0]: https://github.com/oversayapp/oversay/compare/v0.4.0...v0.5.0
 [0.4.0]: https://github.com/oversayapp/oversay/releases/tag/v0.4.0
