@@ -50,7 +50,13 @@ Merging to `main` no longer builds installers (22 Oct). On the free plan, a Wind
    - **windows** and **macos** build the installers;
    - **tagged-release** makes a release named after the tag (private while this repository is, public once it is), in this repository, with the files below.
    - **homebrew** then points the Homebrew cask at the new `.dmg` (below).
-5. **winget** is a manual pull request to Microsoft's catalogue ([winget](#winget), below). Do it once the release has its assets.
+5. **winget** is a manual pull request to Microsoft's catalogue ([winget](#winget), below). Do it once the release has its assets, from a Windows machine:
+
+   ```sh
+   wingetcreate update Oversay.Oversay --version X.Y.Z --urls https://github.com/oversayapp/oversay/releases/download/vX.Y.Z/Oversay_X.Y.Z_x64-setup.exe --submit
+   ```
+
+   Microsoft's reviewers merge it, usually within a few days.
 6. Hand the installers out as before.
 
 What the release holds:
@@ -67,7 +73,7 @@ A wrong tag can be deleted and pushed again (`git push --delete origin v0.2.0`) 
 
 ## winget
 
-`Oversay.Oversay` is listed in Microsoft's catalogue, `microsoft/winget-pkgs`, so Windows users can `winget install Oversay.Oversay` and `winget upgrade`. Unlike the Homebrew tap, the catalogue is Microsoft's, so every version is a pull request from a person's GitHub account that Microsoft's reviewers merge. Nothing in the release workflow does it (oversayapp/oversay#89 tracks automating it).
+`Oversay.Oversay` is listed in Microsoft's catalogue, `microsoft/winget-pkgs`, so Windows users can `winget install Oversay` (the package id `Oversay.Oversay` works too) and `winget upgrade`. Unlike the Homebrew tap, the catalogue is Microsoft's, so every version is a pull request from a person's GitHub account that Microsoft's reviewers merge. Nothing in the release workflow does it (oversayapp/oversay#89 tracks automating it).
 
 - The package points at the per-user installer, `Oversay_X.Y.Z_x64-setup.exe` (NSIS, `InstallerType: nullsoft`, `Scope: user`), by its release URL and the SHA256 GitHub shows for the asset (`gh release view vX.Y.Z --json assets`; winget wants it in capitals).
 - To update, from a Windows machine with [wingetcreate](https://github.com/microsoft/winget-create): `wingetcreate update Oversay.Oversay --version X.Y.Z --urls https://github.com/oversayapp/oversay/releases/download/vX.Y.Z/Oversay_X.Y.Z_x64-setup.exe --submit`. Without Windows, copy the newest folder under `manifests/o/Oversay/Oversay/` to `X.Y.Z/` in a fork of `microsoft/winget-pkgs`, change `PackageVersion` in all three files, the installer's URL and SHA256, `ReleaseDate`, `LicenseUrl` and `ReleaseNotesUrl`, and open the pull request titled `Update: Oversay.Oversay version X.Y.Z`. Run `winget validate --manifest <folder>` first where you can; the pull request's own checks run it too.
