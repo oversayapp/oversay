@@ -52,12 +52,29 @@ fn copy_tree(from: &Path, to: &Path) -> io::Result<()> {
             copy_tree(&entry.path(), &to.join(entry.file_name()))?;
         }
     } else if meta.file_type().is_symlink() {
-        // An alias is not followed (the list never does): it is left behind.
+        // An alias is not followed (the list never does). `move_up` never hands one in.
         return Ok(());
     } else {
         fs::copy(from, to)?;
     }
     Ok(())
+}
+
+/// Whether `path` is an alias, or a folder with one anywhere inside it.
+fn holds_alias(path: &Path) -> io::Result<bool> {
+    let meta = fs::symlink_metadata(path)?;
+    if meta.file_type().is_symlink() {
+        return Ok(true);
+    }
+    if !meta.is_dir() {
+        return Ok(false);
+    }
+    for entry in fs::read_dir(path)? {
+        if holds_alias(&entry?.path())? {
+            return Ok(true);
+        }
+    }
+    Ok(false)
 }
 
 fn remove_any(path: &Path) -> io::Result<()> {
@@ -76,15 +93,18 @@ fn move_any(from: &Path, to: &Path) -> io::Result<()> {
 }
 
 /// Moves what is in `from` (a deck's `resources/`) into the first of `targets` (workspaces'
-/// `resources/`) and copies it into the rest. Nothing is overwritten.
-pub fn move_up(from: &Path, targets: &[PathBuf]) -> io::Result<Vec<Placed>> {
+/// `resources/`) and copies it into the rest. Nothing is overwritten. An alias, or a folder with
+/// one inside it, is left where it is: it can't be copied, and removing the original would lose it.
+/// Returns what moved, and how many entries were left for that reason.
+pub fn move_up(from: &Path, targets: &[PathBuf]) -> io::Result<(Vec<Placed>, usize)> {
     let Some((first, rest)) = targets.split_first() else {
-        return Ok(vec![]);
+        return Ok((vec![], 0));
     };
     let Ok(entries) = fs::read_dir(from) else {
-        return Ok(vec![]);
+        return Ok((vec![], 0));
     };
     let mut placed = vec![];
+    let mut left = 0;
     for entry in entries {
         let entry = entry?;
         let name = entry.file_name().to_string_lossy().into_owned();
@@ -92,6 +112,10 @@ pub fn move_up(from: &Path, targets: &[PathBuf]) -> io::Result<Vec<Placed>> {
             continue;
         }
         let source = entry.path();
+        if holds_alias(&source)? {
+            left += 1;
+            continue;
+        }
         let mut to = vec![];
         // Copied everywhere first and the original removed after, so a failure part-way loses nothing.
         for dir in std::iter::once(first).chain(rest) {
@@ -104,7 +128,7 @@ pub fn move_up(from: &Path, targets: &[PathBuf]) -> io::Result<Vec<Placed>> {
         placed.push(Placed { from: source, to });
     }
     let _ = fs::remove_dir(from);
-    Ok(placed)
+    Ok((placed, left))
 }
 
 /// Puts what `move_up` did back: the first place back where it came from, the copies removed.
@@ -155,6 +179,8 @@ pub struct DeckPlan {
 pub struct Summary {
     files: usize,
     decks: usize,
+    /// Entries left in their decks because an alias is in them.
+    left: usize,
 }
 
 /// Runs once; afterwards (or if `resources-moved.json` exists) it does nothing and says so with none.
@@ -169,6 +195,7 @@ pub async fn move_deck_resources(
     }
     let mut all = vec![];
     let mut decks = 0;
+    let mut left = 0;
     for deck in plan {
         let Ok(folder) = deck_folder(&app, &deck.deck_path) else {
             continue;
@@ -179,16 +206,18 @@ pub async fn move_deck_resources(
             .filter_map(|id| workspace_folder(&app, id).ok())
             .map(|f| f.join(RESOURCES))
             .collect();
-        let moved = move_up(&folder.join(RESOURCES), &targets)
+        let (moved, kept) = move_up(&folder.join(RESOURCES), &targets)
             .map_err(|e| format!("Could not move a deck's resources: {e}"))?;
         if !moved.is_empty() {
             decks += 1;
         }
+        left += kept;
         all.extend(moved);
     }
     let summary = Summary {
         files: all.len(),
         decks,
+        left,
     };
     let text = serde_json::to_string(&Manifest {
         undone: false,
@@ -197,7 +226,7 @@ pub async fn move_deck_resources(
     .map_err(|e| e.to_string())?;
     crate::files::write_atomically(&manifest, &text)
         .map_err(|e| format!("Could not record the move: {e}"))?;
-    Ok((summary.files > 0).then_some(summary))
+    Ok((summary.files > 0 || summary.left > 0).then_some(summary))
 }
 
 /// Undo for the note: puts every moved resource back where it came from. Returns how many.
@@ -236,12 +265,26 @@ mod tests {
         res
     }
 
+    /// Puts an alias at `at` to a file of the person's own, which is returned.
+    #[cfg(unix)]
+    fn alias_at(root: &Path, at: &Path) -> PathBuf {
+        let target = root.join("elsewhere.txt");
+        fs::write(&target, "mine").unwrap();
+        std::os::unix::fs::symlink(&target, at).unwrap();
+        target
+    }
+
+    #[cfg(unix)]
+    fn is_alias(path: &Path) -> bool {
+        fs::symlink_metadata(path).is_ok_and(|m| m.file_type().is_symlink())
+    }
+
     #[test]
     fn a_deck_in_one_workspace_moves_its_resources_up() {
         let root = temp("one");
         let from = deck_with(&root, &["a.pdf", "b.txt"]);
         let ws = root.join("WS").join("resources");
-        let placed = move_up(&from, std::slice::from_ref(&ws)).unwrap();
+        let (placed, _) = move_up(&from, std::slice::from_ref(&ws)).unwrap();
         assert_eq!(placed.len(), 2);
         assert!(ws.join("a.pdf").exists() && ws.join("b.txt").exists());
         assert!(!from.exists(), "the deck's folder of resources is gone");
@@ -265,7 +308,7 @@ mod tests {
     fn a_deck_in_none_keeps_its_resources() {
         let root = temp("none");
         let from = deck_with(&root, &["a.pdf"]);
-        assert!(move_up(&from, &[]).unwrap().is_empty());
+        assert!(move_up(&from, &[]).unwrap().0.is_empty());
         assert!(from.join("a.pdf").exists());
     }
 
@@ -292,6 +335,53 @@ mod tests {
         assert!(ws.join("Slides").join("1.png").exists());
     }
 
+    // Windows can't make links without special rights, so these run where a test can.
+    #[cfg(unix)]
+    #[test]
+    fn an_alias_in_the_deck_is_left_where_it_is() {
+        let root = temp("alias");
+        let from = deck_with(&root, &["a.pdf"]);
+        let target = alias_at(&root, &from.join("shortcut"));
+        let ws = root.join("WS").join("resources");
+        let (placed, left) = move_up(&from, std::slice::from_ref(&ws)).unwrap();
+        assert_eq!(placed.len(), 1, "only the file moved");
+        assert_eq!(left, 1, "the alias was counted as left");
+        assert!(ws.join("a.pdf").exists());
+        assert!(is_alias(&from.join("shortcut")), "the alias is still there");
+        assert_eq!(fs::read_to_string(&target).unwrap(), "mine");
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn a_folder_holding_an_alias_stays_whole() {
+        let root = temp("alias-in-folder");
+        let from = deck_with(&root, &[]);
+        fs::create_dir_all(from.join("Slides")).unwrap();
+        fs::write(from.join("Slides").join("1.png"), "x").unwrap();
+        alias_at(&root, &from.join("Slides").join("shortcut"));
+        let ws = root.join("WS").join("resources");
+        let (placed, left) = move_up(&from, std::slice::from_ref(&ws)).unwrap();
+        assert!(placed.is_empty(), "nothing moved, so nothing is half-moved");
+        assert_eq!(left, 1);
+        assert!(from.join("Slides").join("1.png").exists());
+        assert!(is_alias(&from.join("Slides").join("shortcut")));
+        assert!(!ws.join("Slides").exists());
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn undo_after_an_alias_was_left_puts_the_rest_back() {
+        let root = temp("alias-undo");
+        let from = deck_with(&root, &["a.pdf"]);
+        alias_at(&root, &from.join("shortcut"));
+        let ws = root.join("WS").join("resources");
+        let (placed, _) = move_up(&from, std::slice::from_ref(&ws)).unwrap();
+        assert_eq!(undo(&placed).unwrap(), 1);
+        assert_eq!(fs::read_to_string(from.join("a.pdf")).unwrap(), "a.pdf");
+        assert!(is_alias(&from.join("shortcut")));
+        assert!(!ws.join("a.pdf").exists());
+    }
+
     #[test]
     fn undo_puts_everything_back_and_removes_the_copies() {
         let root = temp("undo");
@@ -300,7 +390,7 @@ mod tests {
             root.join("W1").join("resources"),
             root.join("W2").join("resources"),
         );
-        let placed = move_up(&from, &[w1.clone(), w2.clone()]).unwrap();
+        let (placed, _) = move_up(&from, &[w1.clone(), w2.clone()]).unwrap();
         assert_eq!(undo(&placed).unwrap(), 1);
         assert_eq!(fs::read_to_string(from.join("a.pdf")).unwrap(), "a.pdf");
         assert!(!w1.join("a.pdf").exists() && !w2.join("a.pdf").exists());

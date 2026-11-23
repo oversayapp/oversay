@@ -61,7 +61,14 @@ describe('the one-time move up (ADR 0046)', () => {
   })
 
   it('words the note', () => {
-    expect(movedNote({ files: 1, decks: 1 })).toBe('Moved 1 resource from 1 deck up to its workspace.')
-    expect(movedNote({ files: 5, decks: 2 })).toBe('Moved 5 resources from 2 decks up to their workspaces.')
+    expect(movedNote({ files: 1, decks: 1, left: 0 })).toBe('Moved 1 resource from 1 deck up to its workspace.')
+    expect(movedNote({ files: 5, decks: 2, left: 0 })).toBe('Moved 5 resources from 2 decks up to their workspaces.')
+  })
+
+  it('says what stayed because of an alias', () => {
+    expect(movedNote({ files: 2, decks: 1, left: 1 })).toBe(
+      "Moved 2 resources from 1 deck up to its workspace. 1 item with an alias in it was left in the deck's folder.",
+    )
+    expect(movedNote({ files: 0, decks: 0, left: 3 })).toBe("3 items with an alias in them were left in the deck's folder.")
   })
 })

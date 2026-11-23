@@ -51,15 +51,20 @@ export function movePlan(decks: readonly { id: string; path: string }[], workspa
 export interface MoveSummary {
   files: number
   decks: number
+  /** Entries left in their decks because an alias is in them. */
+  left: number
 }
 
-export const movedNote = (s: MoveSummary): string =>
-  `Moved ${count(s.files, 'resource')} from ${count(s.decks, 'deck')} up to ${s.decks === 1 ? 'its workspace' : 'their workspaces'}.`
+export const movedNote = (s: MoveSummary): string => {
+  const moved = s.files > 0 ? `Moved ${count(s.files, 'resource')} from ${count(s.decks, 'deck')} up to ${s.decks === 1 ? 'its workspace' : 'their workspaces'}.` : ''
+  const left = s.left > 0 ? `${count(s.left, 'item')} with an alias in ${s.left === 1 ? 'it was' : 'them were'} left in the deck's folder.` : ''
+  return [moved, left].filter(Boolean).join(' ')
+}
 
 /** Runs the one-time move (once only; Rust remembers). Returns what moved, or null when nothing did. */
 export async function moveDeckResources(plan: readonly DeckPlan[]): Promise<MoveSummary | null> {
   const summary = await invoke<MoveSummary | null>('move_deck_resources', { plan })
-  if (summary) logAction('resources moved up', `${summary.files} files from ${summary.decks} decks`)
+  if (summary) logAction('resources moved up', `${summary.files} files from ${summary.decks} decks, ${summary.left} left`)
   return summary
 }
 
