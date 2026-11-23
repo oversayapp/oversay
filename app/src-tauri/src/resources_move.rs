@@ -265,6 +265,20 @@ mod tests {
         res
     }
 
+    /// Puts an alias at `at` to a file of the person's own, which is returned.
+    #[cfg(unix)]
+    fn alias_at(root: &Path, at: &Path) -> PathBuf {
+        let target = root.join("elsewhere.txt");
+        fs::write(&target, "mine").unwrap();
+        std::os::unix::fs::symlink(&target, at).unwrap();
+        target
+    }
+
+    #[cfg(unix)]
+    fn is_alias(path: &Path) -> bool {
+        fs::symlink_metadata(path).is_ok_and(|m| m.file_type().is_symlink())
+    }
+
     #[test]
     fn a_deck_in_one_workspace_moves_its_resources_up() {
         let root = temp("one");
@@ -327,16 +341,13 @@ mod tests {
     fn an_alias_in_the_deck_is_left_where_it_is() {
         let root = temp("alias");
         let from = deck_with(&root, &["a.pdf"]);
-        let target = root.join("elsewhere.txt");
-        fs::write(&target, "mine").unwrap();
-        std::os::unix::fs::symlink(&target, from.join("shortcut")).unwrap();
+        let target = alias_at(&root, &from.join("shortcut"));
         let ws = root.join("WS").join("resources");
         let (placed, left) = move_up(&from, std::slice::from_ref(&ws)).unwrap();
         assert_eq!(placed.len(), 1, "only the file moved");
         assert_eq!(left, 1, "the alias was counted as left");
         assert!(ws.join("a.pdf").exists());
-        let kept = fs::symlink_metadata(from.join("shortcut")).unwrap();
-        assert!(kept.file_type().is_symlink(), "the alias is still there");
+        assert!(is_alias(&from.join("shortcut")), "the alias is still there");
         assert_eq!(fs::read_to_string(&target).unwrap(), "mine");
     }
 
@@ -347,16 +358,13 @@ mod tests {
         let from = deck_with(&root, &[]);
         fs::create_dir_all(from.join("Slides")).unwrap();
         fs::write(from.join("Slides").join("1.png"), "x").unwrap();
-        let target = root.join("elsewhere.txt");
-        fs::write(&target, "mine").unwrap();
-        std::os::unix::fs::symlink(&target, from.join("Slides").join("shortcut")).unwrap();
+        alias_at(&root, &from.join("Slides").join("shortcut"));
         let ws = root.join("WS").join("resources");
         let (placed, left) = move_up(&from, std::slice::from_ref(&ws)).unwrap();
         assert!(placed.is_empty(), "nothing moved, so nothing is half-moved");
         assert_eq!(left, 1);
         assert!(from.join("Slides").join("1.png").exists());
-        let kept = fs::symlink_metadata(from.join("Slides").join("shortcut")).unwrap();
-        assert!(kept.file_type().is_symlink());
+        assert!(is_alias(&from.join("Slides").join("shortcut")));
         assert!(!ws.join("Slides").exists());
     }
 
@@ -365,19 +373,12 @@ mod tests {
     fn undo_after_an_alias_was_left_puts_the_rest_back() {
         let root = temp("alias-undo");
         let from = deck_with(&root, &["a.pdf"]);
-        let target = root.join("elsewhere.txt");
-        fs::write(&target, "mine").unwrap();
-        std::os::unix::fs::symlink(&target, from.join("shortcut")).unwrap();
+        alias_at(&root, &from.join("shortcut"));
         let ws = root.join("WS").join("resources");
         let (placed, _) = move_up(&from, std::slice::from_ref(&ws)).unwrap();
         assert_eq!(undo(&placed).unwrap(), 1);
         assert_eq!(fs::read_to_string(from.join("a.pdf")).unwrap(), "a.pdf");
-        assert!(
-            fs::symlink_metadata(from.join("shortcut"))
-                .unwrap()
-                .file_type()
-                .is_symlink()
-        );
+        assert!(is_alias(&from.join("shortcut")));
         assert!(!ws.join("a.pdf").exists());
     }
 
