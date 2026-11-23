@@ -52,12 +52,29 @@ fn copy_tree(from: &Path, to: &Path) -> io::Result<()> {
             copy_tree(&entry.path(), &to.join(entry.file_name()))?;
         }
     } else if meta.file_type().is_symlink() {
-        // An alias is not followed (the list never does): it is left behind.
+        // An alias is not followed (the list never does). `move_up` never hands one in.
         return Ok(());
     } else {
         fs::copy(from, to)?;
     }
     Ok(())
+}
+
+/// Whether `path` is an alias, or a folder with one anywhere inside it.
+fn holds_alias(path: &Path) -> io::Result<bool> {
+    let meta = fs::symlink_metadata(path)?;
+    if meta.file_type().is_symlink() {
+        return Ok(true);
+    }
+    if !meta.is_dir() {
+        return Ok(false);
+    }
+    for entry in fs::read_dir(path)? {
+        if holds_alias(&entry?.path())? {
+            return Ok(true);
+        }
+    }
+    Ok(false)
 }
 
 fn remove_any(path: &Path) -> io::Result<()> {
@@ -76,7 +93,8 @@ fn move_any(from: &Path, to: &Path) -> io::Result<()> {
 }
 
 /// Moves what is in `from` (a deck's `resources/`) into the first of `targets` (workspaces'
-/// `resources/`) and copies it into the rest. Nothing is overwritten.
+/// `resources/`) and copies it into the rest. Nothing is overwritten. An alias, or a folder with
+/// one inside it, is left where it is: it can't be copied, and removing the original would lose it.
 pub fn move_up(from: &Path, targets: &[PathBuf]) -> io::Result<Vec<Placed>> {
     let Some((first, rest)) = targets.split_first() else {
         return Ok(vec![]);
@@ -92,6 +110,9 @@ pub fn move_up(from: &Path, targets: &[PathBuf]) -> io::Result<Vec<Placed>> {
             continue;
         }
         let source = entry.path();
+        if holds_alias(&source)? {
+            continue;
+        }
         let mut to = vec![];
         // Copied everywhere first and the original removed after, so a failure part-way loses nothing.
         for dir in std::iter::once(first).chain(rest) {
@@ -290,6 +311,43 @@ mod tests {
         let ws = root.join("WS").join("resources");
         move_up(&from, std::slice::from_ref(&ws)).unwrap();
         assert!(ws.join("Slides").join("1.png").exists());
+    }
+
+    // Windows can't make links without special rights, so these run where a test can.
+    #[cfg(unix)]
+    #[test]
+    fn an_alias_in_the_deck_is_left_where_it_is() {
+        let root = temp("alias");
+        let from = deck_with(&root, &["a.pdf"]);
+        let target = root.join("elsewhere.txt");
+        fs::write(&target, "mine").unwrap();
+        std::os::unix::fs::symlink(&target, from.join("shortcut")).unwrap();
+        let ws = root.join("WS").join("resources");
+        let placed = move_up(&from, std::slice::from_ref(&ws)).unwrap();
+        assert_eq!(placed.len(), 1, "only the file moved");
+        assert!(ws.join("a.pdf").exists());
+        let kept = fs::symlink_metadata(from.join("shortcut")).unwrap();
+        assert!(kept.file_type().is_symlink(), "the alias is still there");
+        assert_eq!(fs::read_to_string(&target).unwrap(), "mine");
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn a_folder_holding_an_alias_stays_whole() {
+        let root = temp("alias-in-folder");
+        let from = deck_with(&root, &[]);
+        fs::create_dir_all(from.join("Slides")).unwrap();
+        fs::write(from.join("Slides").join("1.png"), "x").unwrap();
+        let target = root.join("elsewhere.txt");
+        fs::write(&target, "mine").unwrap();
+        std::os::unix::fs::symlink(&target, from.join("Slides").join("shortcut")).unwrap();
+        let ws = root.join("WS").join("resources");
+        let placed = move_up(&from, std::slice::from_ref(&ws)).unwrap();
+        assert!(placed.is_empty(), "nothing moved, so nothing is half-moved");
+        assert!(from.join("Slides").join("1.png").exists());
+        let kept = fs::symlink_metadata(from.join("Slides").join("shortcut")).unwrap();
+        assert!(kept.file_type().is_symlink());
+        assert!(!ws.join("Slides").exists());
     }
 
     #[test]
