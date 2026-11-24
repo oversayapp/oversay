@@ -177,7 +177,9 @@
     if (!drag) return
     if (view) {
       const box = view.getBoundingClientRect()
-      view.scrollTop += edgeScrollStep(pointerY, box.top, box.bottom)
+      const step = edgeScrollStep(pointerY, box.top, box.bottom)
+      // Written only at an edge: writing it every frame would cut off a trackpad's momentum.
+      if (step) view.scrollTop += step
       if (view.scrollTop !== scrolledTo) {
         scrolledTo = view.scrollTop
         followPointer()
