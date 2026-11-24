@@ -406,6 +406,10 @@ export function moveTopic(doc: NoteDoc, from: number, position: number): { doc: 
   return headings(next.topics) === headings(topics) ? { doc: next, index: to } : unmoved
 }
 
+/** Moves topic `from` one place up (-1) or down (1), as moveTopic does. */
+export const moveTopicBy = (doc: NoteDoc, from: number, step: -1 | 1): { doc: NoteDoc; index: number } =>
+  moveTopic(doc, from, step === 1 ? from + 2 : from - 1)
+
 // ---- where each topic is in the text, for keeping the place when switching between tabs
 
 const lineCount = (item: Item) => (item.kind === 'kept' ? 1 : item.lines.length)

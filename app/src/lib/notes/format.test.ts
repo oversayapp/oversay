@@ -4,6 +4,7 @@ import {
   frontValue,
   insertPoint,
   moveTopic,
+  moveTopicBy,
   parseNoteDoc,
   parseTopicTime,
   pointsOf,
@@ -18,6 +19,7 @@ import {
   topicTimeText,
   writeNoteDoc,
   endOfTopic,
+  type NoteDoc,
 } from './format'
 
 const PRIYA = `---
@@ -311,5 +313,16 @@ describe('moveTopic: reordering cards (epic 041)', () => {
     expect(moveTopic(doc, 2, 1)).toEqual({ doc, index: 2 })
     expect(moveTopic(doc, 2, 1).doc).toBe(doc)
     expect(moveTopic(doc, 1, 3).doc).toBe(doc)
+  })
+
+  it('moves a card one place either way, and not past either end (keyboard-move-card/V4)', () => {
+    const doc = parseNoteDoc(THREE)
+    const names = (d: NoteDoc) => d.topics.slice(1).map((t) => t.name)
+    const up = moveTopicBy(doc, 2, -1)
+    expect([names(up.doc), up.index]).toEqual([['2', '1', '3'], 1])
+    const down = moveTopicBy(doc, 2, 1)
+    expect([names(down.doc), down.index]).toEqual([['1', '3', '2'], 3])
+    expect(moveTopicBy(doc, 1, -1).doc).toBe(doc)
+    expect(moveTopicBy(doc, 3, 1).doc).toBe(doc)
   })
 })

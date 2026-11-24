@@ -4,13 +4,15 @@
   // a sub-point and Shift+Tab a point again, Backspace on an empty point removes it, and the arrow
   // keys move between points. Lines the editor doesn't show are listed, read-only, where they are.
   // The deck editor uses it too, where a topic is a card with a kind beside its time.
-  // A topic with its own heading is dragged into another place by its grip.
+  // A topic with its own heading is dragged into another place by its grip, or moved one place
+  // with Alt+↑ / Alt+↓ while the grip has focus.
   import { onDestroy, tick } from 'svelte'
   import {
     addTopic,
     endOfTopic,
     insertPoint,
     moveTopic,
+    moveTopicBy,
     parseTopicTime,
     pointsOf,
     removePoint,
@@ -25,8 +27,9 @@
   } from '../lib/notes/format'
   import { SEGMENT_KINDS, type SegmentKind } from '../lib/project/types'
   import { dropIndex } from '../lib/project/lists'
-  import { edgeScrollStep } from '../lib/decks/reorder'
+  import { cardMoveStep, edgeScrollStep } from '../lib/decks/reorder'
   import { logAction } from '../lib/log'
+  import { isMac, shortcutText } from '../lib/session/shortcuts'
   import { count } from '../lib/words'
   import ConfirmDelete from './ConfirmDelete.svelte'
   import Icon from './Icon.svelte'
@@ -50,6 +53,7 @@
   } = $props()
 
   const Word = $derived(word[0].toUpperCase() + word.slice(1))
+  const moveKeys = `${shortcutText('Alt+ArrowUp', isMac())} ${shortcutText('Alt+ArrowDown', isMac())}`
 
   let box: HTMLElement | undefined = $state()
   let removing = $state<number | null>(null)
@@ -205,13 +209,21 @@
     drag = null
     cancelAnimationFrame(frame)
     // The file may have changed outside Oversay while the card was held.
-    if (commit && d && doc.topics[d.from]?.heading === d.heading) move(d.from, d.position, 'drag-card-order/V1')
+    // A drop where the card already is changes nothing.
+    if (!commit || !d || d.position === d.from || d.position === d.from + 1) return
+    if (doc.topics[d.from]?.heading === d.heading) move(d.from, moveTopic(doc, d.from, d.position), 'drag-card-order/V1')
   }
 
-  async function move(from: number, position: number, check: string) {
-    // A drop where the card already is.
-    if (position === from || position === from + 1) return
-    const moved = moveTopic(doc, from, position)
+  function onGripKey(e: KeyboardEvent, t: number) {
+    const step = cardMoveStep(e)
+    if (step === null || drag) return
+    e.preventDefault()
+    // The first and last cards stay where they are.
+    if (t + step < 1 || t + step >= doc.topics.length) return
+    move(t, moveTopicBy(doc, t, step), 'keyboard-move-card/V4')
+  }
+
+  async function move(from: number, moved: { doc: NoteDoc; index: number }, check: string) {
     if (moved.doc === doc) {
       logAction(`${word === 'card' ? 'deck' : 'note'} move ${word} refused`)
       refused = `That ${word} can’t move there: a code block that isn’t closed would take in the ${word}s after it. Close it in Markdown.`
@@ -269,7 +281,8 @@
             class="grip"
             data-grip={t}
             aria-label="Move {word} {topic.name || Word}"
-            title="Drag to reorder"
+            title="Drag to reorder, or press {moveKeys}"
+            onkeydown={(e) => onGripKey(e, t)}
             onpointerdown={(e) => startDrag(e, t)}
             onpointermove={dragTo}
             onpointerup={() => endDrag(true)}
@@ -356,7 +369,7 @@
   {/each}
   {#if refused}<p class="refused" role="status">{refused}</p>{/if}
   <button class="addtopic" onclick={newTopic}><Icon name="plus" size={16} /> Add {word}</button>
-  <p class="keys muted">Drag a {word}’s handle to reorder · Enter adds a point · Tab makes a sub-point · Shift+Tab undoes it · Backspace on an empty point removes it</p>
+  <p class="keys muted">Drag a {word}’s handle to reorder, or focus it and press {moveKeys} · Enter adds a point · Tab makes a sub-point · Shift+Tab undoes it · Backspace on an empty point removes it</p>
 </div>
 
 <style>
