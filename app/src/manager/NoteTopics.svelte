@@ -4,11 +4,13 @@
   // a sub-point and Shift+Tab a point again, Backspace on an empty point removes it, and the arrow
   // keys move between points. Lines the editor doesn't show are listed, read-only, where they are.
   // The deck editor uses it too, where a topic is a card with a kind beside its time.
-  import { tick } from 'svelte'
+  // A topic with its own heading is dragged into another place by its grip.
+  import { onDestroy, tick } from 'svelte'
   import {
     addTopic,
     endOfTopic,
     insertPoint,
+    moveTopic,
     parseTopicTime,
     pointsOf,
     removePoint,
@@ -22,6 +24,8 @@
     type Topic,
   } from '../lib/notes/format'
   import { SEGMENT_KINDS, type SegmentKind } from '../lib/project/types'
+  import { dropIndex } from '../lib/project/lists'
+  import { edgeScrollStep } from '../lib/decks/reorder'
   import { logAction } from '../lib/log'
   import { count } from '../lib/words'
   import ConfirmDelete from './ConfirmDelete.svelte'
@@ -132,6 +136,98 @@
     focus(`name:${added.index}`, 'all')
   }
 
+  // Reordering (pointer events, ADR 0010): the dragged topic and where it would land, as
+  // moveTopic counts positions. The heading is kept to tell if the file changed under the drag.
+  let drag = $state<{ from: number; position: number; heading: string | null } | null>(null)
+  /** Why the last move didn't happen. */
+  let refused = $state('')
+  let pointerY = 0
+  let frame = 0
+
+  const dragMoves = $derived(drag !== null && drag.position !== drag.from && drag.position !== drag.from + 1)
+
+  /** The insertion position under the pointer: only topics with a heading have places between them. */
+  function positionAt(y: number): number {
+    const rows = [...(box?.querySelectorAll<HTMLElement>('[data-card]') ?? [])]
+    return 1 + dropIndex(rows.map((row) => row.getBoundingClientRect()).map((r) => r.top + r.height / 2), y)
+  }
+
+  /** The nearest part of the page that scrolls the cards. */
+  function scroller(): HTMLElement | null {
+    for (let el = box?.parentElement ?? null; el; el = el.parentElement) {
+      if (/auto|scroll/.test(getComputedStyle(el).overflowY) && el.scrollHeight > el.clientHeight) return el
+    }
+    return null
+  }
+
+  function followPointer() {
+    if (drag) drag = { ...drag, position: positionAt(pointerY) }
+  }
+
+  // While a card is held near the top or bottom edge, the cards scroll under it.
+  function scrollAtEdge() {
+    if (!drag) return
+    const el = scroller()
+    if (el) {
+      const view = el.getBoundingClientRect()
+      const step = edgeScrollStep(pointerY, view.top, view.bottom)
+      if (step) {
+        el.scrollTop += step
+        followPointer()
+      }
+    }
+    frame = requestAnimationFrame(scrollAtEdge)
+  }
+
+  function startDrag(e: PointerEvent & { currentTarget: HTMLButtonElement }, t: number) {
+    if (e.button !== 0 || drag) return
+    e.preventDefault()
+    e.currentTarget.focus({ preventScroll: true })
+    try {
+      e.currentTarget.setPointerCapture(e.pointerId)
+    } catch {
+      // No capture for this pointer: the drag still follows its moves.
+    }
+    refused = ''
+    pointerY = e.clientY
+    drag = { from: t, position: positionAt(pointerY), heading: doc.topics[t].heading }
+    frame = requestAnimationFrame(scrollAtEdge)
+  }
+
+  function dragTo(e: PointerEvent) {
+    if (!drag) return
+    pointerY = e.clientY
+    followPointer()
+  }
+
+  function endDrag(commit: boolean) {
+    const d = drag
+    drag = null
+    cancelAnimationFrame(frame)
+    // The file may have changed outside Oversay while the card was held.
+    if (commit && d && doc.topics[d.from]?.heading === d.heading) move(d.from, d.position, 'drag-card-order/V1')
+  }
+
+  async function move(from: number, position: number, check: string) {
+    // A drop where the card already is.
+    if (position === from || position === from + 1) return
+    const moved = moveTopic(doc, from, position)
+    if (moved.doc === doc) {
+      logAction(`${word === 'card' ? 'deck' : 'note'} move ${word} refused`)
+      refused = `That ${word} can’t move there: a code block that isn’t closed would take in the ${word}s after it. Close it in Markdown.`
+      return
+    }
+    refused = ''
+    removing = null
+    logAction(`${word === 'card' ? 'deck' : 'note'} move ${word}`, `${from} to ${moved.index} check=${check}`)
+    onchange(moved.doc)
+    current = moved.index
+    await tick()
+    box?.querySelector<HTMLElement>(`[data-grip="${moved.index}"]`)?.focus()
+  }
+
+  onDestroy(() => cancelAnimationFrame(frame))
+
   function setTime(t: number, input: HTMLInputElement) {
     const value = input.value.trim().replace(/^\[|\]$/g, '')
     const topic = doc.topics[t]
@@ -145,16 +241,41 @@
   }
 </script>
 
-<div class="topics" bind:this={box}>
+<svelte:window
+  onkeydown={(e) => {
+    if (drag && e.key === 'Escape') {
+      e.preventDefault()
+      endDrag(false)
+    }
+  }}
+/>
+
+<div class="topics" class:moving={drag !== null} bind:this={box}>
   {#each cards as { topic, t } (t)}
     <section
       class="topic"
       class:cur={current === t}
       class:kinded={kinds}
+      class:dragging={drag?.from === t}
+      class:drop-before={dragMoves && drag?.position === t}
+      class:drop-after={dragMoves && t === doc.topics.length - 1 && drag?.position === doc.topics.length}
+      data-card={t > 0 ? t : undefined}
       style:--k={kinds ? `var(--k-${topic.segmentKind ?? 'topic'})` : null}
       onfocusin={() => (current = t)}
     >
       <div class="th">
+        {#if t > 0}
+          <button
+            class="grip"
+            data-grip={t}
+            aria-label="Move {word} {topic.name || Word}"
+            title="Drag to reorder"
+            onpointerdown={(e) => startDrag(e, t)}
+            onpointermove={dragTo}
+            onpointerup={() => endDrag(true)}
+            onpointercancel={() => endDrag(false)}><Icon name="grip" size={14} /></button
+          >
+        {/if}
         <span class="tnum">{cards.findIndex((c) => c.t === t) + 1}</span>
         {#if t === 0}
           <span class="tname lead">{noteName}</span>
@@ -233,8 +354,9 @@
       <button class="add" onclick={() => addPoint(t)}><Icon name="plus" size={14} /> Add point</button>
     </section>
   {/each}
+  {#if refused}<p class="refused" role="status">{refused}</p>{/if}
   <button class="addtopic" onclick={newTopic}><Icon name="plus" size={16} /> Add {word}</button>
-  <p class="keys muted">Enter adds a point · Tab makes a sub-point · Shift+Tab undoes it · Backspace on an empty point removes it</p>
+  <p class="keys muted">Drag a {word}’s handle to reorder · Enter adds a point · Tab makes a sub-point · Shift+Tab undoes it · Backspace on an empty point removes it</p>
 </div>
 
 <style>
@@ -253,6 +375,65 @@
   /* A deck's card: its kind's colour down its left edge, as on the flashcard widget. */
   .topic.kinded {
     border-left: 3px solid var(--k);
+  }
+
+  .grip {
+    border: 0;
+    background: none;
+    padding: 4px 2px;
+    margin: 0 -2px 0 -4px;
+    color: var(--faint);
+    display: inline-flex;
+    flex: none;
+    cursor: grab;
+    touch-action: none;
+  }
+
+  .grip:hover {
+    color: var(--text);
+  }
+
+  .moving,
+  .moving .grip {
+    cursor: grabbing;
+    user-select: none;
+  }
+
+  .topic {
+    position: relative;
+  }
+
+  .topic.dragging {
+    opacity: 0.5;
+  }
+
+  /* Where the dragged card will land: a line in the gap between cards. */
+  .topic.drop-before::before,
+  .topic.drop-after::after {
+    content: '';
+    position: absolute;
+    left: -3px;
+    right: 0;
+    height: 3px;
+    border-radius: 3px;
+    background: var(--accent);
+  }
+
+  .topic.drop-before::before {
+    top: -7px;
+  }
+
+  .topic.drop-after::after {
+    bottom: -7px;
+  }
+
+  .refused {
+    margin: 0 0 10px;
+    padding: 8px 12px;
+    border-radius: 10px;
+    background: var(--warn-bg);
+    color: var(--warn);
+    font-size: 13px;
   }
 
   .tkind {
