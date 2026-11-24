@@ -21,6 +21,7 @@
     setPointText,
     setTopic,
     topicTimeText,
+    writeNoteDoc,
     type NoteDoc,
     type PointItem,
     type Topic,
@@ -141,12 +142,14 @@
   }
 
   // Reordering (pointer events, ADR 0010): the dragged topic and where it would land, as
-  // moveTopic counts positions. The heading is kept to tell if the file changed under the drag.
-  let drag = $state<{ from: number; position: number; heading: string | null } | null>(null)
+  // moveTopic counts positions. The text is kept to tell if the file changed under the drag.
+  let drag = $state<{ pointer: number; from: number; position: number; text: string } | null>(null)
   /** Why the last move didn't happen. */
   let refused = $state('')
   let pointerY = 0
   let frame = 0
+  let view: HTMLElement | null = null
+  let scrolledTo = 0
 
   const dragMoves = $derived(drag !== null && drag.position !== drag.from && drag.position !== drag.from + 1)
 
@@ -168,19 +171,19 @@
     if (drag) drag = { ...drag, position: positionAt(pointerY) }
   }
 
-  // While a card is held near the top or bottom edge, the cards scroll under it.
-  function scrollAtEdge() {
+  // Each frame of a drag: a card held near the top or bottom edge scrolls the cards under it, and
+  // however they scrolled (the wheel too), the place under the pointer is found again.
+  function followScroll() {
     if (!drag) return
-    const el = scroller()
-    if (el) {
-      const view = el.getBoundingClientRect()
-      const step = edgeScrollStep(pointerY, view.top, view.bottom)
-      if (step) {
-        el.scrollTop += step
+    if (view) {
+      const box = view.getBoundingClientRect()
+      view.scrollTop += edgeScrollStep(pointerY, box.top, box.bottom)
+      if (view.scrollTop !== scrolledTo) {
+        scrolledTo = view.scrollTop
         followPointer()
       }
     }
-    frame = requestAnimationFrame(scrollAtEdge)
+    frame = requestAnimationFrame(followScroll)
   }
 
   function startDrag(e: PointerEvent & { currentTarget: HTMLButtonElement }, t: number) {
@@ -194,24 +197,32 @@
     }
     refused = ''
     pointerY = e.clientY
-    drag = { from: t, position: positionAt(pointerY), heading: doc.topics[t].heading }
-    frame = requestAnimationFrame(scrollAtEdge)
+    view = scroller()
+    scrolledTo = view?.scrollTop ?? 0
+    drag = { pointer: e.pointerId, from: t, position: positionAt(pointerY), text: writeNoteDoc(doc) }
+    frame = requestAnimationFrame(followScroll)
   }
 
+  // The pointer is followed on the window: the grip can be gone before the card is let go.
   function dragTo(e: PointerEvent) {
-    if (!drag) return
+    if (drag?.pointer !== e.pointerId) return
     pointerY = e.clientY
     followPointer()
+  }
+
+  function letGo(e: PointerEvent, commit: boolean) {
+    if (drag?.pointer === e.pointerId) endDrag(commit)
   }
 
   function endDrag(commit: boolean) {
     const d = drag
     drag = null
     cancelAnimationFrame(frame)
-    // The file may have changed outside Oversay while the card was held.
     // A drop where the card already is changes nothing.
     if (!commit || !d || d.position === d.from || d.position === d.from + 1) return
-    if (doc.topics[d.from]?.heading === d.heading) move(d.from, moveTopic(doc, d.from, d.position), 'drag-card-order/V1')
+    // The position counts the cards as they were: if the file changed outside Oversay while the
+    // card was held, nothing moves.
+    if (writeNoteDoc(doc) === d.text) move(d.from, moveTopic(doc, d.from, d.position), 'drag-card-order/V1')
   }
 
   function onGripKey(e: KeyboardEvent, t: number) {
@@ -227,6 +238,9 @@
     if (moved.doc === doc) {
       logAction(`${word === 'card' ? 'deck' : 'note'} move ${word} refused`)
       refused = `That ${word} can’t move there: a code block that isn’t closed would take in the ${word}s after it. Close it in Markdown.`
+      // The note is after the last card, which may be below the fold.
+      await tick()
+      box?.querySelector('.refused')?.scrollIntoView({ block: 'nearest' })
       return
     }
     refused = ''
@@ -254,6 +268,9 @@
 </script>
 
 <svelte:window
+  onpointermove={dragTo}
+  onpointerup={(e) => letGo(e, true)}
+  onpointercancel={(e) => letGo(e, false)}
   onkeydown={(e) => {
     if (drag && e.key === 'Escape') {
       e.preventDefault()
@@ -283,10 +300,7 @@
             aria-label="Move {word} {topic.name || Word}"
             title="Drag to reorder, or press {moveKeys}"
             onkeydown={(e) => onGripKey(e, t)}
-            onpointerdown={(e) => startDrag(e, t)}
-            onpointermove={dragTo}
-            onpointerup={() => endDrag(true)}
-            onpointercancel={() => endDrag(false)}><Icon name="grip" size={14} /></button
+            onpointerdown={(e) => startDrag(e, t)}><Icon name="grip" size={14} /></button
           >
         {/if}
         <span class="tnum">{cards.findIndex((c) => c.t === t) + 1}</span>

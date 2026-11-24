@@ -1,4 +1,5 @@
-// Operations on an ordered list of short texts (a segment's talking points or hints).
+// Operations on an ordered list: mostly short texts (a segment's talking points or hints); a move
+// by drag works on a list of anything.
 // All return new lists; the moves return the same list when nothing would change.
 
 export function insertItem(list: string[], index: number, text = ''): string[] {
@@ -25,7 +26,7 @@ export function moveItem(list: string[], index: number, delta: -1 | 1): string[]
  * Moves the item at `from` to an insertion position (0 is before the first, n after the last,
  * counted on the list before the move), as a drag drops it. Same list when it wouldn't move.
  */
-export function moveItemTo(list: string[], from: number, position: number): string[] {
+export function moveItemTo<T>(list: T[], from: number, position: number): T[] {
   if (from < 0 || from >= list.length) return list
   const at = Math.max(0, Math.min(position, list.length))
   if (at === from || at === from + 1) return list
