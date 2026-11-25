@@ -12,7 +12,7 @@ import { forgetQuickPath, listedQuickFiles, markOpened, renameQuickPath } from '
 import { diskChange, outsideName, whatChanged } from './outside'
 import { createDeck, deckNameOf, decks, findDeck, loadDecks, summariseDeck } from '../decks/store'
 import { deckId, setDeckTitle } from '../decks/deck'
-import { NO_HISTORY, record, stepBack, stepForward, type Edit, type History, type Spot } from './history'
+import { NO_HISTORY, record, retitle, stepBack, stepForward, type Edit, type EditKind, type History, type Spot } from './history'
 
 export interface NoteEntry {
   path: string
@@ -148,7 +148,7 @@ export async function openNoteAt(path: string, kind: EditedKind = 'notes'): Prom
 export function editNote(text: string, edit?: Edit): void {
   const note = get(openNote)
   if (!note || note.text === text) return
-  change(note, text, record(note.history, note.text, text, edit))
+  change(note, text, record(note.history, note.text, text, edit, Date.now()))
 }
 
 function change(note: OpenNote, text: string, history: History): void {
@@ -158,6 +158,9 @@ function change(note: OpenNote, text: string, history: History): void {
 }
 
 // ---- undo and redo (ADR 0052)
+
+/** The validation check each kind of step shows in the log. */
+const UNDO_CHECK: Record<EditKind, string> = { 'delete-point': 'V1', edit: 'V2', typing: 'V3' }
 
 /** What asked for an undo or a redo, for the debug log. */
 export type UndoBy = 'keys' | 'menu'
@@ -177,7 +180,7 @@ async function travel(way: 'undo' | 'redo', by: UndoBy): Promise<Undone> {
   const note = get(openNote)
   const to = note && (way === 'undo' ? stepBack : stepForward)(note.history)
   if (!note || !to) return null
-  logAction(`${word(note.kind)}.${way}`, `by=${by} what=${to.step.what} check=epic-043/V1`)
+  logAction(`${word(note.kind)}.${way}`, `by=${by} what=${to.step.what} check=epic-043/${UNDO_CHECK[to.step.what]}`)
   change(note, to.to.text, to.history)
   return { spot: to.to.spot }
 }
@@ -234,7 +237,9 @@ export async function renameOpenNote(name: string): Promise<string> {
   openNote.update((n) => (n && (n.path === note.path || n.path === to) ? { ...n, path: to, name: named } : n))
   if (note.kind === 'decks') {
     const now = get(openNote)
-    if (now?.path === to) editNote(writeNoteDoc(setDeckTitle(parseNoteDoc(now.text), named)))
+    // Not a step to undo: undoing keeps the new name, so every step takes it too.
+    const title = (text: string) => writeNoteDoc(setDeckTitle(parseNoteDoc(text), named))
+    if (now?.path === to && title(now.text) !== now.text) change(now, title(now.text), retitle(now.history, title))
     await flushNote()
   }
   await renameQuickPath(note.path, to, named)

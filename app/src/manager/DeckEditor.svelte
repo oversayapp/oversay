@@ -88,7 +88,7 @@
 
   function setAudience(value: string) {
     if (!doc || deckAudience(doc) === value.trim()) return
-    editNote(writeNoteDoc(setDeckAudience(doc, value)))
+    edit(setDeckAudience(doc, value))
   }
 
   // The workspaces this deck is in (ADR 0040): each opens with a click and has × to take the
@@ -101,7 +101,7 @@
   const tags = $derived(doc ? deckTags(doc) : [])
   let tagText = $state('')
   function setTags(next: string[]) {
-    if (doc) editNote(writeNoteDoc(setDeckTags(doc, next)))
+    if (doc) edit(setDeckTags(doc, next))
   }
   function addTag() {
     const tag = tagText.replace(/,/g, ' ').trim()
@@ -137,13 +137,13 @@
     if (!topic || topic.time?.seconds === seconds) return
     // `[~3m]` stays an estimate; an untimed card becomes timed.
     const about = !!topic.time?.open && topic.time.seconds > 0
-    change(setTopic(doc, t, { time: { seconds, open: about } }))
+    edit(setTopic(doc, t, { time: { seconds, open: about } }))
   }
 
   function setOption<K extends keyof DeckOptions>(option: K, value: DeckOptions[K]) {
     if (!doc || !options || options[option] === value) return
     logAction('deck option', `${option} ${String(value)}`)
-    editNote(writeNoteDoc(setDeckOption(doc, option, value)))
+    edit(setDeckOption(doc, option, value))
   }
 
   const PART_LABELS: Record<DeckPart, string> = { position: '2/4', bar: 'Deck bar', next: 'Next card', left: 'Time left', ends: 'Ends at' }
@@ -204,13 +204,28 @@
   // Undo and redo (ADR 0052). Where the editor is goes with each change, so undoing it can go
   // back there.
   let root: HTMLElement | undefined = $state()
-  const here = (card: number, focus: Focus | null): Spot => ({ view: page === 'settings' ? 'settings' : view === 'markdown' ? 'markdown' : 'cards', card, focus })
-  const change = (next: NoteDoc, how?: Change) =>
+  const here = (card = current, focus: Focus | null = null): Spot => ({ view: page === 'settings' ? 'settings' : view === 'markdown' ? 'markdown' : 'cards', card, focus })
+  /** An edit that moves neither the card being edited nor focus: the plan bar and the settings. */
+  const edit = (next: NoteDoc) => editNote(writeNoteDoc(next), { before: here(), after: here() })
+  const change = (next: NoteDoc, how: Change = {}) =>
     editNote(writeNoteDoc(next), {
-      what: how?.what,
-      before: here(how?.card ?? current, how?.before ?? null),
-      after: here(how?.card ?? current, how?.after ?? null),
+      what: how.what,
+      before: here(how.card, how.before),
+      after: here(how.to ?? how.card, how.after),
     })
+  let topics: NoteTopics | undefined = $state()
+
+  // Typing in the Markdown view: where the cursor was before each keystroke.
+  let mdSelected: [number, number] = [0, 0]
+  const md = (select: [number, number]): Focus => ({ field: 'textarea.md', select })
+  const selectionOf = (el: HTMLTextAreaElement): [number, number] => [el.selectionStart, el.selectionEnd]
+  function typeMarkdown(el: HTMLTextAreaElement) {
+    const before = here(current, md(mdSelected))
+    const text = el.value
+    const after = md(selectionOf(el))
+    followCursor()
+    editNote(text, { what: 'typing', before, after: here(current, after) })
+  }
 
   /** Where a key or a menu choice at `el` goes: whether the deck's undo takes it. */
   function undoTarget(el: EventTarget | null): UndoTarget {
@@ -230,7 +245,9 @@
 
   async function travel(way: Way, by: UndoBy) {
     const done = await (way === 'undo' ? undoNote : redoNote)(by)
-    if (done?.spot) await goTo(done.spot)
+    if (!done) return
+    topics?.settle()
+    if (done.spot) await goTo(done.spot)
   }
 
   /** Shows where an undone or redone change was made, with focus where it was. */
@@ -422,7 +439,7 @@
         {#if page === 'cards'}
           <div class="main">
         {#if view === 'edit'}
-          <NoteTopics {doc} noteName={deck.name} onchange={change} bind:current word="card" kinds />
+          <NoteTopics bind:this={topics} {doc} noteName={deck.name} onchange={change} bind:current word="card" kinds />
           {#if $justRan !== deck.path}<DeckAfter path={deck.path} />{/if}
         {:else}
           <textarea
@@ -432,10 +449,8 @@
             spellcheck="true"
             bind:this={area}
             value={deck.text}
-            oninput={(e) => {
-              editNote(e.currentTarget.value)
-              followCursor()
-            }}
+            onbeforeinput={(e) => (mdSelected = selectionOf(e.currentTarget))}
+            oninput={(e) => typeMarkdown(e.currentTarget)}
             onclick={followCursor}
             onkeyup={followCursor}
           ></textarea>
