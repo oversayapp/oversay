@@ -308,6 +308,9 @@
     logPageOpened(width > 860 ? 'wide' : 'narrow')
   })
 
+  /** What a click on a card's row does, with how much there is to read. */
+  const opensWords = (open: boolean, lines: number) => (open ? 'Hide what was said' : `See what was said (${lines} ${lines === 1 ? 'line' : 'lines'})`)
+
   /** Where a transcript came from, after "From": the person's own voice reads mid-sentence. */
   const sourceWords = (source: string) => (source === VOICE_SOURCE ? source.charAt(0).toLowerCase() + source.slice(1) : source)
 
@@ -491,7 +494,7 @@
           <div class="row head" role="row">
             <span></span><span role="columnheader">Card</span><span role="columnheader" class="r">Planned</span><span role="columnheader" class="r"
               >Actual</span
-            ><span role="columnheader" class="r">Difference</span><span></span>
+            ><span role="columnheader" class="r">Difference</span><span></span><span></span>
           </div>
           {#each run.cards as c, i (i)}
             {@const d = c.plannedSeconds === null ? null : difference(c.plannedSeconds, c.seconds)}
@@ -501,10 +504,10 @@
             <div class="row" class:opens={!!words} role="row">
               <span class="edge" style:background="var(--k-{c.kind})"></span>
               <span role="cell" class="name"
-                >{#if words}<button class="open" aria-expanded={open} onclick={() => toggleCard(i)}>{c.name}</button>{:else}<b>{c.name}</b>{/if}{#if n > 1}<small
+                >{#if words}<button class="open" aria-expanded={open} title={opensWords(open, words.byCard[i].length)} onclick={() => toggleCard(i)}>{c.name}</button
+                  ><span class="count" class:none={!words.byCard[i].length} aria-hidden="true"><Icon name="talk" size={12} /> {words.byCard[i].length}</span>{:else}<b>{c.name}</b>{/if}{#if n > 1}<small
                     >shown {n} times</small
-                  >{/if}{#if c.seconds === 0}<small>skipped</small>{/if}{#if words}<span class="view" aria-hidden="true">{open ? 'Hide transcript ▾' : 'View transcript ▸'}</span
-                  >{/if}</span
+                  >{/if}{#if c.seconds === 0}<small>skipped</small>{/if}</span
               >
               <span role="cell" class="r num muted">{c.plannedSeconds === null ? 'untimed' : formatDuration(c.plannedSeconds)}</span>
               <span role="cell" class="r num">{formatDuration(c.seconds)}</span>
@@ -521,6 +524,7 @@
                   </span>
                 {/if}
               </span>
+              <span class="chev" data-open={words ? open : undefined} aria-hidden="true">{#if words}<Icon name={open ? 'up' : 'down'} size={16} />{/if}</span>
             </div>
             {#if open && words}
               <div class="said" role="row">
@@ -532,7 +536,7 @@
             <span></span><span role="cell">Total</span><span role="cell" class="r num">{times.planned ? formatDuration(times.planned) : '–'}</span><span
               role="cell"
               class="r num">{formatDuration(times.ran)}</span
-            ><span role="cell" class="r num diff" class:over={total?.over === true} class:under={total?.over === false}>{total?.text ?? ''}</span><span></span>
+            ><span role="cell" class="r num diff" class:over={total?.over === true} class:under={total?.over === false}>{total?.text ?? ''}</span><span></span><span></span>
           </div>
         </div>
         {#each words?.extra ?? [] as c, i (i)}
@@ -950,7 +954,7 @@
   .row {
     position: relative;
     display: grid;
-    grid-template-columns: 4px minmax(0, 1fr) 56px 52px 92px minmax(50px, 130px);
+    grid-template-columns: 4px minmax(0, 1fr) 56px 52px 92px minmax(50px, 130px) 16px;
     gap: 8px;
     align-items: center;
     margin: 0;
@@ -994,16 +998,37 @@
     outline-offset: -2px;
   }
 
-  /* A card that opens says so, in words, under its name. A click on it is a click on the row. */
-  .view {
-    flex-basis: 100%;
-    color: var(--accent-text);
-    font-size: 12.5px;
+  /* A card that opens: how many lines it holds beside its name, and an arrow at the row's end. */
+  .count {
+    display: inline-flex;
+    align-self: center;
+    align-items: center;
+    gap: 4px;
+    padding: 0 8px;
+    border: 1px solid var(--line-strong);
+    border-radius: 99px;
+    color: var(--muted);
+    font-size: 12px;
     font-weight: 600;
+    line-height: 18px;
+    font-variant-numeric: tabular-nums;
   }
 
-  .row.opens:hover .view {
-    text-decoration: underline;
+  .count.none {
+    border-style: dashed;
+    color: var(--faint);
+  }
+
+  .chev {
+    display: flex;
+    justify-content: center;
+    color: var(--muted);
+  }
+
+  .row.opens:hover .count,
+  .row.opens:hover .chev {
+    color: var(--accent-text);
+    border-color: var(--accent);
   }
 
   .said {
