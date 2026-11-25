@@ -424,7 +424,7 @@
               {#if top === 'transcript'}<button class="small" onclick={readAll}>{allOpen ? 'Close all' : 'Read it all'}</button>{/if}
             </div>
             <p class="src">
-              {transcript.source ? `From ${transcript.source}` : 'Transcript'} · <button class="link" onclick={pick}>Replace…</button>{#if trashed}{' '}· audio in the Trash{/if}
+              {transcript.source ? `From ${transcript.source === VOICE_SOURCE ? `y${VOICE_SOURCE.slice(1)}` : transcript.source}` : 'Transcript'} · <button class="link" onclick={pick}>Replace…</button>{#if trashed}{' '}· audio in the Trash{/if}
             </p>
             {#if top === 'silent'}
               <p class="faint">Nothing was heard{transcript.source === VOICE_SOURCE ? ' in the recording' : ''}.</p>

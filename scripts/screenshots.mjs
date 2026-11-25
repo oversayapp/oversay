@@ -177,7 +177,9 @@ const fakeBridge = `(() => {
   // The Atlas review's run yesterday recorded the person's voice, not yet transcribed.
   const atlasYesterday = new Date(Math.floor((Date.now() - 86400e3) / 60000) * 60000).toISOString();
   const stamp = (iso) => { const d = new Date(iso), p = (n) => String(n).padStart(2, '0'); return d.getFullYear() + '-' + p(d.getMonth() + 1) + '-' + p(d.getDate()) + ' ' + p(d.getHours()) + '-' + p(d.getMinutes()); };
+  const atlas = { transcripts: {}, recorded: true };
   const standupStart = new Date(Math.floor((Date.now() - 900e3) / 1000) * 1000).toISOString();
+  window.__standup = { path: qdir('decks') + 'Stand-up 23 Oct' + qext.decks, startedAt: standupStart };
   window.__drag = (type, paths) => emit('tauri://drag-' + type, { paths, position: { x: 400, y: 300 } });
   let clipboard = '';
   window.__clipboard = (text) => { clipboard = text; };
@@ -284,11 +286,15 @@ const fakeBridge = `(() => {
         ] }) : '';
       if (cmd === 'write_deck_sessions') return null;
       // A session's transcript, review and recording (ADR 0041): a transcript once one is saved.
-      if (cmd === 'list_session_files') return qname('decks', args.path) === 'Atlas launch review' ? { transcripts: [], reviews: [], recordings: [stamp(atlasYesterday)] } : { transcripts: Object.keys(sessionFiles), reviews: Object.keys(sessionReviews), recordings: [] };
+      if (cmd === 'list_session_files') return qname('decks', args.path) === 'Atlas launch review' ? { transcripts: Object.keys(atlas.transcripts), reviews: [], recordings: atlas.recorded ? [stamp(atlasYesterday)] : [] } : { transcripts: Object.keys(sessionFiles), reviews: Object.keys(sessionReviews), recordings: [] };
+      // The model's download and Whisper each say how far they are, then wait until window.__release().
+      if (cmd === 'download_speech_model') { emit('speech-model', { received: 62, total: 100 }); return new Promise((r) => { window.__release = () => r(null); }); }
+      if (cmd === 'transcribe_recording') { emit('transcribing', { deck: args.path, name: args.name, percent: 40 }); return new Promise((r) => { window.__release = () => r([]); }); }
+      if (cmd === 'discard_recording') { atlas.recorded = false; return null; }
       // Whisper's model is not downloaded yet.
       if (cmd === 'speech_model') return { present: false, bytes: 190098681, from: 'huggingface.co/ggerganov/whisper.cpp' };
-      if (cmd === 'write_transcript') { sessionFiles[args.name] = args.contents; return null; }
-      if (cmd === 'read_session_file') return (args.kind === 'review' ? sessionReviews : sessionFiles)[args.name] ?? '';
+      if (cmd === 'write_transcript') { (qname('decks', args.path) === 'Atlas launch review' ? atlas.transcripts : sessionFiles)[args.name] = args.contents; return null; }
+      if (cmd === 'read_session_file') return (args.kind === 'review' ? sessionReviews[args.name] : (atlas.transcripts[args.name] ?? sessionFiles[args.name])) ?? '';
       // A Teams transcript of the latest stand-up, lined up with its Start.
       if (cmd === 'read_transcript_file') {
         const rel = (s) => { const h = Math.floor(s / 3600), m = Math.floor(s / 60) % 60, x = s % 60; return [h, m, x].map((n) => String(n).padStart(2, '0')).join(':') + '.000'; };
@@ -472,16 +478,29 @@ const SCREENS = [
   // Back to the plain list, as a person starts, for the session pages that follow.
   ['sessions-reset', `(async () => { const wait = () => new Promise((r) => setTimeout(r, 200)); const click = (sel, text) => [...document.querySelectorAll(sel)].find((b) => b.textContent.trim().startsWith(text)); click('main .link', 'Clear all')?.click(); await wait(); click('main .fbtn', 'Deck')?.click(); await wait(); click('main .pop label', 'Recent first')?.click(); await wait() })()`],
   ['session', `(async () => { document.querySelector('main .runs button.row').click(); await new Promise((r) => setTimeout(r, 300)) })()`],
+  // A session's page, state by state (epic 044 (#100)): nothing yet (above), then a file that isn't a transcript.
+  ['session-badfile', `(async () => { window.__drag('drop', ['/Users/demo/Downloads/agenda.pdf']); await new Promise((r) => setTimeout(r, 400)) })()`],
   ['session-drop-over', `(async () => { window.__drag('enter', ['/Users/demo/Downloads/Weekly stand-up.vtt']); await new Promise((r) => setTimeout(r, 200)) })()`],
   ['session-transcript-check', `(async () => { window.__drag('drop', ['/Users/demo/Downloads/Weekly stand-up.vtt']); await new Promise((r) => setTimeout(r, 400)); document.querySelector('main .ask').scrollIntoView() })()`],
   ['session-transcript', `(async () => { [...document.querySelectorAll('main button')].find((b) => b.textContent.trim() === 'Save transcript').click(); await new Promise((r) => setTimeout(r, 400)) })()`],
   ['session-read-all', `(async () => { [...document.querySelectorAll('main button')].find((b) => b.textContent.trim() === 'Read it all').click(); await new Promise((r) => setTimeout(r, 300)) })()`],
   ['session-review-ask', `(async () => { [...document.querySelectorAll('main button')].find((b) => b.textContent.includes('Review with your AI')).click(); await new Promise((r) => setTimeout(r, 300)); document.querySelector('main .copied')?.scrollIntoView() })()`],
   ['session-review', `(async () => { window.__review(); document.querySelector('.topbar button.back').click(); await new Promise((r) => setTimeout(r, 300)); document.querySelector('main .runs button.row').click(); await new Promise((r) => setTimeout(r, 500)); [...document.querySelectorAll('main h2')].find((h) => h.textContent.trim() === 'AI review')?.scrollIntoView() })()`],
-  ['session-menu', `(async () => { document.querySelector('main').scrollTop = 0; await new Promise((r) => setTimeout(r, 100)) })()`],
+  // A narrow window's switch, on the note and on the review; wide shows both sides whichever is chosen.
+  ['session-pane-note', `(async () => { [...document.querySelectorAll('main .switch button')].find((b) => b.textContent.trim().startsWith('Note')).click(); await new Promise((r) => setTimeout(r, 200)) })()`],
+  ['session-pane-review', `(async () => { [...document.querySelectorAll('main .switch button')].find((b) => b.textContent.trim().startsWith('Review')).click(); await new Promise((r) => setTimeout(r, 200)) })()`],
+  ['session-menu', `(async () => { [...document.querySelectorAll('main .switch button')].find((b) => b.textContent.trim().startsWith('The run')).click(); await new Promise((r) => setTimeout(r, 200)) })()`],
   ['session-menu-open', `(async () => { document.querySelector('main button[aria-label="More actions for this session"]').click(); await new Promise((r) => setTimeout(r, 200)) })()`],
   ['session-delete', `(async () => { [...document.querySelectorAll('main [role=menuitem]')].find((b) => b.textContent.includes('Delete session')).click(); await new Promise((r) => setTimeout(r, 200)) })()`],
   ['session-recording', `(async () => { const wait = () => new Promise((r) => setTimeout(r, 300)); [...document.querySelectorAll('main button')].find((b) => b.textContent.trim() === 'Cancel')?.click(); document.querySelector('.topbar button.back').click(); await wait(); [...document.querySelectorAll('main .runs button.row')].find((b) => b.textContent.includes('Atlas')).click(); await wait(); await wait(); document.querySelector('main .ask')?.scrollIntoView() })()`],
+  // A review asked for while the recording waits, then each step of its transcription, to nothing heard.
+  ['session-review-early', `(async () => { const wait = () => new Promise((r) => setTimeout(r, 300)); [...document.querySelectorAll('main button')].find((b) => b.textContent.includes('Review with your AI')).click(); [...document.querySelectorAll('main .switch button')].find((b) => b.textContent.trim().startsWith('Review')).click(); await wait() })()`],
+  ['session-waiting', `(async () => { const wait = () => new Promise((r) => setTimeout(r, 300)); [...document.querySelectorAll('main .switch button')].find((b) => b.textContent.trim().startsWith('The run')).click(); [...document.querySelectorAll('main button')].find((b) => b.textContent.trim() === 'Not now').click(); await wait() })()`],
+  ['session-downloading', `(async () => { [...document.querySelectorAll('main button')].find((b) => b.textContent.trim() === 'Transcribe…').click(); await new Promise((r) => setTimeout(r, 400)) })()`],
+  ['session-transcribing', `(async () => { window.__release(); await new Promise((r) => setTimeout(r, 400)) })()`],
+  ['session-silent', `(async () => { window.__release(); await new Promise((r) => setTimeout(r, 600)) })()`],
+  // As a deck's run ending opens it.
+  ['session-just-finished', `(async () => { const { goSession } = await import('/src/manager/route.ts'); goSession(window.__standup.path, window.__standup.startedAt, 'run'); await new Promise((r) => setTimeout(r, 600)) })()`],
   ['session-back', `(async () => { document.querySelector('.topbar button.back').click(); await new Promise((r) => setTimeout(r, 300)) })()`],
   ['templates', `[...document.querySelectorAll('nav.rail button')].find((b) => b.textContent.includes('Templates')).click()`],
   ['templates-meetings', `[...document.querySelectorAll('main .rowbtn')].find((b) => b.textContent.includes('Meetings')).click()`],
