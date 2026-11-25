@@ -5,6 +5,7 @@
 import { logAction } from '../log'
 import type { DeckSessionCard } from '../decks/sessions'
 import type { TranscriptLine, readTranscript } from './transcript'
+import { VOICE_SOURCE } from './whisper'
 import type { Review } from './review'
 import SESSION_FORMAT from './session-format.json'
 
@@ -118,3 +119,16 @@ export type Pane = 'run' | 'note' | 'review'
 export const logPaneShown = (pane: Pane) => logAction('session.pane_shown', `pane=${pane} check=epic-044/V3`)
 export const logLabels = ({ run, note, review }: { run: TopState; note: Label; review: Label }) =>
   logAction('session.state_labels', `run=${run} note=${note.text} review=${review.text} check=epic-044/V4`)
+
+/**
+ * Whether to say the audio is in the Trash: Oversay made the transcript from the person's voice,
+ * and the recording is no longer beside it. It can't tell whether the Trash was emptied since.
+ */
+export const audioInTrash = (source: string, recording: boolean): boolean => source === VOICE_SOURCE && !recording
+
+/** A review asked for now would miss the transcript still to come from the recording. */
+export const reviewEarly = (has: { review: boolean; recording: boolean; transcript: boolean }): boolean => !has.review && has.recording && !has.transcript
+
+export const logAudioNote = () => logAction('session.audio_note', 'check=epic-044/V7')
+export const logReviewEarly = () => logAction('session.review_early', 'check=epic-044/V8')
+export const logOpenDeck = () => logAction('session.open_deck', 'check=epic-044/V9')

@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest'
-import { logArrived, logCardWords, logLabels, logPaneShown, logTopState, noteLabel, reviewLabel, runLabelFor, topState, wordsByCard, type TopInput } from './session-page'
+import { audioInTrash, logArrived, logAudioNote, logCardWords, logOpenDeck, logReviewEarly, reviewEarly, logLabels, logPaneShown, logTopState, noteLabel, reviewLabel, runLabelFor, topState, wordsByCard, type TopInput } from './session-page'
 import { readReview } from './review'
+import { VOICE_SOURCE } from './whisper'
 import { logAction } from '../log'
 import { readTranscript, transcriptMarkdown } from './transcript'
 import type { DeckSession } from '../decks/sessions'
@@ -146,5 +147,35 @@ describe('how a page was arrived at', () => {
     logArrived('run')
     logArrived(undefined)
     expect(logs('session.arrived')).toEqual(['from=run check=epic-044/V6', 'from=other check=epic-044/V6'])
+  })
+})
+
+describe('audio in the Trash', () => {
+  it('only for the person’s own voice, once its recording is gone', () => {
+    expect(audioInTrash(VOICE_SOURCE, false)).toBe(true)
+    // Keep recordings is on, and the file is there.
+    expect(audioInTrash(VOICE_SOURCE, true)).toBe(false)
+    expect(audioInTrash('Zoom (call.vtt)', false)).toBe(false)
+    expect(audioInTrash('', false)).toBe(false)
+  })
+})
+
+describe('asking for a review too early', () => {
+  const early = { review: false, recording: true, transcript: false }
+
+  it('is when a recording has no transcript yet and there is no review', () => {
+    expect(reviewEarly(early)).toBe(true)
+    expect(reviewEarly({ ...early, transcript: true })).toBe(false)
+    expect(reviewEarly({ ...early, recording: false })).toBe(false)
+    expect(reviewEarly({ ...early, review: true })).toBe(false)
+  })
+
+  it('is logged, as the audio note and Open deck are', () => {
+    logReviewEarly()
+    logAudioNote()
+    logOpenDeck()
+    expect(logs('session.review_early')).toEqual(['check=epic-044/V8'])
+    expect(logs('session.audio_note')).toEqual(['check=epic-044/V7'])
+    expect(logs('session.open_deck')).toEqual(['check=epic-044/V9'])
   })
 })

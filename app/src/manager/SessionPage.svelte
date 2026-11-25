@@ -8,7 +8,7 @@
   // apart.
   import { untrack } from 'svelte'
   import { SvelteSet } from 'svelte/reactivity'
-  import { logCardWords, logLabels, logPageOpened, logPaneShown, logTopState, noteLabel, reviewLabel, runLabelFor, topState, wordsByCard, type Label, type Pane } from '../lib/sessions/session-page'
+  import { audioInTrash, logAudioNote, logCardWords, logLabels, logOpenDeck, logPageOpened, logPaneShown, logReviewEarly, logTopState, reviewEarly, noteLabel, reviewLabel, runLabelFor, topState, wordsByCard, type Label, type Pane } from '../lib/sessions/session-page'
   import { formatDuration } from '../lib/project/duration'
   import { decks } from '../lib/decks/store'
   import { invoke } from '@tauri-apps/api/core'
@@ -269,6 +269,19 @@
     if (loggedLabels) untrack(() => logLabels({ run: top, note: noteState, review: reviewState }))
   })
 
+  const trashed = $derived((top === 'transcript' || top === 'silent') && !!transcript && audioInTrash(transcript.source, hasRecording))
+  $effect(() => {
+    if (trashed) logAudioNote()
+  })
+  const early = $derived(!!run && reviewEarly({ review: hasReview, recording: hasRecording, transcript: hasTranscript }))
+  $effect(() => {
+    if (early) logReviewEarly()
+  })
+  function openDeck() {
+    logOpenDeck()
+    goDeck(path)
+  }
+
   const loggedTop = $derived(run && top !== 'loading' ? top : null)
   $effect(() => {
     if (loggedTop) logTopState(loggedTop)
@@ -317,7 +330,7 @@
     <div class="top">
       <header class="phead">
         <h1>
-          {#if deck}<button class="deckname" title="Open the deck" onclick={() => goDeck(path)}>{deck.name}</button>{:else}A deck that has gone{/if}
+          {#if deck}<button class="deckname" title="Open the deck" onclick={openDeck}>{deck.name} <small>Open deck ›</small></button>{:else}A deck that has gone{/if}
         </h1>
         {#each inWorkspaces as w (w.id)}<span class="chip">{w.name}</span>{/each}
         <span class="grow"></span>
@@ -330,7 +343,7 @@
           >
           {#if menuOpen}
             <div class="menu" role="menu">
-              <button role="menuitem" disabled={!deck} onclick={() => goDeck(path)}><Icon name="deck" size={15} /> Open the deck</button>
+              <button role="menuitem" disabled={!deck} onclick={openDeck}><Icon name="deck" size={15} /> Open the deck</button>
               <button
                 role="menuitem"
                 class="danger"
@@ -411,7 +424,7 @@
               {#if top === 'transcript'}<button class="small" onclick={readAll}>{allOpen ? 'Close all' : 'Read it all'}</button>{/if}
             </div>
             <p class="src">
-              {transcript.source ? `From ${transcript.source}` : 'Transcript'} · <button class="link" onclick={pick}>Replace…</button>
+              {transcript.source ? `From ${transcript.source}` : 'Transcript'} · <button class="link" onclick={pick}>Replace…</button>{#if trashed}{' '}· audio in the Trash{/if}
             </p>
             {#if top === 'silent'}
               <p class="faint">Nothing was heard{transcript.source === VOICE_SOURCE ? ' in the recording' : ''}.</p>
@@ -558,7 +571,11 @@
                   The review shows here when it's written. No Oversay skill yet? <button class="link" onclick={goAi}>Set it up on the AI page</button>
                 </div>
               {/if}
-              {#if !run.note && !hasTranscript}<p class="faint">A note or a transcript makes the review much better.</p>{/if}
+              {#if early}
+                <p class="early">The transcript isn't ready yet: a review asked for now would miss it.</p>
+              {:else if !run.note && !hasTranscript}
+                <p class="faint">A note or a transcript makes the review much better.</p>
+              {/if}
             </div>
           {/if}
         </section>
@@ -744,6 +761,15 @@
     font: inherit;
     color: inherit;
     text-align: left;
+  }
+
+  .deckname small {
+    margin-left: 4px;
+    font-size: 14px;
+    font-weight: 600;
+    letter-spacing: 0;
+    color: var(--accent-text);
+    white-space: nowrap;
   }
 
   .deckname:hover {
@@ -1131,6 +1157,13 @@
 
   .review li {
     margin: 3px 0;
+  }
+
+  .early {
+    margin: 10px 0 0;
+    color: var(--warn);
+    font-size: 12.5px;
+    font-weight: 600;
   }
 
   .copied {
