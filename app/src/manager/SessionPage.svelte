@@ -955,10 +955,12 @@
     background: none;
   }
 
+  /* Above the bar, which is positioned too and would otherwise take the click. */
   button.open::after {
     content: '';
     position: absolute;
     inset: 0;
+    z-index: 1;
   }
 
   button.open:focus-visible {
