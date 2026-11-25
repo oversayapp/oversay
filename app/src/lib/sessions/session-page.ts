@@ -4,7 +4,7 @@
 
 import { logAction } from '../log'
 import type { DeckSessionCard } from '../decks/sessions'
-import type { TranscriptLine, readTranscript } from './transcript'
+import { oneLine, type TranscriptLine, type readTranscript } from './transcript'
 import { VOICE_SOURCE } from './whisper'
 import type { Review } from './review'
 
@@ -49,17 +49,12 @@ export function wordsByCard(cards: readonly DeckSessionCard[], transcript: Trans
   const byCard: TranscriptLine[][] = cards.map(() => [])
   const unnamed: number[] = []
   const taken = new Set<number>()
-  // A heading is read up to its first " · ", so a name with one in it is matched by its start.
-  const is = (name: string, title: string) => {
-    const flat = name.replace(/\s+/g, ' ').trim()
-    return flat === title || flat.startsWith(`${title} · `)
-  }
   const give = (card: number, section: number) => {
     taken.add(card)
     byCard[card] = transcript.cards[section].lines
   }
   transcript.cards.forEach((section, at) => {
-    const i = cards.findIndex((c, card) => !taken.has(card) && is(c.name, section.title))
+    const i = cards.findIndex((c, card) => !taken.has(card) && oneLine(c.name) === section.title)
     if (i < 0) unnamed.push(at)
     else give(i, at)
   })
@@ -123,8 +118,7 @@ export function reviewLabel(there: boolean, review: Review | null): Label {
 export type Pane = 'run' | 'note' | 'review'
 
 export const logPaneShown = (pane: Pane) => logAction('session.pane_shown', `pane=${pane} check=epic-044/V3`)
-export const logLabels = ({ run, note, review }: { run: TopState; note: Label; review: Label }) =>
-  logAction('session.state_labels', `run=${run} note=${note.text} review=${review.text} check=epic-044/V4`)
+export const logLabels = (run: TopState, note: string, review: string) => logAction('session.state_labels', `run=${run} note=${note} review=${review} check=epic-044/V4`)
 
 /**
  * Whether to say the audio is in the Trash: Oversay made the transcript from the person's voice,

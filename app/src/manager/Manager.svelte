@@ -124,13 +124,10 @@
     // Record my voice: with Auto record on, every deck records from Start (ADR 0041).
     const stopRecording = followRecording(() => !!get(settings).autoRecord)
     const stopVoiceWork = followVoiceWork()
-    // Every deck's sessions, for Sessions and search (ADR 0041): read again with the decks, and once a run is kept.
+    // Every deck's sessions, for Sessions and search (ADR 0041): read again with the decks. A run
+    // just kept is read as its page opens (above).
     const stopSessions = decks.subscribe((all) => {
       if (all) attempt(() => loadDeckSessions(all))
-    })
-    const stopJustRan = justRan.subscribe((path) => {
-      const all = get(decks)
-      if (path && all) attempt(() => loadDeckSessions(all))
     })
     // Decks written outside Oversay (an AI, another editor) as they land (ADR 0034).
     const folderListener = listen<QuickKind>(QUICK_FILES_CHANGED_EVENT, (e) => {
@@ -155,7 +152,6 @@
       stopSessions()
       stopRecording()
       stopVoiceWork()
-      stopJustRan()
       stopDecks()
       stopTray()
       stopTrayDecks()

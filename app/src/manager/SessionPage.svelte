@@ -6,7 +6,6 @@
   // it is saved, or the person's own voice. The deck's name opens the deck, Show again shows it,
   // and Delete (in ⋯) takes the session and its files away, after asking. The two sides scroll
   // apart.
-  import { untrack } from 'svelte'
   import { SvelteSet } from 'svelte/reactivity'
   import { audioInTrash, logAudioNote, logCardWords, logLabels, logOpenDeck, logPageOpened, logPaneShown, logReviewEarly, logTopState, reviewEarly, noteLabel, reviewLabel, runLabelFor, topState, wordsByCard, type Label, type Pane } from '../lib/sessions/session-page'
   import { formatDuration } from '../lib/project/duration'
@@ -266,9 +265,16 @@
   const runState = $derived(runLabelFor({ state: top, percent: download?.percent ?? work?.percent ?? 0, refused: !!importError }))
   const noteState = $derived(noteLabel(note))
   const reviewState = $derived(reviewLabel(hasReview, review))
-  const loggedLabels = $derived(run && top !== 'loading' ? [top, noteState.text, reviewState.text].join('\n') : null)
+  // The page's state is logged once it is known, and again only when it changes: these are plain
+  // values, so a reload of the runs that changes nothing logs nothing.
+  const ready = $derived(!!run && top !== 'loading')
+  const noteText = $derived(noteState.text)
+  const reviewText = $derived(reviewState.text)
   $effect(() => {
-    if (loggedLabels) untrack(() => logLabels({ run: top, note: noteState, review: reviewState }))
+    if (ready) logTopState(top)
+  })
+  $effect(() => {
+    if (ready) logLabels(top, noteText, reviewText)
   })
 
   const trashed = $derived((top === 'transcript' || top === 'silent') && !!transcript && audioInTrash(transcript.source, hasRecording))
@@ -284,10 +290,6 @@
     goDeck(path)
   }
 
-  const loggedTop = $derived(run && top !== 'loading' ? top : null)
-  $effect(() => {
-    if (loggedTop) logTopState(loggedTop)
-  })
   let width = $state(0)
   let openedLogged = false
   $effect(() => {
@@ -296,6 +298,9 @@
     // The same width the two panes need (the container query below).
     logPageOpened(width > 860 ? 'wide' : 'narrow')
   })
+
+  /** Where a transcript came from, after "From": the person's own voice reads mid-sentence. */
+  const sourceWords = (source: string) => (source === VOICE_SOURCE ? source.charAt(0).toLowerCase() + source.slice(1) : source)
 
   /** How the file was lined up, in words. */
   function offsetWords(seconds: number, clock: boolean): string {
@@ -426,7 +431,7 @@
               {#if top === 'transcript'}<button class="small" onclick={readAll}>{allOpen ? 'Close all' : 'Read it all'}</button>{/if}
             </div>
             <p class="src">
-              {transcript.source ? `From ${transcript.source === VOICE_SOURCE ? VOICE_SOURCE.charAt(0).toLowerCase() + VOICE_SOURCE.slice(1) : transcript.source}` : 'Transcript'} · <button class="link" onclick={pick}>Replace…</button>{#if trashed}{' '}· audio in the Trash{/if}
+              {transcript.source ? `From ${sourceWords(transcript.source)}` : 'Transcript'} · <button class="link" onclick={pick}>Replace…</button>{#if trashed}{' '}· audio in the Trash{/if}
             </p>
             {#if top === 'silent'}
               <p class="faint">Nothing was heard{transcript.source === VOICE_SOURCE ? ' in the recording' : ''}.</p>

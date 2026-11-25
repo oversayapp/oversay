@@ -147,7 +147,7 @@ describe('the state labels', () => {
   })
 
   it('log the states and the pane, with no words from the note or review', () => {
-    logLabels({ run: 'transcript', note: noteLabel('Secret plan'), review: reviewLabel(false, null) })
+    logLabels('transcript', noteLabel('Secret plan').text, reviewLabel(false, null).text)
     logPaneShown('note')
     expect(logs('session.state_labels')).toEqual(['run=transcript note=Written review=Not yet check=epic-044/V4'])
     expect(logs('session.pane_shown')).toEqual(['pane=note check=epic-044/V3'])
