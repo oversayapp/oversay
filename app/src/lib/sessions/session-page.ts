@@ -5,6 +5,8 @@
 import { logAction } from '../log'
 import type { DeckSessionCard } from '../decks/sessions'
 import type { TranscriptLine, readTranscript } from './transcript'
+import type { Review } from './review'
+import SESSION_FORMAT from './session-format.json'
 
 type Transcript = ReturnType<typeof readTranscript>
 
@@ -65,3 +67,53 @@ export function wordsByCard(cards: readonly DeckSessionCard[], transcript: Trans
 export const logTopState = (state: TopState) => logAction('session.transcript_state', `state=${state} check=epic-044/V5`)
 export const logCardWords = (card: number, open: boolean) => logAction('session.card_words', `card=${card} open=${open} check=epic-044/V2`)
 export const logPageOpened = (layout: 'wide' | 'narrow') => logAction('session.page_opened', `layout=${layout} check=epic-044/V1`)
+
+/** A part's state in a few words, and how it reads: done or coming, waiting on the person, refused, or not there. */
+export interface Label {
+  text: string
+  tone: 'good' | 'todo' | 'bad' | 'none' | 'plain'
+}
+
+const label = (text: string, tone: Label['tone']): Label => ({ text, tone })
+
+/** Where the transcript stands. `percent` is the download's or the transcription's. */
+export function runLabelFor({ state, percent, refused }: { state: TopState; percent: number; refused: boolean }): Label | null {
+  switch (state) {
+    case 'transcript':
+      return label('Ready', 'good')
+    case 'silent':
+      return label('Nothing heard', 'plain')
+    case 'import':
+      return label('Check and save', 'todo')
+    case 'downloading':
+      return label(`Downloading ${percent}%`, 'good')
+    case 'transcribing':
+      return label(`Transcribing ${percent}%`, 'good')
+    case 'ask':
+      return label('Needs your OK', 'todo')
+    case 'waiting':
+      return label('Recording waits', 'todo')
+    case 'none':
+      return refused ? label('File refused', 'bad') : label('None · add one', 'none')
+    case 'loading':
+      return null
+  }
+}
+
+export const noteLabel = (note: string): Label => (note.trim() ? label('Written', 'plain') : label('Not written', 'none'))
+
+/** The review's section that lists what to change in the deck, as the skill writes it. */
+const CHANGES = SESSION_FORMAT.review.sections[3]
+
+export function reviewLabel(there: boolean, review: Review | null): Label {
+  if (!there) return label('Not yet', 'none')
+  const n = review?.sections.find((s) => s.title === CHANGES)?.points.length ?? 0
+  return label(n ? `Ready · ${n} ${n === 1 ? 'change' : 'changes'}` : 'Ready', 'good')
+}
+
+/** The three parts a narrow window shows one at a time. */
+export type Pane = 'run' | 'note' | 'review'
+
+export const logPaneShown = (pane: Pane) => logAction('session.pane_shown', `pane=${pane} check=epic-044/V3`)
+export const logLabels = ({ run, note, review }: { run: TopState; note: Label; review: Label }) =>
+  logAction('session.state_labels', `run=${run} note=${note.text} review=${review.text} check=epic-044/V4`)

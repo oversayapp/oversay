@@ -6,8 +6,9 @@
   // it is saved, or the person's own voice. The deck's name opens the deck, Show again shows it,
   // and Delete (in ⋯) takes the session and its files away, after asking. The two sides scroll
   // apart.
+  import { untrack } from 'svelte'
   import { SvelteSet } from 'svelte/reactivity'
-  import { logCardWords, logPageOpened, logTopState, topState, wordsByCard } from '../lib/sessions/session-page'
+  import { logCardWords, logLabels, logPageOpened, logPaneShown, logTopState, noteLabel, reviewLabel, runLabelFor, topState, wordsByCard, type Label, type Pane } from '../lib/sessions/session-page'
   import { formatDuration } from '../lib/project/duration'
   import { decks } from '../lib/decks/store'
   import { invoke } from '@tauri-apps/api/core'
@@ -182,6 +183,8 @@
   /** Reads a call's transcript file to line it up; nothing is saved until Save. */
   function take(file: string) {
     importError = ''
+    // The file is checked on the run: in a narrow window, that pane is shown for it.
+    show('run')
     attempt(async () => {
       try {
         const captions = parseCaptions(fileName(file), await invoke<string>('read_transcript_file', { path: file }))
@@ -245,6 +248,21 @@
       if (open !== openCards.has(i)) toggleCard(i)
     })
   }
+
+  // A narrow window shows one part at a time, behind a switch that says where each stands.
+  let pane = $state<Pane>('run')
+  function show(next: Pane) {
+    if (next === pane) return
+    pane = next
+    logPaneShown(next)
+  }
+  const runState = $derived(runLabelFor({ state: top, percent: download?.percent ?? work?.percent ?? 0, refused: !!importError }))
+  const noteState = $derived(noteLabel(note))
+  const reviewState = $derived(reviewLabel(hasReview, review))
+  const loggedLabels = $derived(run && top !== 'loading' ? [top, noteState.text, reviewState.text].join('\n') : null)
+  $effect(() => {
+    if (loggedLabels) untrack(() => logLabels({ run: top, note: noteState, review: reviewState }))
+  })
 
   const loggedTop = $derived(run && top !== 'loading' ? top : null)
   $effect(() => {
@@ -333,7 +351,13 @@
       {/if}
     </div>
 
-    <div class="split">
+    <div class="switch" role="group" aria-label="Which part of the session to show">
+      {@render tab('run', 'The run', runState, 'Transcript:')}
+      {@render tab('note', 'Note', noteState)}
+      {@render tab('review', 'Review', reviewState)}
+    </div>
+
+    <div class="split" data-pane={pane}>
       <section class="pane runpane" aria-label="The run">
         <div class="summary">
           <div><small>Ran</small><b class="num">{formatDuration(times.ran)}</b></div>
@@ -376,6 +400,7 @@
           {:else if (top === 'transcript' || top === 'silent') && transcript}
             <div class="tbar">
               <b>Transcript</b>
+              {#if runState}{@render pill(runState)}{/if}
               <span class="grow"></span>
               {#if top === 'transcript'}<button class="small" onclick={readAll}>{allOpen ? 'Close all' : 'Read it all'}</button>{/if}
             </div>
@@ -536,6 +561,17 @@
   {/if}
 </div>
 
+{#snippet pill(state: Label)}
+  <span class="st {state.tone}">{state.text}</span>
+{/snippet}
+
+{#snippet tab(id: Pane, name: string, state: Label | null, lead?: string)}
+  <button class:on={pane === id} aria-pressed={pane === id} onclick={() => show(id)}>
+    {name}
+    <span class="stline">{#if lead}<small>{lead}</small>{/if}{#if state}{@render pill(state)}{/if}</span>
+  </button>
+{/snippet}
+
 {#snippet lines(said: { time: string; speaker: string; text: string }[])}
   <ul class="lines">
     {#each said as l, j (j)}
@@ -600,6 +636,79 @@
 
   .recording {
     margin: 10px 0;
+  }
+
+  .switch {
+    flex: none;
+    display: none;
+    gap: 6px;
+    width: 100%;
+    padding: 10px 32px 0;
+  }
+
+  .switch button {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 3px;
+    min-width: 0;
+    padding: 6px 10px;
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    background: var(--card);
+    text-align: left;
+  }
+
+  .switch button.on {
+    border-color: var(--accent);
+    box-shadow: inset 0 -3px 0 var(--accent);
+  }
+
+  .stline {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 4px;
+  }
+
+  .stline small {
+    font-weight: 500;
+    color: var(--faint);
+  }
+
+  /* A part's state in a few words, with its tone. */
+  .st {
+    padding: 0 7px;
+    border: 1px solid var(--line);
+    border-radius: 9px;
+    background: var(--card);
+    color: var(--muted);
+    font-size: 11.5px;
+    font-weight: 600;
+    line-height: 18px;
+  }
+
+  .st.good {
+    border-color: transparent;
+    background: var(--accent-soft);
+    color: var(--accent-text);
+  }
+
+  .st.todo {
+    border-color: transparent;
+    background: var(--warn-bg);
+    color: var(--warn);
+  }
+
+  .st.bad {
+    border-color: transparent;
+    background: var(--danger-bg);
+    color: var(--danger);
+  }
+
+  .st.none {
+    border-style: dashed;
+    color: var(--faint);
   }
 
   .tbar {
@@ -863,11 +972,14 @@
   }
 
   .name {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    column-gap: 6px;
     min-width: 0;
   }
 
   .name small {
-    margin-left: 6px;
     white-space: nowrap;
     color: var(--faint);
   }
@@ -1130,15 +1242,17 @@
     color: var(--danger);
   }
 
-  /* Too narrow for two sides: one column that scrolls. */
+  /* Too narrow for two sides: one part at a time, behind the switch. */
   @container session (max-width: 860px) {
-    .split {
-      display: block;
-      overflow: auto;
+    .switch {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
     }
 
-    .pane {
-      overflow: visible;
+    .split {
+      grid-template-columns: minmax(0, 1fr);
+      margin-top: 4px;
+      border-top: 0;
     }
 
     .side {
@@ -1146,12 +1260,28 @@
       border-left: 0;
       background: none;
     }
+
+    .split[data-pane='run'] .side,
+    .split:not([data-pane='run']) .runpane,
+    .split[data-pane='note'] .reviewpart,
+    .split[data-pane='review'] .notepart {
+      display: none;
+    }
+
+    .split[data-pane='review'] .reviewpart .sec {
+      margin-top: 0;
+    }
   }
 
   /* The search bar's row narrows its padding here too, so the way back still lines up. */
   @container session (max-width: 760px) {
     .top,
     .gone {
+      padding-left: 16px;
+      padding-right: 16px;
+    }
+
+    .switch {
       padding-left: 16px;
       padding-right: 16px;
     }

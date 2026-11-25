@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
-import { logCardWords, logTopState, topState, wordsByCard, type TopInput } from './session-page'
+import { logCardWords, logLabels, logPaneShown, logTopState, noteLabel, reviewLabel, runLabelFor, topState, wordsByCard, type TopInput } from './session-page'
+import { readReview } from './review'
 import { logAction } from '../log'
 import { readTranscript, transcriptMarkdown } from './transcript'
 import type { DeckSession } from '../decks/sessions'
@@ -94,5 +95,48 @@ describe('what was said, beside each card', () => {
     logCardWords(1, true)
     logCardWords(1, false)
     expect(logs('session.card_words')).toEqual(['card=1 open=true check=epic-044/V2', 'card=1 open=false check=epic-044/V2'])
+  })
+})
+
+describe('the state labels', () => {
+  it('say where the transcript stands', () => {
+    const label = (state: Parameters<typeof runLabelFor>[0]['state'], percent = 0, refused = false) => runLabelFor({ state, percent, refused })
+    expect(label('transcript')).toEqual({ text: 'Ready', tone: 'good' })
+    expect(label('silent')).toEqual({ text: 'Nothing heard', tone: 'plain' })
+    expect(label('import')).toEqual({ text: 'Check and save', tone: 'todo' })
+    expect(label('ask')).toEqual({ text: 'Needs your OK', tone: 'todo' })
+    expect(label('downloading', 62)).toEqual({ text: 'Downloading 62%', tone: 'good' })
+    expect(label('transcribing', 40)).toEqual({ text: 'Transcribing 40%', tone: 'good' })
+    expect(label('waiting')).toEqual({ text: 'Recording waits', tone: 'todo' })
+    expect(label('none')).toEqual({ text: 'None · add one', tone: 'none' })
+    expect(label('none', 0, true)).toEqual({ text: 'File refused', tone: 'bad' })
+    expect(label('loading')).toBeNull()
+  })
+
+  it('a refused file doesn’t hide a transcript already there', () => {
+    expect(runLabelFor({ state: 'transcript', percent: 0, refused: true })?.text).toBe('Ready')
+  })
+
+  it('say whether the note is written, a blank one not', () => {
+    expect(noteLabel('Cut the demo.')).toEqual({ text: 'Written', tone: 'plain' })
+    expect(noteLabel('  \n ')).toEqual({ text: 'Not written', tone: 'none' })
+  })
+
+  it('count the changes a review asks for', () => {
+    const review = (points: number) => readReview(`## What ran over\n- Atlas.\n## What to change in the deck\n${'- one\n'.repeat(points)}`)
+    expect(reviewLabel(true, review(4))).toEqual({ text: 'Ready · 4 changes', tone: 'good' })
+    expect(reviewLabel(true, review(1))?.text).toBe('Ready · 1 change')
+    expect(reviewLabel(true, review(0))?.text).toBe('Ready')
+    expect(reviewLabel(true, readReview('## What ran over\n- Atlas.\n'))?.text).toBe('Ready')
+    // There, and still being read.
+    expect(reviewLabel(true, null)?.text).toBe('Ready')
+    expect(reviewLabel(false, null)).toEqual({ text: 'Not yet', tone: 'none' })
+  })
+
+  it('log the states and the pane, with no words from the note or review', () => {
+    logLabels({ run: 'transcript', note: noteLabel('Secret plan'), review: reviewLabel(false, null) })
+    logPaneShown('note')
+    expect(logs('session.state_labels')).toEqual(['run=transcript note=Written review=Not yet check=epic-044/V4'])
+    expect(logs('session.pane_shown')).toEqual(['pane=note check=epic-044/V3'])
   })
 })
