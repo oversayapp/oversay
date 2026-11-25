@@ -19,3 +19,5 @@ Spec §11 grouped runs by day with a Filter popover. With hundreds of runs, and 
 
 - Replaces the Filter popover and the "between dates" range of spec §11.
 - The page's chips and grouping are kept while a session is open, so the way back returns to the same list.
+
+*Changed by epic 044 (#100): the way back from a session's page opened by a run ending, or by a deck's View last session, opens All with no filters (grouping kept), as that page wasn't opened from the list and the filters left may not hold the run.*

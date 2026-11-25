@@ -1,8 +1,9 @@
 import { deckPathFor } from '../lib/decks/paths'
 import { writable } from 'svelte/store'
 import { logAction } from '../lib/log'
+import { logArrived } from '../lib/sessions/session-page'
 import type { SettingsSectionId } from '../lib/settings/sections'
-import { closeDeck, showAi, showDeck, showHome, showLibrary, showSession, showSessions, showSettings, showTemplates, showWorkspace, start, type LibraryPlace, type Nav } from './nav'
+import { closeDeck, showAi, showDeck, showHome, showLibrary, showSession, showSessions, showSettings, showTemplates, showWorkspace, start, type LibraryPlace, type Nav, type SessionFrom } from './nav'
 
 /** Which screen the manager is showing. The pure transitions live in nav.ts. */
 export const nav = writable<Nav>(start)
@@ -31,8 +32,11 @@ export const goLibrary = (place?: LibraryPlace) => go((n) => showLibrary(n, plac
 export const goDecks = () => goLibrary('all')
 /** Sessions (the rail's Sessions item, ADR 0041): every deck's runs, by day. */
 export const goSessions = () => go(showSessions)
-/** A session's page: the deck's file and when the session started. */
-export const goSession = (deck: string, startedAt: string) => go((n) => showSession(n, deck, startedAt))
+/** A session's page: the deck's file and when the session started; `from` is set after a run and from View last session. */
+export const goSession = (deck: string, startedAt: string, from?: SessionFrom) => {
+  logArrived(from)
+  go((n) => showSession(n, deck, startedAt, from))
+}
 /** A workspace's page. */
 export const goWorkspace = (id: string) => go((n) => showWorkspace(n, id))
 /** A deck in the deck editor. */

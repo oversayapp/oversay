@@ -32,19 +32,24 @@
   import { workspaces } from '../lib/workspaces/store'
   import { workspacesWith } from '../lib/workspaces/workspaces'
   import { showBack } from './back'
-  import { sessionsPage } from '../lib/sessions/page-state'
+  import { sessionsPage, withEveryRun } from '../lib/sessions/page-state'
   import { tabFor } from '../lib/sessions/views'
   import { sessionViews, settings } from '../lib/settings/store'
   import ConfirmDelete from './ConfirmDelete.svelte'
   import { attempt } from './errors'
   import Icon from './Icon.svelte'
+  import { sessionWayBack, type SessionFrom } from './nav'
   import { goAi, goDeck, goSessions } from './route'
 
-  let { path, startedAt }: { path: string; startedAt: string } = $props()
+  let { path, startedAt, from }: { path: string; startedAt: string; from?: SessionFrom } = $props()
 
-  // The way back names the view the person came from: its tab (a saved view's name), else Sessions.
-  const backName = $derived(tabFor($sessionsPage.filters, $sessionViews)?.name)
-  $effect(() => showBack({ label: backName && backName !== 'All' ? backName : 'Sessions', go: goSessions, width: 1180, tight: true }))
+  // The way back names the view the person came from, or says Sessions (see sessionWayBack).
+  const wayBack = $derived(sessionWayBack(from, tabFor($sessionsPage.filters, $sessionViews)?.name))
+  function goBack() {
+    if (wayBack.everyRun) sessionsPage.update(withEveryRun)
+    goSessions()
+  }
+  $effect(() => showBack({ label: wayBack.label, go: goBack, width: 1180, tight: true }))
 
   const deck = $derived(($decks ?? []).find((d) => d.path === path) ?? null)
   const runs = $derived($deckSessions?.get(path) ?? null)
@@ -339,6 +344,7 @@
         </div>
       </header>
       <p class="muted when">
+        {#if from === 'run'}<span class="just">Just finished</span>{/if}
         {[`${day(run.startedAt)}, ${clock(run.startedAt)} to ${clock(run.endedAt)}`, deck?.audience && `for ${deck.audience}`].filter(Boolean).join(' · ')}
       </p>
 
@@ -768,6 +774,20 @@
 
   .when {
     margin: 6px 0 0;
+  }
+
+  .just {
+    display: inline-block;
+    margin-right: 6px;
+    padding: 0 6px;
+    border-radius: 6px;
+    background: var(--accent);
+    color: var(--on-accent);
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    line-height: 18px;
+    text-transform: uppercase;
   }
 
   .more {

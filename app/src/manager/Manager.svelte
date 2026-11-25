@@ -117,7 +117,7 @@
     // being transcribed straight away; the deck editor is a click away.
     const stopDecks = recordFinishedDecks((path, startedAt) => {
       justRan.set(path)
-      goSession(path, startedAt)
+      goSession(path, startedAt, 'run')
       // Its recording, if it made one, becomes a transcript on this computer (ADR 0041).
       void transcribeAfterRun(path)
     })
@@ -195,7 +195,7 @@
     {:else if $nav.view === 'templates'}
       <TemplatesPage />
     {:else if $nav.view === 'sessions' && $nav.session}
-      {#key $nav.session}<SessionPage path={$nav.session.deck} startedAt={$nav.session.startedAt} />{/key}
+      {#key $nav.session}<SessionPage path={$nav.session.deck} startedAt={$nav.session.startedAt} from={$nav.session.from} />{/key}
     {:else if $nav.view === 'sessions'}
       <SessionsPage />
     {:else}

@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
-import { logCardWords, logLabels, logPaneShown, logTopState, noteLabel, reviewLabel, runLabelFor, topState, wordsByCard, type TopInput } from './session-page'
+import { logArrived, logCardWords, logLabels, logPaneShown, logTopState, noteLabel, reviewLabel, runLabelFor, topState, wordsByCard, type TopInput } from './session-page'
 import { readReview } from './review'
 import { logAction } from '../log'
 import { readTranscript, transcriptMarkdown } from './transcript'
@@ -138,5 +138,13 @@ describe('the state labels', () => {
     logPaneShown('note')
     expect(logs('session.state_labels')).toEqual(['run=transcript note=Written review=Not yet check=epic-044/V4'])
     expect(logs('session.pane_shown')).toEqual(['pane=note check=epic-044/V3'])
+  })
+})
+
+describe('how a page was arrived at', () => {
+  it('is logged', () => {
+    logArrived('run')
+    logArrived(undefined)
+    expect(logs('session.arrived')).toEqual(['from=run check=epic-044/V6', 'from=other check=epic-044/V6'])
   })
 })

@@ -66,6 +66,7 @@ export function wordsByCard(cards: readonly DeckSessionCard[], transcript: Trans
 
 export const logTopState = (state: TopState) => logAction('session.transcript_state', `state=${state} check=epic-044/V5`)
 export const logCardWords = (card: number, open: boolean) => logAction('session.card_words', `card=${card} open=${open} check=epic-044/V2`)
+export const logArrived = (from: string | undefined) => logAction('session.arrived', `from=${from ?? 'other'} check=epic-044/V6`)
 export const logPageOpened = (layout: 'wide' | 'narrow') => logAction('session.page_opened', `layout=${layout} check=epic-044/V1`)
 
 /** A part's state in a few words, and how it reads: done or coming, waiting on the person, refused, or not there. */

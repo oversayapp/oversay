@@ -13,6 +13,9 @@ export type LibraryPlace = 'recent' | 'pinned' | 'week' | 'unsorted' | 'all'
 /** What the way back from a deck, and the main pane's heading, call each group. */
 export const PLACE_TITLES: Record<LibraryPlace, string> = { recent: 'Recent', pinned: 'Pinned', week: 'This week', unsorted: 'Unsorted', all: 'All decks' }
 
+/** A way into a session's page that its page treats differently: its deck's run just ended, or the deck's View last session. */
+export type SessionFrom = 'run' | 'last-session'
+
 export interface Nav {
   view: View
   /** On the Library, the group of the left pane shown; none means it picks Recent, or All decks while Recent is empty. */
@@ -20,7 +23,7 @@ export interface Nav {
   /** The deck open in the deck editor (its file's path), over the Library. */
   deck?: string
   /** On Sessions, the session open on its page: its deck's file and when it started (ADR 0041). */
-  session?: { deck: string; startedAt: string }
+  session?: { deck: string; startedAt: string; from?: SessionFrom }
   /** On the Library, the workspace open on its page, by its id (ADR 0040). */
   workspace?: string
   /** The Settings section to open at, when another screen sent you there (013/02). Cleared by every other way into Settings. */
@@ -43,8 +46,18 @@ export const showDeck = (nav: Nav, path: string): Nav =>
 export const closeDeck = (nav: Nav): Nav => ({ ...nav, deck: undefined })
 /** Sessions: every deck's runs, by day (ADR 0041). */
 export const showSessions = (_nav: Nav): Nav => ({ view: 'sessions' })
-/** A session's page, over Sessions. */
-export const showSession = (_nav: Nav, deck: string, startedAt: string): Nav => ({ view: 'sessions', session: { deck, startedAt } })
+/** A session's page, over Sessions. How it was arrived at lasts only while it is showing. */
+export const showSession = (_nav: Nav, deck: string, startedAt: string, from?: SessionFrom): Nav => ({
+  view: 'sessions',
+  session: from ? { deck, startedAt, from } : { deck, startedAt },
+})
+/**
+ * The way back from a session's page. From the Sessions list (and search) it names the view left,
+ * `view`, and goes back to it. After a run, or from View last session, the person didn't come from
+ * the list, and the view they last left may not hold this run: it says Sessions and shows every run.
+ */
+export const sessionWayBack = (from: SessionFrom | undefined, view: string | undefined): { label: string; everyRun: boolean } =>
+  from ? { label: 'Sessions', everyRun: true } : { label: view && view !== 'All' ? view : 'Sessions', everyRun: false }
 /** The AI page: install and try the Oversay skill (ADR 0033). */
 export const showAi = (_nav: Nav): Nav => ({ view: 'ai' })
 /** Templates, to browse and edit. */
