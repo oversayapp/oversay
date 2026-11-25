@@ -1,7 +1,7 @@
 ---
 title: Catch-up with Sam
 audience: Sam Ortiz
-made-with: Oversay skill 0.5.0
+made-with: Oversay skill 0.6.0
 ---
 
 ## Q4 hiring plan
