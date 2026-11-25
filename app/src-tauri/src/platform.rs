@@ -397,13 +397,13 @@ pub fn install_edit_menu(app: &AppHandle) {
 }
 
 /// Enables or greys Edit > Undo and Redo.
-pub fn enable_edit_menu(app: &AppHandle, undo: bool, redo: bool) {
+pub fn enable_edit_menu(undo: bool, redo: bool) {
     #[cfg(target_os = "macos")]
-    if let Err(e) = edit_menu::enable(app, undo, redo) {
+    if let Err(e) = edit_menu::enable(undo, redo) {
         log::warn!("Edit menu not updated: {e}");
     }
     #[cfg(not(target_os = "macos"))]
-    let _ = (app, undo, redo);
+    let _ = (undo, redo);
 }
 
 /// What the standard Edit > Undo or Redo does: sends `undo:` or `redo:` to whatever has focus.
@@ -426,8 +426,12 @@ mod edit_menu {
     use crate::edit_menu::{REDO_ID, UNDO_ID};
     use objc2::runtime::AnyObject;
     use objc2::{class, msg_send, sel};
+    use std::sync::OnceLock;
     use tauri::menu::{MenuItem, Submenu};
     use tauri::{AppHandle, Wry};
+
+    /// Undo and Redo, once they are in the menu.
+    static ITEMS: OnceLock<[MenuItem<Wry>; 2]> = OnceLock::new();
 
     fn submenu(app: &AppHandle) -> tauri::Result<Option<Submenu<Wry>>> {
         let Some(menu) = app.menu() else {
@@ -455,17 +459,13 @@ mod edit_menu {
         edit.remove_at(0)?;
         edit.insert(&undo, 0)?;
         edit.insert(&redo, 1)?;
+        let _ = ITEMS.set([undo, redo]);
         Ok(true)
     }
 
-    pub fn enable(app: &AppHandle, undo: bool, redo: bool) -> tauri::Result<()> {
-        let Some(edit) = submenu(app)? else {
-            return Ok(());
-        };
-        for (id, on) in [(UNDO_ID, undo), (REDO_ID, redo)] {
-            if let Some(item) = edit.get(id)
-                && let Some(item) = item.as_menuitem()
-            {
+    pub fn enable(undo: bool, redo: bool) -> tauri::Result<()> {
+        if let Some(items) = ITEMS.get() {
+            for (item, on) in items.iter().zip([undo, redo]) {
                 item.set_enabled(on)?;
             }
         }

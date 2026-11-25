@@ -34,7 +34,7 @@
   import { SEGMENT_KINDS, type SegmentKind } from '../lib/project/types'
   import { dropIndex } from '../lib/project/lists'
   import { moveStep, edgeScrollStep } from '../lib/decks/reorder'
-  import type { Change, Focus } from '../lib/notes/history'
+  import { selectionOf, type Change, type Focus, type Selection } from '../lib/notes/history'
   import { logAction } from '../lib/log'
   import { isMac, shortcutText } from '../lib/session/shortcuts'
   import { count } from '../lib/words'
@@ -83,15 +83,15 @@
   }
 
   /** The field `key` as a place undo can put focus back: the cursor at `select`, or at its end. */
-  const inField = (key: string, select: [number, number] | null = null): Focus => ({ field: `[data-f="${key}"]`, select })
-
-  type Selection = [number, number]
-  const selectionOf = (input: HTMLInputElement): Selection => [input.selectionStart ?? input.value.length, input.selectionEnd ?? input.value.length]
+  const inField = (key: string, select: Selection | null = null): Focus => ({ field: `[data-f="${key}"]`, select })
 
   /** A move grip, and a field with no key of its own, as places undo can put focus back. */
   const grip = (t: number): Focus => ({ field: `[data-grip="${t}"]`, select: null })
   const pointGrip = (t: number, i: number): Focus => ({ field: `[data-pgrip="${t}:${i}"]`, select: null })
   const control = (t: number, name: 'ttime' | 'tkind'): Focus => ({ field: `[data-card="${t}"] .${name}`, select: null })
+
+  /** A change in card `t` after which focus is where it was. */
+  const keeping = (t: number, focus: Focus): Change => ({ card: t, before: focus, after: focus })
 
   /** What was selected before the keystroke under way, in the field it is typed in. */
   let selected: Selection = [0, 0]
@@ -131,8 +131,7 @@
       focus(`${t}:${added.index}`, 'start')
     } else if (e.key === 'Tab') {
       e.preventDefault()
-      const kept = inField(`${t}:${i}`, selectionOf(input))
-      onchange(setPointDepth(doc, t, i, e.shiftKey ? 0 : 1), { card: t, before: kept, after: kept })
+      onchange(setPointDepth(doc, t, i, e.shiftKey ? 0 : 1), keeping(t, inField(`${t}:${i}`, selectionOf(input))))
       focus(`${t}:${i}`)
     } else if (e.key === 'Backspace' && input.value === '') {
       e.preventDefault()
@@ -384,13 +383,10 @@
   function setTime(t: number, input: HTMLInputElement) {
     const value = input.value.trim().replace(/^\[|\]$/g, '')
     const topic = doc.topics[t]
-    if (value === '') {
-      onchange(setTopic(doc, t, { time: null }), { card: t, before: control(t, 'ttime'), after: control(t, 'ttime') })
-      return
-    }
-    const parsed = parseTopicTime(value)
-    const next = parsed?.time ? setTopic(doc, t, { time: parsed.time }) : null
-    if (next) onchange(next, { card: t, before: control(t, 'ttime'), after: control(t, 'ttime') })
+    // No text takes the time away; text that isn't a time changes nothing.
+    const time = value === '' ? null : (parseTopicTime(value)?.time ?? undefined)
+    const next = time === undefined ? null : setTopic(doc, t, { time })
+    if (next) onchange(next, keeping(t, control(t, 'ttime')))
     // As saved, so brackets or spacing alone don't leave the field holding something uncommitted.
     input.value = timeText(next ? next.topics[t] : topic)
   }
@@ -468,7 +464,7 @@
               aria-label="Kind of {topic.name}"
               onchange={(e) => {
                 const kind = e.currentTarget.value as SegmentKind
-                onchange(setTopic(doc, t, { segmentKind: kind === 'topic' ? null : kind }), { card: t, before: control(t, 'tkind'), after: control(t, 'tkind') })
+                onchange(setTopic(doc, t, { segmentKind: kind === 'topic' ? null : kind }), keeping(t, control(t, 'tkind')))
               }}
             >
               {#each SEGMENT_KINDS as kind (kind)}<option value={kind}>{kind[0].toUpperCase() + kind.slice(1)}</option>{/each}

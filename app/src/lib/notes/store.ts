@@ -13,6 +13,7 @@ import { diskChange, outsideName, whatChanged } from './outside'
 import { createDeck, deckNameOf, decks, findDeck, loadDecks, summariseDeck } from '../decks/store'
 import { deckId, setDeckTitle } from '../decks/deck'
 import { NO_HISTORY, record, retitle, stepBack, stepForward, type Edit, type EditKind, type History, type Spot } from './history'
+import type { Way } from './undo-keys'
 
 export interface NoteEntry {
   path: string
@@ -171,7 +172,7 @@ export type Undone = { spot: Spot | null } | null
 export const undoNote = (by: UndoBy): Promise<Undone> => travel('undo', by)
 export const redoNote = (by: UndoBy): Promise<Undone> => travel('redo', by)
 
-async function travel(way: 'undo' | 'redo', by: UndoBy): Promise<Undone> {
+async function travel(way: Way, by: UndoBy): Promise<Undone> {
   const kind = get(openNote)?.kind
   if (!kind) return null
   // The file is looked at first: a change from outside not yet noticed drops the history here,

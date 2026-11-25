@@ -11,10 +11,18 @@ export interface Spot {
   focus: Focus | null
 }
 
+export type Selection = [number, number]
+
 export interface Focus {
   field: string
-  select: [number, number] | null
+  select: Selection | null
 }
+
+/** What is selected in a text field. */
+export const selectionOf = (el: { value: string; selectionStart: number | null; selectionEnd: number | null }): Selection => [
+  el.selectionStart ?? el.value.length,
+  el.selectionEnd ?? el.value.length,
+]
 
 /** What a step did, for the debug log. */
 export type EditKind = 'edit' | 'delete-point' | 'typing'

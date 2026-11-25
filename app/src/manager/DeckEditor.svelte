@@ -27,7 +27,7 @@
   import { showBlockedBy } from '../lib/notes/show'
   import { session, sessionCommands } from '../lib/session/store'
   import { closeNote, dismissChanged, editNote, flushNote, keepBothVersions, noteSaveError, openNote, openNoteAt, redoNote, renameOpenNote, undoNote, useOutsideVersion, type UndoBy } from '../lib/notes/store'
-  import type { Change, Focus, Spot } from '../lib/notes/history'
+  import { selectionOf, type Change, type Focus, type Selection, type Spot } from '../lib/notes/history'
   import { deckTakesUndo, fieldHistory, undoKey, type UndoTarget, type Way } from '../lib/notes/undo-keys'
   import { EDIT_MENU_EVENT, checkEditMenuChoice, editMenuState, sendEditMenu } from '../lib/notes/edit-menu'
   import { listen } from '@tauri-apps/api/event'
@@ -219,15 +219,14 @@
   let topics: NoteTopics | undefined = $state()
 
   // Typing in the Markdown view: where the cursor was before each keystroke.
-  let mdSelected: [number, number] = [0, 0]
-  const md = (select: [number, number]): Focus => ({ field: 'textarea.md', select })
-  const selectionOf = (el: HTMLTextAreaElement): [number, number] => [el.selectionStart, el.selectionEnd]
+  let mdSelected: Selection = [0, 0]
+  const md = (select: Selection): Focus => ({ field: 'textarea.md', select })
   function typeMarkdown(el: HTMLTextAreaElement) {
     const before = here(current, md(mdSelected))
     const text = el.value
     const after = md(selectionOf(el))
     // From the text as it now is: `doc` is still the one before this keystroke.
-    current = topicAtLine(parseNoteDoc(text), el.value.slice(0, el.selectionStart).split('\n').length - 1)
+    current = cursorCard(parseNoteDoc(text), el)
     editNote(text, { what: 'typing', before, after: here(current, after) })
   }
 
@@ -330,8 +329,11 @@
 
   function followCursor() {
     if (!area || !doc) return
-    current = topicAtLine(doc, area.value.slice(0, area.selectionStart).split('\n').length - 1)
+    current = cursorCard(doc, area)
   }
+
+  /** The card the Markdown view's cursor is in. */
+  const cursorCard = (of: NoteDoc, el: HTMLTextAreaElement) => topicAtLine(of, el.value.slice(0, el.selectionStart).split('\n').length - 1)
 
   // Not while a talk, a note or another deck is on screen; not before there is a card to show.
   const blocked = $derived(cards.length === 0 ? 'Add a card to show' : showBlockedBy($session))

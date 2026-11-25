@@ -56,11 +56,11 @@ fn enabled(deck: Option<DeckUndo>) -> (bool, bool) {
 
 /// The manager's word on whose undo the items are, and what the deck's can do.
 #[tauri::command]
-pub async fn set_edit_menu(app: AppHandle, deck: Option<DeckUndo>) -> Result<(), String> {
+pub async fn set_edit_menu(deck: Option<DeckUndo>) -> Result<(), String> {
     *DECK.lock().unwrap() = deck;
     let (undo, redo) = enabled(deck);
     log::debug!("menu.edit_state undo={undo} redo={redo} check=epic-043/V5");
-    crate::platform::enable_edit_menu(&app, undo, redo);
+    crate::platform::enable_edit_menu(undo, redo);
     Ok(())
 }
 
