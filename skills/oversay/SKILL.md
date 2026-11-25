@@ -2,7 +2,7 @@
 name: oversay
 description: Make, add to and find Oversay decks, the Markdown cards Oversay shows on screen one at a time during a call or a talk, each with points and an optional time, and group them into Oversay's workspaces. Use when the person asks for a note, talking points (timed or not), cards or a deck in Oversay (for a meeting, a 1:1, a call, a stand-up, a demo, a short talk), asks to add points or pasted Markdown to an Oversay deck or note, asks which Oversay decks or notes they have, asks to make a workspace in Oversay, tag one, or add a deck to one or take it out, asks which workspaces a deck is in, asks to review a session or run of a deck ("review my last stand-up", "how did my talk go"), gives a call's transcript for an Oversay session, or asks what the Oversay skill or plugin can do.
 metadata:
-  version: 0.5.0
+  version: 0.6.0
 ---
 
 # Oversay decks

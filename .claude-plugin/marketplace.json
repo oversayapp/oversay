@@ -9,7 +9,7 @@
       "name": "oversay",
       "source": "./plugins/oversay",
       "description": "Make, add to and find Oversay decks, the cards Oversay shows on screen during a call or a talk, and group them into workspaces.",
-      "version": "0.5.0",
+      "version": "0.6.0",
       "author": {
         "name": "Oversay"
       }

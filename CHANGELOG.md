@@ -6,6 +6,40 @@ Notable changes to Oversay, newest first. The format follows [Keep a Changelog](
 
 ## [Unreleased]
 
+## [0.6.0] · 2026-11-25
+
+Reorder and take back changes in the deck editor, and a session page that puts the run beside your note and review. Everything below landed after 0.5.0.
+
+### Session page: the run beside your note and review · 2026-11-25 ([epic 044 (#100)](https://github.com/oversayapp/oversay/issues/100))
+
+#### Added
+- With a transcript, each card shows how many lines were said on it and opens to show them; **Read it all** opens every card.
+- A narrow window switches between **The run**, **Note** and **Review**, each showing where it stands.
+- A session you have just finished says **Just finished**, **Open deck** sits beside its name, the page says when the recording's audio is in the Trash, and it warns you if you ask for a review before the transcript is ready.
+- A **Copy** button beside the review request.
+
+#### Changed
+- The run is on the left, your note and the AI review on the right, and each side scrolls on its own. After a run, **‹ Sessions** opens the list of every run.
+
+#### Fixed
+- A replaced transcript or a rewritten review shows its new text without reopening the page.
+- Running the same deck twice in a row could open the second session as missing.
+
+### Deck editor: reorder, delete and undo · 2026-11-25 ([epic 041 (#94)](https://github.com/oversayapp/oversay/issues/94), [epic 042 (#96)](https://github.com/oversayapp/oversay/issues/96), [epic 043 (#98)](https://github.com/oversayapp/oversay/issues/98))
+
+#### Added
+- Drag a card by its grip to reorder it, or focus the grip and press Alt+↑ / Alt+↓ (⌥ on a Mac).
+- Within a card, move a point by dragging it or with Alt+↑ / Alt+↓, and delete it with its button.
+- **Undo and redo** for every change to a deck (⌘Z and ⇧⌘Z; Ctrl+Z and Ctrl+Shift+Z or Ctrl+Y on Windows). A run of typing is one step. On a Mac, Edit › Undo and Redo follow it too. Renaming a deck isn't undone.
+
+### Fixes · 2026-11-23
+
+#### Fixed
+- The one-time move of a deck's resources into its workspace leaves an alias, or a folder that holds one, where it is instead of deleting it, and says how many items stayed ([#92](https://github.com/oversayapp/oversay/pull/92)). It doesn't bring back an alias 0.5.0 already removed.
+
+#### Security
+- Updated the `url` and `cookie` libraries for two published advisories (RUSTSEC-2026-0592, RUSTSEC-2026-0594).
+
 ## [0.5.0] · 2026-11-21
 
 Cloud saving, a Library, a new deck editor and a simpler control panel. Everything below landed after 0.4.0.
@@ -296,6 +330,7 @@ Work on how Oversay is built, checked and tracked, newest first.
 - 2026-10-12: Work is tracked in GitHub Issues, with the history of the earlier tickets kept.
 - 2026-10-06: Builds for macOS and Windows in CI; checks on every pull request; actions logged without their content in development builds.
 
-[Unreleased]: https://github.com/oversayapp/oversay/compare/v0.5.0...main
+[Unreleased]: https://github.com/oversayapp/oversay/compare/v0.6.0...main
+[0.6.0]: https://github.com/oversayapp/oversay/compare/v0.5.0...v0.6.0
 [0.5.0]: https://github.com/oversayapp/oversay/compare/v0.4.0...v0.5.0
 [0.4.0]: https://github.com/oversayapp/oversay/releases/tag/v0.4.0
