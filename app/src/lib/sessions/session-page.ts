@@ -1,0 +1,67 @@
+// What a session's page shows (spec §11, epic 044 (#100)): which state the top of the run is
+// in, and what was said beside each card. Pure but for the debug log, so the page and its tests
+// agree. The log carries states and numbers only, never what was said or written.
+
+import { logAction } from '../log'
+import type { DeckSessionCard } from '../decks/sessions'
+import type { TranscriptLine, readTranscript } from './transcript'
+
+type Transcript = ReturnType<typeof readTranscript>
+
+/** What the top of the run shows: the saved transcript, or why there is none to read yet. */
+export type TopState = 'import' | 'transcript' | 'silent' | 'loading' | 'downloading' | 'transcribing' | 'ask' | 'waiting' | 'none'
+
+export interface TopInput {
+  /** A transcript file is being lined up, to check before it is saved. */
+  checking: boolean
+  /** The saved transcript, once read. */
+  transcript: Transcript | null
+  /** A saved transcript is being read. */
+  reading: boolean
+  /** The session has a recording. */
+  recording: boolean
+  /** How far the speech model's download is, in percent, or null when none is under way. */
+  download: number | null
+  /** How far this recording's transcription is, in percent, or null. */
+  work: number | null
+  /** The speech model is not here and the person hasn't said Not now. */
+  askForModel: boolean
+}
+
+export function topState(i: TopInput): TopState {
+  if (i.checking) return 'import'
+  if (i.transcript) return i.transcript.cards.some((c) => c.lines.length > 0) ? 'transcript' : 'silent'
+  if (i.reading) return 'loading'
+  if (!i.recording) return 'none'
+  if (i.download !== null) return 'downloading'
+  if (i.work !== null) return 'transcribing'
+  return i.askForModel ? 'ask' : 'waiting'
+}
+
+/**
+ * Each card's lines from a transcript, matched by the card's name, in order. A heading that is
+ * no card's (an edited file) is kept, to show after the cards.
+ */
+export function wordsByCard(cards: readonly DeckSessionCard[], transcript: Transcript): { byCard: TranscriptLine[][]; extra: Transcript['cards'] } {
+  const byCard: TranscriptLine[][] = cards.map(() => [])
+  const extra: Transcript['cards'] = []
+  const taken = new Set<number>()
+  // A heading is read up to its first " · ", so a name with one in it is matched by its start.
+  const is = (name: string, title: string) => {
+    const flat = name.replace(/\s+/g, ' ').trim()
+    return flat === title || flat.startsWith(`${title} · `)
+  }
+  for (const section of transcript.cards) {
+    const i = cards.findIndex((c, at) => !taken.has(at) && is(c.name, section.title))
+    if (i < 0) extra.push(section)
+    else {
+      taken.add(i)
+      byCard[i] = section.lines
+    }
+  }
+  return { byCard, extra }
+}
+
+export const logTopState = (state: TopState) => logAction('session.transcript_state', `state=${state} check=epic-044/V5`)
+export const logCardWords = (card: number, open: boolean) => logAction('session.card_words', `card=${card} open=${open} check=epic-044/V2`)
+export const logPageOpened = (layout: 'wide' | 'narrow') => logAction('session.page_opened', `layout=${layout} check=epic-044/V1`)

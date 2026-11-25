@@ -470,14 +470,12 @@ Decks/Weekly standup 2026-10-25/
 
 ### A session's page
 
-Opened from the Sessions screen, search, or a deck's earlier runs (§9). It shows:
+Opened from the Sessions screen, search, or a deck's earlier runs (§9). Across the top: the deck's name (it opens the deck), its workspaces, when it ran and for whom, **Show again**, and **Delete session** in its ⋯ menu, after asking. Under it the **run** is on the left, and the person's **note** with the **AI review** under it on the right; the two sides scroll separately (epic 044 (#100)).
 
-- The deck's name (it opens the deck), when it ran, how long against planned, paused time, and **Show again**.
-- **Cards against plan:** each card's planned and actual time and the difference, overruns in words and colour, untimed cards marked, and a card visited more than once says so.
+- **The run:** how long it ran against the plan, the difference, paused time and cards over; then where the transcript stands; then one list of the cards, each with its planned and actual time and the difference, overruns in words and colour, untimed and skipped cards marked, and a card visited more than once saying so.
+- **Transcript:** with one, each card opens to what was said while it was up, with the time; none is open when the page opens, and **Read it all** opens every card (**Close all** closes them). Until then the top of the run says why there is none: **Add a transcript…** (or a file dropped on the page) imports one from the call app, checked before it is saved, and a recording shows where its transcription stands. While a file is being checked, or when nothing was heard, no card opens.
 - **Note:** what went wrong, what to improve; saved as it is typed.
-- **Transcript:** under each card, what was said while it was up, with the time. **Add a transcript…** (or a file dropped on the page) imports one from the call app.
 - **Review:** the AI review when there is one (its sections, with the skill that wrote it), or **Review with your AI**, which copies a request for the person's agent ("Review my Weekly standup session of Wed 28 Oct 09:00 in Oversay."), shows it to copy by hand when the clipboard can't be written, says where to paste it, and links the AI page (§4).
-- **Delete session** in its ⋯ menu, after asking.
 
 ### Transcripts
 

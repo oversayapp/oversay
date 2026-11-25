@@ -177,7 +177,8 @@
   <div class="col">
   <!-- One search for the whole app, above every page (task 253). -->
   <GlobalSearch />
-  <main>
+  <!-- A session's page fills the window and scrolls its own two sides. -->
+  <main class:fills={$nav.view === 'sessions' && !!$nav.session}>
     {#if $notice}<p class="error notice" role="alert">{$notice}</p>{/if}
     <MovedBanner />
 
@@ -229,6 +230,12 @@
     min-width: 0;
     overflow: auto;
     background: var(--bg);
+  }
+
+  main.fills {
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
   }
 
   .notice {

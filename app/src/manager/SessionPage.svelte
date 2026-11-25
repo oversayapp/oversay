@@ -1,9 +1,13 @@
 <script lang="ts">
-  // A session's page (ADR 0041): when it ran,
-  // how long against the plan, each card's planned and actual time with a bar, the person's note
-  // on it, saved as it is typed, and its transcript under each card: a call app's, dropped on the
-  // page or added, lined up by time and checked before it is saved. The deck's name opens the deck, Show again shows it, and Delete (in
-  // ⋯) takes the session and its files away, after asking.
+  // A session's page (ADR 0041, spec §11): the run beside the person's note and the AI review.
+  // The run is when it ran, how long against the plan, where its transcript stands, and each
+  // card's planned and actual time with a bar, opening to what was said while it was up. A
+  // transcript is a call app's, dropped on the page or added, lined up by time and checked before
+  // it is saved, or the person's own voice. The deck's name opens the deck, Show again shows it,
+  // and Delete (in ⋯) takes the session and its files away, after asking. The two sides scroll
+  // apart.
+  import { SvelteSet } from 'svelte/reactivity'
+  import { logCardWords, logPageOpened, logTopState, topState, wordsByCard } from '../lib/sessions/session-page'
   import { formatDuration } from '../lib/project/duration'
   import { decks } from '../lib/decks/store'
   import { invoke } from '@tauri-apps/api/core'
@@ -39,7 +43,7 @@
 
   // The way back names the view the person came from: its tab (a saved view's name), else Sessions.
   const backName = $derived(tabFor($sessionsPage.filters, $sessionViews)?.name)
-  $effect(() => showBack({ label: backName && backName !== 'All' ? backName : 'Sessions', go: goSessions, width: 900 }))
+  $effect(() => showBack({ label: backName && backName !== 'All' ? backName : 'Sessions', go: goSessions, width: 1180, tight: true }))
 
   const deck = $derived(($decks ?? []).find((d) => d.path === path) ?? null)
   const runs = $derived($deckSessions?.get(path) ?? null)
@@ -107,6 +111,7 @@
 
   // The transcript: the saved one, read when the session has one, or a call's file being lined up.
   let transcript = $state<ReturnType<typeof readTranscript> | null>(null)
+  let reading = $state(false)
   const hasTranscript = $derived(!!name && !!runs?.files.transcripts.includes(name))
   $effect(() => {
     const [p, n, has] = [path, name, hasTranscript]
@@ -114,8 +119,13 @@
       transcript = null
       return
     }
+    reading = true
     attempt(async () => {
-      transcript = readTranscript(await invoke<string>('read_session_file', { path: p, kind: 'transcript', name: n }))
+      try {
+        transcript = readTranscript(await invoke<string>('read_session_file', { path: p, kind: 'transcript', name: n }))
+      } finally {
+        reading = false
+      }
     })
   })
 
@@ -208,6 +218,47 @@
       await reloadDeckSessions(path)
     })
   }
+  // Where the top of the run stands, and the cards opened to what was said on them.
+  const top = $derived(
+    topState({
+      checking: !!lined,
+      transcript,
+      reading,
+      recording: hasRecording,
+      download: download?.percent ?? null,
+      work: work?.percent ?? null,
+      askForModel: !!model && !model.present && !notNow,
+    }),
+  )
+  const words = $derived(run && transcript && top === 'transcript' ? wordsByCard(run.cards, transcript) : null)
+  const openCards = new SvelteSet<number>()
+  const allOpen = $derived(!!run && run.cards.every((_, i) => openCards.has(i)))
+  function toggleCard(i: number) {
+    const open = !openCards.has(i)
+    if (open) openCards.add(i)
+    else openCards.delete(i)
+    logCardWords(i, open)
+  }
+  function readAll() {
+    const open = !allOpen
+    run?.cards.forEach((_, i) => {
+      if (open !== openCards.has(i)) toggleCard(i)
+    })
+  }
+
+  const loggedTop = $derived(run && top !== 'loading' ? top : null)
+  $effect(() => {
+    if (loggedTop) logTopState(loggedTop)
+  })
+  let width = $state(0)
+  let openedLogged = false
+  $effect(() => {
+    if (openedLogged || !run || !width) return
+    openedLogged = true
+    // The same width the two panes need (the container query below).
+    logPageOpened(width > 860 ? 'wide' : 'narrow')
+  })
+
   /** How the file was lined up, in words. */
   function offsetWords(seconds: number, clock: boolean): string {
     if (!clock) return nudge ? `Its start is ${Math.abs(nudge)} s ${nudge < 0 ? 'before' : 'after'} Start.` : 'It has no clock time, so its start is lined up with Start.'
@@ -231,247 +282,332 @@
   }}
 />
 
-<div class="page">
+<div class="page" bind:clientWidth={width}>
   {#if !run || !times}
     {#if runs}
-      <p class="muted">This session isn't here any more: it was deleted, or its deck was moved.</p>
-      <button onclick={goSessions}>Go to Sessions</button>
+      <div class="gone">
+        <p class="muted">This session isn't here any more: it was deleted, or its deck was moved.</p>
+        <button onclick={goSessions}>Go to Sessions</button>
+      </div>
     {/if}
   {:else}
-    <header class="phead">
-      <h1>
-        {#if deck}<button class="deckname" title="Open the deck" onclick={() => goDeck(path)}>{deck.name}</button>{:else}A deck that has gone{/if}
-      </h1>
-      {#each inWorkspaces as w (w.id)}<span class="chip">{w.name}</span>{/each}
-      <span class="grow"></span>
-      <button class="primary" disabled={!deck || !!blocked} title={blocked ?? 'Show the deck on screen'} onclick={showAgain}
-        ><Icon name="show" size={15} /> Show again</button
-      >
-      <div class="more">
-        <button class="ibtn" aria-haspopup="menu" aria-expanded={menuOpen} aria-label="More actions for this session" onclick={() => (menuOpen = !menuOpen)}
-          ><Icon name="more" size={18} /></button
+    <div class="top">
+      <header class="phead">
+        <h1>
+          {#if deck}<button class="deckname" title="Open the deck" onclick={() => goDeck(path)}>{deck.name}</button>{:else}A deck that has gone{/if}
+        </h1>
+        {#each inWorkspaces as w (w.id)}<span class="chip">{w.name}</span>{/each}
+        <span class="grow"></span>
+        <button class="primary" disabled={!deck || !!blocked} title={blocked ?? 'Show the deck on screen'} onclick={showAgain}
+          ><Icon name="show" size={15} /> Show again</button
         >
-        {#if menuOpen}
-          <div class="menu" role="menu">
-            <button role="menuitem" disabled={!deck} onclick={() => goDeck(path)}><Icon name="deck" size={15} /> Open the deck</button>
-            <button
-              role="menuitem"
-              class="danger"
-              onclick={() => {
-                menuOpen = false
-                deleting = true
-              }}><Icon name="trash" size={15} /> Delete session…</button
-            >
-          </div>
-        {/if}
-      </div>
-    </header>
-    <p class="muted when">
-      {[`${day(run.startedAt)}, ${clock(run.startedAt)} to ${clock(run.endedAt)}`, deck?.audience && `for ${deck.audience}`].filter(Boolean).join(' · ')}
-    </p>
-
-    {#if deleting}
-      <div class="confirm">
-        <ConfirmDelete label="Delete session" onconfirm={remove} oncancel={() => (deleting = false)}
-          >Delete this session? Its note goes with it, and its transcript, review and recording go to the Trash. The deck isn't changed.</ConfirmDelete
-        >
-      </div>
-    {/if}
-
-    <div class="summary">
-      <div><small>Ran</small><b class="num">{formatDuration(times.ran)}</b></div>
-      <div><small>Planned</small><b class="num">{times.planned ? formatDuration(times.planned) : 'untimed'}{times.untimed && times.planned ? ' + untimed' : ''}</b></div>
-      {#if total?.text}
-        <div>
-          <small>Difference{times.untimed ? ', timed cards' : ''}</small><b class="num" class:over={total.over === true} class:under={total.over === false}>{total.text}</b>
-        </div>
-      {/if}
-      <div><small>Paused</small><b class="num">{run.pausedSeconds ? formatDuration(run.pausedSeconds) : '–'}</b></div>
-      <div><small>Cards over</small><b class="num">{cardsOver} of {run.cards.length}</b></div>
-    </div>
-
-    <h2 class="sec">Cards against plan</h2>
-    <div class="cards" role="table" aria-label="Each card's planned and actual time">
-      <div class="row head" role="row">
-        <span></span><span role="columnheader">Card</span><span role="columnheader" class="r">Planned</span><span role="columnheader" class="r"
-          >Actual</span
-        ><span role="columnheader" class="r">Difference</span><span class="barcol"></span>
-      </div>
-      {#each run.cards as c, i (i)}
-        {@const d = c.plannedSeconds === null ? null : difference(c.plannedSeconds, c.seconds)}
-        {@const scale = Math.max(c.plannedSeconds ?? 0, c.seconds) || 1}
-        {@const n = shownTimes(run, i)}
-        <div class="row" role="row">
-          <span class="edge" style:background="var(--k-{c.kind})"></span>
-          <span role="cell" class="name"
-            ><b>{c.name}</b>{#if n > 1}<small>shown {n} times</small>{/if}{#if c.seconds === 0}<small>skipped</small>{/if}</span
+        <div class="more">
+          <button class="ibtn" aria-haspopup="menu" aria-expanded={menuOpen} aria-label="More actions for this session" onclick={() => (menuOpen = !menuOpen)}
+            ><Icon name="more" size={18} /></button
           >
-          <span role="cell" class="r num muted">{c.plannedSeconds === null ? 'untimed' : formatDuration(c.plannedSeconds)}</span>
-          <span role="cell" class="r num">{formatDuration(c.seconds)}</span>
-          <span role="cell" class="r num diff" class:over={d?.over === true} class:under={d?.over === false}>{d?.text ?? '–'}</span>
-          <span class="barcol" aria-hidden="true">
-            {#if c.plannedSeconds === null}
-              <span class="pa open"></span>
-            {:else}
-              {@const fill = (Math.min(c.seconds, c.plannedSeconds) / scale) * 100}
-              <span class="pa">
-                <i style:width="{fill}%" style:background="var(--k-{c.kind})"></i>
-                {#if d?.over}<b style:left="{fill}%" style:width="{100 - fill}%"></b>{/if}
-                <u style:left="calc({(c.plannedSeconds / scale) * 100}% - 1px)"></u>
-              </span>
-            {/if}
-          </span>
+          {#if menuOpen}
+            <div class="menu" role="menu">
+              <button role="menuitem" disabled={!deck} onclick={() => goDeck(path)}><Icon name="deck" size={15} /> Open the deck</button>
+              <button
+                role="menuitem"
+                class="danger"
+                onclick={() => {
+                  menuOpen = false
+                  deleting = true
+                }}><Icon name="trash" size={15} /> Delete session…</button
+              >
+            </div>
+          {/if}
         </div>
-      {/each}
-      <div class="row total" role="row">
-        <span></span><span role="cell">Total</span><span role="cell" class="r num">{times.planned ? formatDuration(times.planned) : '–'}</span><span
-          role="cell"
-          class="r num">{formatDuration(times.ran)}</span
-        ><span role="cell" class="r num diff" class:over={total?.over === true} class:under={total?.over === false}>{total?.text ?? ''}</span><span
-          class="barcol"
-        ></span>
-      </div>
+      </header>
+      <p class="muted when">
+        {[`${day(run.startedAt)}, ${clock(run.startedAt)} to ${clock(run.endedAt)}`, deck?.audience && `for ${deck.audience}`].filter(Boolean).join(' · ')}
+      </p>
+
+      {#if deleting}
+        <div class="confirm">
+          <ConfirmDelete label="Delete session" onconfirm={remove} oncancel={() => (deleting = false)}
+            >Delete this session? Its note goes with it, and its transcript, review and recording go to the Trash. The deck isn't changed.</ConfirmDelete
+          >
+        </div>
+      {/if}
     </div>
 
-    <h2 class="sec">Note <span class="hint">what went wrong, what to change</span></h2>
-    <textarea
-      class="note"
-      aria-label="Your note on this session"
-      placeholder="What went wrong? What would you do differently?"
-      value={note}
-      oninput={(e) => typed(e.currentTarget.value)}
-    ></textarea>
-    <p class="saved">{saved === 'saving' ? 'Saving…' : saved === 'saved' ? 'Saved' : 'Saved as you type, with this session.'}</p>
-
-    <h2 class="sec">Transcript{#if transcript && !pending}<span class="hint">by card</span>{/if}</h2>
-    {#if pending && lined}
-      <div class="ask" aria-live="polite">
-        <b>{pending.captions.source ? `${pending.captions.source} transcript` : 'Transcript'} · {pending.file}</b>
-        <p>
-          {offsetWords(lined.offsetSeconds, pending.captions.clockStartMs !== null)}
-          {lined.kept} {lined.kept === 1 ? 'line falls' : 'lines fall'} within the session{#if lined.leftOut}; {lined.leftOut} from before Start, after Stop or while paused
-            {lined.leftOut === 1 ? 'is' : 'are'} left out{/if}.
-        </p>
-        {#if lined.kept === 0}
-          <p class="warn">None of its lines falls within this session: it may be from another call. Move it, or cancel.</p>
-        {/if}
-        {#if hasTranscript}<p class="warn">Saving replaces this session's transcript.</p>{/if}
-        <div class="line">
-          <span class="muted">Move it</span>
-          <button class="small" onclick={() => (nudge -= 5)}>−5 s</button>
-          <b class="num">{nudge > 0 ? '+' : ''}{nudge} s</b>
-          <button class="small" onclick={() => (nudge += 5)}>+5 s</button>
-          <span class="grow"></span>
-          <button onclick={() => (pending = null)}>Cancel</button>
-          <button class="primary" disabled={lined.kept === 0} onclick={save}>Save transcript</button>
-        </div>
-        {#if preview.length}
-          <p class="first">First lines: {#each preview as l, i (i)}<span><i>{l.card}</i> {l.time} {l.speaker ? `${l.speaker}: ` : ''}“{l.text}”</span>{/each}</p>
-        {/if}
-      </div>
-    {:else if transcript}
-      <p class="src">
-        {transcript.source ? `From ${transcript.source}` : 'Transcript'} · <button class="link" onclick={pick}>Replace…</button>
-      </p>
-      {#if transcript.cards.every((c) => c.lines.length === 0)}
-        <p class="faint">Nothing was heard{transcript.source === VOICE_SOURCE ? ' in the recording' : ''}.</p>
-      {:else}
-        {#each transcript.cards as c, i (i)}
-          <div class="tcard">
-            <h3><span class="k" style:background="var(--k-{run.cards[i]?.kind ?? 'topic'})"></span>{c.title} <small>{c.times}</small></h3>
-            <ul>
-              {#each c.lines as l, j (j)}
-                <li><time class="num">{l.time}</time>{#if l.speaker}<b>{l.speaker}:</b>{' '}{/if}{l.text}</li>
-              {:else}
-                <li class="none">Nothing said while this card was up.</li>
-              {/each}
-            </ul>
-          </div>
-        {/each}
-      {/if}
-    {:else if hasRecording}
-      {#if download}
-        <div class="ask">
-          <b>Downloading Whisper's speech model</b>
-          <div class="prog"><i style:width="{download.percent}%"></i></div>
-          <p class="faint">{download.percent}% · it carries on if you leave this page.</p>
-        </div>
-      {:else if work}
-        <div class="ask">
-          <b>Transcribing on this computer…</b>
-          <div class="prog"><i style:width="{work.percent}%"></i></div>
-          <p class="faint">
-            {work.percent}% · {$settings.keepRecordings ? 'the recording is kept (Settings › Recordings).' : 'the recording goes to the Trash once it’s done.'}
-          </p>
-        </div>
-      {:else if model && !model.present && !notNow}
-        <div class="ask">
-          <b><span class="dot"></span> Your voice was recorded ({formatDuration(times.ran)})</b>
-          <p>
-            Transcribe it on this computer? Whisper's speech model is downloaded once, the first time: <b>{Math.round(model.bytes / 1_000_000)} MB</b> from
-            {model.from}, checked before it is used. Nothing you said leaves your computer.
-          </p>
-          <div class="line">
-            <button class="primary" onclick={transcribe}>Download and transcribe</button>
-            <button onclick={() => (notNow = true)}>Not now</button>
-            <span class="faint">The recording is kept until you do.</span>
-          </div>
-        </div>
-      {:else}
-        <div class="drop">
-          <b><span class="dot"></span> A recording of your voice waits to be transcribed</b>
-          <button class="small" onclick={transcribe}>Transcribe…</button>
-        </div>
-      {/if}
-    {:else}
-      <div class="drop">
-        <b>Drop a transcript from Zoom, Teams or Meet</b>
-        <span>.vtt, .srt or .txt · it's split by card, by time</span>
-        <button class="small" onclick={pick}>Add a transcript…</button>
-      </div>
-    {/if}
-    {#if importError}<p class="error" role="alert">{importError}</p>{/if}
-
-    <h2 class="sec">Review</h2>
-    {#if review}
-      <div class="review">
-        <p class="by">Written by your AI{review.madeWith ? ` with the ${review.madeWith}` : ''}. Oversay doesn't change the deck; ask your AI to make the changes.</p>
-        {#each review.sections as s, i (i)}
-          <h3>{s.title}</h3>
-          {#if s.points.length}
-            <ul>
-              {#each s.points as p, j (j)}<li><Spans spans={parseInline(p)} /></li>{/each}
-            </ul>
+    <div class="split">
+      <section class="pane runpane" aria-label="The run">
+        <div class="summary">
+          <div><small>Ran</small><b class="num">{formatDuration(times.ran)}</b></div>
+          <div><small>Planned</small><b class="num">{times.planned ? formatDuration(times.planned) : 'untimed'}{times.untimed && times.planned ? ' + untimed' : ''}</b></div>
+          {#if total?.text}
+            <div>
+              <small>Difference{times.untimed ? ', timed cards' : ''}</small><b class="num" class:over={total.over === true} class:under={total.over === false}>{total.text}</b>
+            </div>
           {/if}
-          {#each s.lines as l, j (j)}<p><Spans spans={parseInline(l)} /></p>{/each}
-        {/each}
-      </div>
-    {:else}
-      <div class="review">
-        <b>No review yet</b>
-        <p class="muted">
-          Your AI reads the deck, this session{run.note ? ', your note' : ''}{hasTranscript ? ' and the transcript' : ''}, and writes what ran over, what was rushed or
-          skipped, and what to change in the deck. It runs in your own AI app, with the Oversay skill.
-        </p>
-        <button class="primary" disabled={!request} onclick={copyRequest}>✦ Review with your AI</button>
-        {#if copied}
-          <div class="copied" role="status">
-            {copied === 'copied' ? 'Copied. Paste it' : 'Copy it'} into Claude Code, Codex or your AI app:
-            <code>{request}</code>
-            The review shows here when it's written. No Oversay skill yet? <button class="link" onclick={goAi}>Set it up on the AI page</button>
+          <div><small>Paused</small><b class="num">{run.pausedSeconds ? formatDuration(run.pausedSeconds) : '–'}</b></div>
+          <div><small>Cards over</small><b class="num">{cardsOver} of {run.cards.length}</b></div>
+        </div>
+
+        <div class="recording">
+          {#if top === 'import' && pending && lined}
+            <div class="ask" aria-live="polite">
+              <b>{pending.captions.source ? `${pending.captions.source} transcript` : 'Transcript'} · {pending.file}</b>
+              <p>
+                {offsetWords(lined.offsetSeconds, pending.captions.clockStartMs !== null)}
+                {lined.kept} {lined.kept === 1 ? 'line falls' : 'lines fall'} within the session{#if lined.leftOut}; {lined.leftOut} from before Start, after Stop or while paused
+                  {lined.leftOut === 1 ? 'is' : 'are'} left out{/if}.
+              </p>
+              {#if lined.kept === 0}
+                <p class="warn">None of its lines falls within this session: it may be from another call. Move it, or cancel.</p>
+              {/if}
+              {#if hasTranscript}<p class="warn">Saving replaces this session's transcript.</p>{/if}
+              <div class="line">
+                <span class="muted">Move it</span>
+                <button class="small" onclick={() => (nudge -= 5)}>−5 s</button>
+                <b class="num">{nudge > 0 ? '+' : ''}{nudge} s</b>
+                <button class="small" onclick={() => (nudge += 5)}>+5 s</button>
+                <span class="grow"></span>
+                <button onclick={() => (pending = null)}>Cancel</button>
+                <button class="primary" disabled={lined.kept === 0} onclick={save}>Save transcript</button>
+              </div>
+              {#if preview.length}
+                <p class="first">First lines: {#each preview as l, i (i)}<span><i>{l.card}</i> {l.time} {l.speaker ? `${l.speaker}: ` : ''}“{l.text}”</span>{/each}</p>
+              {/if}
+            </div>
+          {:else if (top === 'transcript' || top === 'silent') && transcript}
+            <div class="tbar">
+              <b>Transcript</b>
+              <span class="grow"></span>
+              {#if top === 'transcript'}<button class="small" onclick={readAll}>{allOpen ? 'Close all' : 'Read it all'}</button>{/if}
+            </div>
+            <p class="src">
+              {transcript.source ? `From ${transcript.source}` : 'Transcript'} · <button class="link" onclick={pick}>Replace…</button>
+            </p>
+            {#if top === 'silent'}
+              <p class="faint">Nothing was heard{transcript.source === VOICE_SOURCE ? ' in the recording' : ''}.</p>
+            {/if}
+          {:else if top === 'downloading' && download}
+            <div class="ask">
+              <b>Downloading Whisper's speech model</b>
+              <div class="prog"><i style:width="{download.percent}%"></i></div>
+              <p class="faint">{download.percent}% · it carries on if you leave this page.</p>
+            </div>
+          {:else if top === 'transcribing' && work}
+            <div class="ask">
+              <b>Transcribing on this computer…</b>
+              <div class="prog"><i style:width="{work.percent}%"></i></div>
+              <p class="faint">
+                {work.percent}% · {$settings.keepRecordings ? 'the recording is kept (Settings › Recordings).' : 'the recording goes to the Trash once it’s done.'}
+              </p>
+            </div>
+          {:else if top === 'ask' && model}
+            <div class="ask">
+              <b><span class="dot"></span> Your voice was recorded ({formatDuration(times.ran)})</b>
+              <p>
+                Transcribe it on this computer? Whisper's speech model is downloaded once, the first time: <b>{Math.round(model.bytes / 1_000_000)} MB</b> from
+                {model.from}, checked before it is used. Nothing you said leaves your computer.
+              </p>
+              <div class="line">
+                <button class="primary" onclick={transcribe}>Download and transcribe</button>
+                <button onclick={() => (notNow = true)}>Not now</button>
+                <span class="faint">The recording is kept until you do.</span>
+              </div>
+            </div>
+          {:else if top === 'waiting'}
+            <div class="drop">
+              <b><span class="dot"></span> A recording of your voice waits to be transcribed</b>
+              <button class="small" onclick={transcribe}>Transcribe…</button>
+            </div>
+          {:else if top === 'none'}
+            <div class="drop">
+              <b>Drop a transcript from Zoom, Teams or Meet</b>
+              <span>.vtt, .srt or .txt · it's split by card, by time</span>
+              <button class="small" onclick={pick}>Add a transcript…</button>
+            </div>
+          {/if}
+          {#if importError}<p class="error" role="alert">{importError}</p>{/if}
+        </div>
+
+        <div class="cards" role="table" aria-label="Each card's planned and actual time, and what was said on it">
+          <div class="row head" role="row">
+            <span></span><span role="columnheader">Card</span><span role="columnheader" class="r">Planned</span><span role="columnheader" class="r"
+              >Actual</span
+            ><span role="columnheader" class="r">Difference</span><span></span><span></span>
           </div>
-        {/if}
-        {#if !run.note && !hasTranscript}<p class="faint">A note or a transcript makes the review much better.</p>{/if}
-      </div>
-    {/if}
+          {#each run.cards as c, i (i)}
+            {@const d = c.plannedSeconds === null ? null : difference(c.plannedSeconds, c.seconds)}
+            {@const scale = Math.max(c.plannedSeconds ?? 0, c.seconds) || 1}
+            {@const n = shownTimes(run, i)}
+            {@const open = !!words && openCards.has(i)}
+            <div class="row" class:opens={!!words} role="row">
+              <span class="edge" style:background="var(--k-{c.kind})"></span>
+              <span role="cell" class="name"
+                >{#if words}<button class="open" aria-expanded={open} onclick={() => toggleCard(i)}>{c.name}</button>{:else}<b>{c.name}</b>{/if}{#if n > 1}<small
+                    >shown {n} times</small
+                  >{/if}{#if c.seconds === 0}<small>skipped</small>{/if}</span
+              >
+              <span role="cell" class="r num muted">{c.plannedSeconds === null ? 'untimed' : formatDuration(c.plannedSeconds)}</span>
+              <span role="cell" class="r num">{formatDuration(c.seconds)}</span>
+              <span role="cell" class="r num diff" class:over={d?.over === true} class:under={d?.over === false}>{d?.text ?? '–'}</span>
+              <span aria-hidden="true">
+                {#if c.plannedSeconds === null}
+                  <span class="pa open-ended"></span>
+                {:else}
+                  {@const fill = (Math.min(c.seconds, c.plannedSeconds) / scale) * 100}
+                  <span class="pa">
+                    <i style:width="{fill}%" style:background="var(--k-{c.kind})"></i>
+                    {#if d?.over}<b style:left="{fill}%" style:width="{100 - fill}%"></b>{/if}
+                    <u style:left="calc({(c.plannedSeconds / scale) * 100}% - 1px)"></u>
+                  </span>
+                {/if}
+              </span>
+              <span class="chev" aria-hidden="true">{words ? (open ? '▾' : '▸') : ''}</span>
+            </div>
+            {#if open && words}
+              <div class="said" role="row">
+                <div role="cell" aria-colspan="5">{@render lines(words.byCard[i])}</div>
+              </div>
+            {/if}
+          {/each}
+          <div class="row total" role="row">
+            <span></span><span role="cell">Total</span><span role="cell" class="r num">{times.planned ? formatDuration(times.planned) : '–'}</span><span
+              role="cell"
+              class="r num">{formatDuration(times.ran)}</span
+            ><span role="cell" class="r num diff" class:over={total?.over === true} class:under={total?.over === false}>{total?.text ?? ''}</span><span></span
+            ><span></span>
+          </div>
+        </div>
+        {#each words?.extra ?? [] as c, i (i)}
+          <div class="extra">
+            <h3>{c.title} <small>{c.times}</small></h3>
+            {@render lines(c.lines)}
+          </div>
+        {/each}
+      </section>
+
+      <aside class="pane side" aria-label="Your note and the AI review">
+        <section class="notepart">
+          <h2 class="sec">Note <span class="hint">what went wrong, what to change</span></h2>
+          <textarea
+            class="note"
+            aria-label="Your note on this session"
+            placeholder="What went wrong? What would you do differently?"
+            value={note}
+            oninput={(e) => typed(e.currentTarget.value)}
+          ></textarea>
+          <p class="saved">{saved === 'saving' ? 'Saving…' : saved === 'saved' ? 'Saved' : 'Saved as you type, with this session.'}</p>
+        </section>
+
+        <section class="reviewpart">
+          <h2 class="sec">AI review</h2>
+          {#if review}
+            <div class="review">
+              <p class="by">Written by your AI{review.madeWith ? ` with the ${review.madeWith}` : ''}. Oversay doesn't change the deck; ask your AI to make the changes.</p>
+              {#each review.sections as s, i (i)}
+                <h3>{s.title}</h3>
+                {#if s.points.length}
+                  <ul>
+                    {#each s.points as p, j (j)}<li><Spans spans={parseInline(p)} /></li>{/each}
+                  </ul>
+                {/if}
+                {#each s.lines as l, j (j)}<p><Spans spans={parseInline(l)} /></p>{/each}
+              {/each}
+            </div>
+          {:else}
+            <div class="review">
+              <b>No review yet</b>
+              <p class="muted">
+                Your AI reads the deck, this session{run.note ? ', your note' : ''}{hasTranscript ? ' and the transcript' : ''}, and writes what ran over, what was rushed or
+                skipped, and what to change in the deck. It runs in your own AI app, with the Oversay skill.
+              </p>
+              <button class="primary" disabled={!request} onclick={copyRequest}>✦ Review with your AI</button>
+              {#if copied}
+                <div class="copied" role="status">
+                  {copied === 'copied' ? 'Copied. Paste it' : 'Copy it'} into Claude Code, Codex or your AI app:
+                  <code>{request}</code>
+                  The review shows here when it's written. No Oversay skill yet? <button class="link" onclick={goAi}>Set it up on the AI page</button>
+                </div>
+              {/if}
+              {#if !run.note && !hasTranscript}<p class="faint">A note or a transcript makes the review much better.</p>{/if}
+            </div>
+          {/if}
+        </section>
+      </aside>
+    </div>
   {/if}
 </div>
 
+{#snippet lines(said: { time: string; speaker: string; text: string }[])}
+  <ul class="lines">
+    {#each said as l, j (j)}
+      <li><time class="num">{l.time}</time>{#if l.speaker}<b>{l.speaker}:</b>{' '}{/if}{l.text}</li>
+    {:else}
+      <li class="none">Nothing said while this card was up.</li>
+    {/each}
+  </ul>
+{/snippet}
+
 <style>
+  /* The page fills the window under the search bar, so its two sides can scroll apart. */
   .page {
-    max-width: 900px;
+    flex: 1;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    container: session / inline-size;
+  }
+
+  .top,
+  .gone {
+    flex: none;
+    width: 100%;
+    max-width: 1180px;
     margin: 0 auto;
-    padding: 26px 32px 48px;
+    padding: 18px 32px 0;
+  }
+
+  /* The run at the left; the note and the review at the right. */
+  .split {
+    flex: 1;
+    min-height: 0;
+    width: 100%;
+    max-width: 1180px;
+    margin: 12px auto 0;
+    display: grid;
+    grid-template-columns: minmax(0, 1.55fr) minmax(320px, 1fr);
+    grid-template-rows: minmax(0, 1fr);
+    border-top: 1px solid var(--line);
+  }
+
+  .pane {
+    min-height: 0;
+    overflow: auto;
+    padding: 12px 18px 32px;
+  }
+
+  .runpane {
+    padding-left: 32px;
+  }
+
+  .side {
+    padding-right: 32px;
+    border-left: 1px solid var(--line);
+    background: var(--side);
+  }
+
+  .notepart .sec {
+    margin-top: 0;
+  }
+
+  .recording {
+    margin: 10px 0;
+  }
+
+  .tbar {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px;
+    font-size: 13px;
   }
 
   .phead {
@@ -635,12 +771,72 @@
   }
 
   .row {
+    position: relative;
     display: grid;
-    grid-template-columns: 4px minmax(0, 1fr) 64px 64px 112px minmax(110px, 190px);
-    gap: 12px;
+    grid-template-columns: 4px minmax(0, 1fr) 56px 52px 92px minmax(50px, 130px) 12px;
+    gap: 8px;
     align-items: center;
-    padding: 9px 14px 9px 0;
+    margin: 0;
+    padding: 9px 12px 9px 0;
     border-top: 1px solid var(--line);
+  }
+
+  .row.opens:hover {
+    background: var(--hover);
+  }
+
+  /* The card's name is the button; it reaches over its whole row. */
+  button.open {
+    border: 0;
+    background: none;
+    padding: 0;
+    font: inherit;
+    font-weight: 700;
+    color: inherit;
+    text-align: left;
+  }
+
+  button.open:hover {
+    background: none;
+  }
+
+  button.open::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+  }
+
+  button.open:focus-visible {
+    outline: none;
+  }
+
+  button.open:focus-visible::after {
+    outline: 2px solid var(--accent);
+    outline-offset: -2px;
+  }
+
+  .chev {
+    font-size: 11px;
+    color: var(--faint);
+  }
+
+  .said {
+    padding: 4px 14px 10px 18px;
+    border-top: 1px dashed var(--line);
+  }
+
+  .extra {
+    margin-top: 12px;
+  }
+
+  .extra h3 {
+    margin: 0 0 4px;
+    font-size: 14px;
+  }
+
+  .extra h3 small {
+    font-weight: 500;
+    color: var(--faint);
   }
 
   .row:first-child {
@@ -648,7 +844,7 @@
   }
 
   .row.head {
-    padding: 8px 14px 6px 0;
+    padding: 8px 12px 6px 0;
     font-size: 11px;
     font-weight: 700;
     letter-spacing: 0.05em;
@@ -672,6 +868,7 @@
 
   .name small {
     margin-left: 6px;
+    white-space: nowrap;
     color: var(--faint);
   }
 
@@ -731,7 +928,7 @@
     opacity: 0.55;
   }
 
-  .pa.open {
+  .pa.open-ended {
     background: transparent;
     border: 1.5px dashed var(--line-strong);
   }
@@ -881,52 +1078,29 @@
     font-size: inherit;
   }
 
-  .tcard {
-    margin: 0 0 12px;
-  }
-
-  .tcard h3 {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    margin: 0 0 4px;
-    font-size: 14px;
-  }
-
-  .tcard h3 small {
-    font-weight: 500;
-    color: var(--faint);
-  }
-
-  .tcard .k {
-    width: 8px;
-    height: 8px;
-    border-radius: 2px;
-  }
-
-  .tcard ul {
+  .lines {
     list-style: none;
     margin: 0;
-    padding: 0 0 0 16px;
+    padding: 0 0 0 14px;
     border-left: 2px solid var(--line);
   }
 
-  .tcard li {
+  .lines li {
     padding: 2px 0;
     font-size: 13.5px;
   }
 
-  .tcard time {
+  .lines time {
     margin-right: 8px;
     font-size: 12.5px;
     color: var(--faint);
   }
 
-  .tcard li b {
+  .lines li b {
     font-weight: 650;
   }
 
-  .tcard .none {
+  .lines .none {
     color: var(--faint);
     font-style: italic;
   }
@@ -956,17 +1130,36 @@
     color: var(--danger);
   }
 
-  @media (max-width: 760px) {
-    .page {
-      padding: 20px 16px 40px;
+  /* Too narrow for two sides: one column that scrolls. */
+  @container session (max-width: 860px) {
+    .split {
+      display: block;
+      overflow: auto;
     }
 
-    .row {
-      grid-template-columns: 4px minmax(0, 1fr) 52px 52px 92px;
+    .pane {
+      overflow: visible;
     }
 
-    .barcol {
-      display: none;
+    .side {
+      padding-left: 32px;
+      border-left: 0;
+      background: none;
+    }
+  }
+
+  /* The search bar's row narrows its padding here too, so the way back still lines up. */
+  @container session (max-width: 760px) {
+    .top,
+    .gone {
+      padding-left: 16px;
+      padding-right: 16px;
+    }
+
+    .runpane,
+    .side {
+      padding-left: 16px;
+      padding-right: 16px;
     }
   }
 </style>
