@@ -3,6 +3,8 @@ import {
   addTopic,
   frontValue,
   insertPoint,
+  moveTopic,
+  moveTopicBy,
   parseNoteDoc,
   parseTopicTime,
   pointsOf,
@@ -17,6 +19,7 @@ import {
   topicTimeText,
   writeNoteDoc,
   endOfTopic,
+  type NoteDoc,
 } from './format'
 
 const PRIYA = `---
@@ -247,5 +250,79 @@ describe('where topics are', () => {
     expect(lines[topicLine(doc, 3)]).toBe('## Anything else [open]')
     expect(topicAtLine(doc, 0)).toBe(0)
     expect(topicAtLine(doc, topicLine(doc, 2) + 1)).toBe(2)
+  })
+})
+
+describe('moveTopic: reordering cards (epic 041)', () => {
+  const THREE = '## 1 [1m]\n- one\n\n## 2 [2m, demo]\n- two\n\n## 3\n- three\n'
+
+  it('moves the third card above the first, each card as written (drag-card-order/V1, V3)', () => {
+    const { doc, index } = moveTopic(parseNoteDoc(THREE), 3, 1)
+    expect(writeNoteDoc(doc)).toBe('## 3\n- three\n\n## 1 [1m]\n- one\n\n## 2 [2m, demo]\n- two\n')
+    expect(index).toBe(1)
+    expect(parseNoteDoc(writeNoteDoc(doc)).topics.map((t) => t.name)).toEqual(['', '3', '1', '2'])
+  })
+
+  it('moves a card down, to the end (drag-card-order/V1)', () => {
+    const { doc, index } = moveTopic(parseNoteDoc(THREE), 1, 4)
+    expect(writeNoteDoc(doc)).toBe('## 2 [2m, demo]\n- two\n\n## 3\n- three\n\n## 1 [1m]\n- one\n')
+    expect(index).toBe(3)
+  })
+
+  it('takes everything under a heading with its card and leaves the front matter and preamble', () => {
+    const text = '---\nid: d_k3x9a2bq\n---\n\n# Title\n\n## A\n1. first\n   wrapped on\n  - sub\n> quote\n\n```\n## not a card\n```\n\n## B [~5m]\n| a | b |\n\n### deeper\n'
+    expect(writeNoteDoc(moveTopic(parseNoteDoc(text), 2, 1).doc)).toBe(
+      '---\nid: d_k3x9a2bq\n---\n\n# Title\n\n## B [~5m]\n| a | b |\n\n### deeper\n\n## A\n1. first\n   wrapped on\n  - sub\n> quote\n\n```\n## not a card\n```\n',
+    )
+  })
+
+  it('keeps the blank lines where they were: a newly added last card moved between two others (drag-card-order/V2)', () => {
+    const added = addTopic(parseNoteDoc('## A\n- one\n\n\n## B\n- two\n'), 2, 'New card').doc
+    expect(writeNoteDoc(moveTopic(added, 3, 2).doc)).toBe('## A\n- one\n\n\n## New card\n\n## B\n- two\n')
+  })
+
+  it.each([
+    ['no final newline', '## A\n- one\n\n## B\n- two', '## B\n- two\n\n## A\n- one'],
+    ['CRLF', '## A\r\n- one\r\n\r\n## B\r\n- two\r\n', '## B\r\n- two\r\n\r\n## A\r\n- one\r\n'],
+    ['CRLF and no final newline', '## A\r\n- one\r\n\r\n## B\r\n- two', '## B\r\n- two\r\n\r\n## A\r\n- one'],
+    ['no blank line between cards', '## A\n- one\n## B\n- two\n', '## B\n- two\n## A\n- one\n'],
+  ])('keeps the end of the file and its line endings: %s', (_, before, after) => {
+    expect(writeNoteDoc(moveTopic(parseNoteDoc(before), 2, 1).doc)).toBe(after)
+  })
+
+  it('changes nothing when the card would stay where it is', () => {
+    const doc = parseNoteDoc(THREE)
+    for (const position of [2, 3]) expect(moveTopic(doc, 2, position)).toEqual({ doc, index: 2 })
+    expect(moveTopic(doc, 2, 2).doc).toBe(doc)
+  })
+
+  it('never moves the lines before the first heading, or a card above them', () => {
+    const doc = parseNoteDoc('- before any heading\n\n## A\n\n## B\n')
+    expect(moveTopic(doc, 0, 3).doc).toBe(doc)
+    expect(writeNoteDoc(moveTopic(doc, 2, 0).doc)).toBe('- before any heading\n\n## B\n\n## A\n')
+  })
+
+  it('has no card for an index outside the note', () => {
+    const doc = parseNoteDoc(THREE)
+    expect(moveTopic(doc, 9, 1).doc).toBe(doc)
+    expect(moveTopic(doc, -1, 1).doc).toBe(doc)
+  })
+
+  it('refuses a move that would swallow other cards into an unclosed code fence', () => {
+    const doc = parseNoteDoc('## A\n- one\n\n## B\n```\nnever closed\n')
+    expect(moveTopic(doc, 2, 1)).toEqual({ doc, index: 2 })
+    expect(moveTopic(doc, 2, 1).doc).toBe(doc)
+    expect(moveTopic(doc, 1, 3).doc).toBe(doc)
+  })
+
+  it('moves a card one place either way, and not past either end (keyboard-move-card/V4)', () => {
+    const doc = parseNoteDoc(THREE)
+    const names = (d: NoteDoc) => d.topics.slice(1).map((t) => t.name)
+    const up = moveTopicBy(doc, 2, -1)
+    expect([names(up.doc), up.index]).toEqual([['2', '1', '3'], 1])
+    const down = moveTopicBy(doc, 2, 1)
+    expect([names(down.doc), down.index]).toEqual([['1', '3', '2'], 3])
+    expect(moveTopicBy(doc, 1, -1).doc).toBe(doc)
+    expect(moveTopicBy(doc, 3, 1).doc).toBe(doc)
   })
 })

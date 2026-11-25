@@ -4,6 +4,7 @@
 // tables, code, deeper headings) stay where they were.
 
 import { formatDuration, parseDuration } from '../project/duration'
+import { moveItemTo } from '../project/lists'
 import { SEGMENT_KINDS, type SegmentKind } from '../project/types'
 
 /** A topic's time from its heading: `[5m]`, `[~5m]` (about five minutes), `[open]`. */
@@ -373,6 +374,39 @@ export function setFrontValue(doc: NoteDoc, key: string, value: string): NoteDoc
   const empty = front.length === 2
   return reread({ ...doc, front: empty ? [] : front })
 }
+
+const isBlank = (item: Item) => item.kind === 'kept' && body(item.line).trim() === ''
+
+/** A topic's items, apart from the blank lines at its end, which separate it from what follows. */
+function splitGap(items: Item[]): { content: Item[]; gap: Item[] } {
+  const end = items.findLastIndex((item) => !isBlank(item)) + 1
+  return { content: items.slice(0, end), gap: items.slice(end) }
+}
+
+/**
+ * Moves topic `from` to the insertion position `position`, counted before the move: 1 is before the
+ * first `## ` topic, `topics.length` after the last. The lines before the first heading never move.
+ * Returns the note and the topic's new index. The same note when the topic would not move, or when
+ * the move would change which topics the file reads as (an unclosed code fence swallows what follows).
+ */
+export function moveTopic(doc: NoteDoc, from: number, position: number): { doc: NoteDoc; index: number } {
+  const unmoved = { doc, index: from }
+  const parts = doc.topics.slice(1).map((topic) => ({ topic, ...splitGap(topic.items) }))
+  const order = moveItemTo(parts, from - 1, position - 1)
+  if (order === parts) return unmoved
+  // Each card takes its own lines with it; the blank lines stay where they are in the file.
+  const topics = [doc.topics[0], ...order.map((part, n) => ({ ...part.topic, items: [...part.content, ...parts[n].gap] }))]
+  let text = writeNoteDoc({ ...doc, topics })
+  // A file that did not end its last line still doesn't.
+  if (!ENDING.test(writeNoteDoc(doc))) text = text.replace(ENDING, '')
+  const next = parseNoteDoc(text)
+  const headings = (list: Topic[]) => list.map((t) => (t.heading === null ? '' : body(t.heading))).join('\n')
+  return headings(next.topics) === headings(topics) ? { doc: next, index: 1 + order.indexOf(parts[from - 1]) } : unmoved
+}
+
+/** Moves topic `from` one place up (-1) or down (1), as moveTopic does. */
+export const moveTopicBy = (doc: NoteDoc, from: number, step: -1 | 1): { doc: NoteDoc; index: number } =>
+  moveTopic(doc, from, step === 1 ? from + 2 : from - 1)
 
 // ---- where each topic is in the text, for keeping the place when switching between tabs
 
