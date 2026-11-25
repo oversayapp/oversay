@@ -26,7 +26,10 @@
   import { logAction } from '../lib/log'
   import { showBlockedBy } from '../lib/notes/show'
   import { session, sessionCommands } from '../lib/session/store'
-  import { closeNote, dismissChanged, editNote, flushNote, keepBothVersions, noteSaveError, openNote, openNoteAt, renameOpenNote, useOutsideVersion } from '../lib/notes/store'
+  import { closeNote, dismissChanged, editNote, flushNote, keepBothVersions, noteSaveError, openNote, openNoteAt, redoNote, renameOpenNote, undoNote, useOutsideVersion, type UndoBy } from '../lib/notes/store'
+  import type { Change, Focus, Spot } from '../lib/notes/history'
+  import { deckTakesUndo, undoKey, type UndoTarget, type Way } from '../lib/notes/undo-keys'
+  import { isMac } from '../lib/session/shortcuts'
   import { quickName } from '../lib/notes/files'
   import { formatDuration } from '../lib/project/duration'
   import { count } from '../lib/words'
@@ -198,7 +201,70 @@
   const editing = $derived(doc ? cardAt(doc, current) : 0)
   let area: HTMLTextAreaElement | undefined = $state()
 
-  const change = (next: NoteDoc) => editNote(writeNoteDoc(next))
+  // Undo and redo (ADR 0052). Where the editor is goes with each change, so undoing it can go
+  // back there.
+  let root: HTMLElement | undefined = $state()
+  const here = (card: number, focus: Focus | null): Spot => ({ view: page === 'settings' ? 'settings' : view === 'markdown' ? 'markdown' : 'cards', card, focus })
+  const change = (next: NoteDoc, how?: Change) =>
+    editNote(writeNoteDoc(next), {
+      what: how?.what,
+      before: here(how?.card ?? current, how?.before ?? null),
+      after: here(how?.card ?? current, how?.after ?? null),
+    })
+
+  /** Where a key or a menu choice at `el` goes: whether the deck's undo takes it. */
+  function undoTarget(el: EventTarget | null): UndoTarget {
+    const node = el instanceof HTMLElement ? el : null
+    const textEntry =
+      node instanceof HTMLTextAreaElement ||
+      (node instanceof HTMLInputElement && !['checkbox', 'radio', 'button', 'range'].includes(node.type)) ||
+      !!node?.isContentEditable
+    return {
+      inEditor: !node || node === document.body || (!!root?.contains(node) && !node.closest('[role="dialog"]')),
+      textEntry,
+      savedAsTyped: node?.dataset.undo === 'deck',
+      value: node instanceof HTMLInputElement ? node.value : '',
+      committed: node?.dataset.committed ?? null,
+    }
+  }
+
+  async function travel(way: Way, by: UndoBy) {
+    const done = await (way === 'undo' ? undoNote : redoNote)(by)
+    if (done?.spot) await goTo(done.spot)
+  }
+
+  /** Shows where an undone or redone change was made, with focus where it was. */
+  async function goTo(spot: Spot) {
+    page = spot.view === 'settings' ? 'settings' : 'cards'
+    if (spot.view !== 'settings') view = spot.view === 'markdown' ? 'markdown' : 'edit'
+    current = spot.card
+    await tick()
+    const el = spot.focus && root?.querySelector<HTMLElement>(spot.focus.field)
+    if (!el) {
+      root?.querySelector(`[data-card="${spot.card}"]`)?.scrollIntoView({ block: 'nearest' })
+      return
+    }
+    el.focus()
+    if (el instanceof HTMLInputElement || el instanceof HTMLTextAreaElement) el.setSelectionRange(...(spot.focus?.select ?? [el.value.length, el.value.length]))
+    el.scrollIntoView({ block: 'nearest' })
+  }
+
+  function onUndoKey(e: KeyboardEvent) {
+    if (e.defaultPrevented || e.isComposing || !deck) return
+    const way = undoKey(e, isMac())
+    if (!way || !deckTakesUndo(undoTarget(e.target))) return
+    // Stops the field's own undo too.
+    e.preventDefault()
+    void attempt(() => travel(way, 'keys'))
+  }
+
+  // A field's own undo asked for another way (its context menu): the deck's takes its place.
+  function onHistoryInput(e: InputEvent) {
+    const way: Way | null = e.inputType === 'historyUndo' ? 'undo' : e.inputType === 'historyRedo' ? 'redo' : null
+    if (!way || !deck || !deckTakesUndo(undoTarget(e.target))) return
+    e.preventDefault()
+    void attempt(() => travel(way, 'menu'))
+  }
 
   async function showView(next: 'edit' | 'markdown') {
     if (next === view) return
@@ -252,13 +318,16 @@
   )
 </script>
 
-<div class="page">
+<svelte:window onkeydown={onUndoKey} onbeforeinputcapture={onHistoryInput} />
+
+<div class="page" bind:this={root}>
   {#if deck && doc && options}
     <header class="nhead">
       <span class="kicon"><Icon name="deck" size={20} /></span>
       <input
         class="name"
         value={deck.name}
+        data-committed={deck.name}
         aria-label="Deck name"
         onchange={rename}
         onkeydown={(e) => {
@@ -358,6 +427,7 @@
         {:else}
           <textarea
             class="md"
+            data-undo="deck"
             aria-label="The deck in Markdown"
             spellcheck="true"
             bind:this={area}
@@ -382,7 +452,7 @@
               <div class="front">
       <label>
         <span>Audience</span>
-        <input value={deckAudience(doc)} placeholder="Who it is for" onchange={(e) => setAudience(e.currentTarget.value)} />
+        <input value={deckAudience(doc)} data-committed={deckAudience(doc)} placeholder="Who it is for" onchange={(e) => setAudience(e.currentTarget.value)} />
       </label>
       <div class="tags" role="group" aria-label="Tags">
         <span>Tags</span>
@@ -397,6 +467,7 @@
           class="tagin"
           placeholder={tags.length ? 'Add' : 'weekly, platform…'}
           aria-label="Add a tag"
+          data-committed=""
           bind:value={tagText}
           onkeydown={(e) => {
             if ((e.key === 'Enter' || e.key === ',') && !e.isComposing) {

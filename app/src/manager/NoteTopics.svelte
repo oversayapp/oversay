@@ -34,6 +34,7 @@
   import { SEGMENT_KINDS, type SegmentKind } from '../lib/project/types'
   import { dropIndex } from '../lib/project/lists'
   import { moveStep, edgeScrollStep } from '../lib/decks/reorder'
+  import type { Change, Focus } from '../lib/notes/history'
   import { logAction } from '../lib/log'
   import { isMac, shortcutText } from '../lib/session/shortcuts'
   import { count } from '../lib/words'
@@ -50,7 +51,8 @@
   }: {
     doc: NoteDoc
     noteName: string
-    onchange: (doc: NoteDoc) => void
+    /** The cards changed, and how, for undo. */
+    onchange: (doc: NoteDoc, how?: Change) => void
     current?: number
     /** What a topic is called: `card` in a deck. */
     word?: 'topic' | 'card'
@@ -79,6 +81,9 @@
       el.setSelectionRange(at, at)
     }
   }
+
+  /** The field `key` as a place undo can put focus back: the cursor at `select`, or at its end. */
+  const at = (key: string, select: [number, number] | null = null): Focus => ({ field: `[data-f="${key}"]`, select })
 
   const timeText = (topic: Topic) => topicTimeText(topic.time).replace(/^ \[|\]$/g, '')
 
@@ -129,8 +134,9 @@
   function deletePoint(t: number, i: number) {
     const previous = doc.topics[t].items.slice(0, i).findLastIndex((x) => x.kind === 'point')
     refused = ''
-    onchange(removePoint(doc, t, i))
-    focus(previous >= 0 ? `${t}:${previous}` : t > 0 ? `name:${t}` : '')
+    const next = previous >= 0 ? `${t}:${previous}` : t > 0 ? `name:${t}` : ''
+    onchange(removePoint(doc, t, i), { what: 'delete-point', card: t, before: at(`${t}:${i}`) })
+    focus(next)
   }
 
   /** Alt+↑ / Alt+↓ on a point or its grip: one place among its siblings, with focus, and the cursor, kept. */
@@ -404,6 +410,7 @@
           <input
             class="tname"
             data-f="name:{t}"
+            data-undo="deck"
             value={topic.name}
             aria-label="{Word} name"
             placeholder={Word}
@@ -418,6 +425,7 @@
           <input
             class="ttime"
             value={timeText(topic)}
+            data-committed={timeText(topic)}
             aria-label="Time for {topic.name}"
             title="About how long: 5m, 30s, ~5m, 1:30 or open"
             placeholder={kinds ? 'no time' : 'time'}
@@ -477,6 +485,7 @@
               <span class="bul" aria-hidden="true">{item.depth === 1 ? '–' : '•'}</span>
               <input
                 data-f="{t}:{i}"
+                data-undo="deck"
                 value={item.text}
                 aria-label={item.depth === 1 ? 'Sub-point' : 'Point'}
                 placeholder={item.depth === 1 ? 'Sub-point' : 'Point'}
