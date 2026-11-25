@@ -178,6 +178,15 @@
       copied = 'shown'
     }
     logAction('review request', copied)
+    return copied
+  }
+  // The button beside the request says how its press went, for a moment.
+  let pressed = $state<'copied' | 'shown' | null>(null)
+  let pressedTimer: ReturnType<typeof setTimeout> | undefined
+  async function copyAgain() {
+    pressed = await copyRequest()
+    clearTimeout(pressedTimer)
+    pressedTimer = setTimeout(() => (pressed = null), 1500)
   }
 
   let pending = $state<{ file: string; captions: Captions } | null>(null)
@@ -482,7 +491,7 @@
           <div class="row head" role="row">
             <span></span><span role="columnheader">Card</span><span role="columnheader" class="r">Planned</span><span role="columnheader" class="r"
               >Actual</span
-            ><span role="columnheader" class="r">Difference</span><span></span><span></span>
+            ><span role="columnheader" class="r">Difference</span><span></span>
           </div>
           {#each run.cards as c, i (i)}
             {@const d = c.plannedSeconds === null ? null : difference(c.plannedSeconds, c.seconds)}
@@ -494,7 +503,8 @@
               <span role="cell" class="name"
                 >{#if words}<button class="open" aria-expanded={open} onclick={() => toggleCard(i)}>{c.name}</button>{:else}<b>{c.name}</b>{/if}{#if n > 1}<small
                     >shown {n} times</small
-                  >{/if}{#if c.seconds === 0}<small>skipped</small>{/if}</span
+                  >{/if}{#if c.seconds === 0}<small>skipped</small>{/if}{#if words}<span class="view" aria-hidden="true">{open ? 'Hide transcript ▾' : 'View transcript ▸'}</span
+                  >{/if}</span
               >
               <span role="cell" class="r num muted">{c.plannedSeconds === null ? 'untimed' : formatDuration(c.plannedSeconds)}</span>
               <span role="cell" class="r num">{formatDuration(c.seconds)}</span>
@@ -511,7 +521,6 @@
                   </span>
                 {/if}
               </span>
-              <span class="chev" aria-hidden="true">{words ? (open ? '▾' : '▸') : ''}</span>
             </div>
             {#if open && words}
               <div class="said" role="row">
@@ -523,8 +532,7 @@
             <span></span><span role="cell">Total</span><span role="cell" class="r num">{times.planned ? formatDuration(times.planned) : '–'}</span><span
               role="cell"
               class="r num">{formatDuration(times.ran)}</span
-            ><span role="cell" class="r num diff" class:over={total?.over === true} class:under={total?.over === false}>{total?.text ?? ''}</span><span></span
-            ><span></span>
+            ><span role="cell" class="r num diff" class:over={total?.over === true} class:under={total?.over === false}>{total?.text ?? ''}</span><span></span>
           </div>
         </div>
         {#each words?.extra ?? [] as c, i (i)}
@@ -574,7 +582,13 @@
               {#if copied}
                 <div class="copied" role="status">
                   {copied === 'copied' ? 'Copied. Paste it' : 'Copy it'} into Claude Code, Codex or your AI app:
-                  <code>{request}</code>
+                  <span class="request">
+                    <code>{request}</code>
+                    <button class="small copy" title="Copy the request" onclick={copyAgain}
+                      ><Icon name={pressed === 'copied' ? 'check' : 'copy'} size={15} />
+                      {pressed === 'copied' ? 'Copied' : pressed === 'shown' ? 'Couldn’t copy: select it' : 'Copy'}</button
+                    >
+                  </span>
                   The review shows here when it's written. No Oversay skill yet? <button class="link" onclick={goAi}>Set it up on the AI page</button>
                 </div>
               {/if}
@@ -936,7 +950,7 @@
   .row {
     position: relative;
     display: grid;
-    grid-template-columns: 4px minmax(0, 1fr) 56px 52px 92px minmax(50px, 130px) 12px;
+    grid-template-columns: 4px minmax(0, 1fr) 56px 52px 92px minmax(50px, 130px);
     gap: 8px;
     align-items: center;
     margin: 0;
@@ -980,9 +994,16 @@
     outline-offset: -2px;
   }
 
-  .chev {
-    font-size: 11px;
-    color: var(--faint);
+  /* A card that opens says so, in words, under its name. A click on it is a click on the row. */
+  .view {
+    flex-basis: 100%;
+    color: var(--accent-text);
+    font-size: 12.5px;
+    font-weight: 600;
+  }
+
+  .row.opens:hover .view {
+    text-decoration: underline;
   }
 
   .said {
@@ -1185,9 +1206,28 @@
     font-size: 13px;
   }
 
-  .copied code {
-    display: block;
+  /* The text to paste, with its Copy button beside it (under it when there isn't room). */
+  .request {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 6px;
     margin: 6px 0;
+  }
+
+  .copy {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    background: var(--card);
+  }
+
+  .copied code {
+    flex: 1 1 220px;
+    /* A sentence, not a path: it wraps between words. */
+    word-break: normal;
+    overflow-wrap: anywhere;
     padding: 7px 9px;
     border: 1px solid var(--line);
     border-radius: 7px;
