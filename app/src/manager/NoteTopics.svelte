@@ -11,9 +11,11 @@
     addTopic,
     endOfTopic,
     insertPoint,
+    movePointBy,
     moveTopic,
     moveTopicBy,
     parseTopicTime,
+    pointSiblings,
     pointsOf,
     removePoint,
     removeTopic,
@@ -28,7 +30,7 @@
   } from '../lib/notes/format'
   import { SEGMENT_KINDS, type SegmentKind } from '../lib/project/types'
   import { dropIndex } from '../lib/project/lists'
-  import { cardMoveStep, edgeScrollStep } from '../lib/decks/reorder'
+  import { moveStep, edgeScrollStep } from '../lib/decks/reorder'
   import { logAction } from '../lib/log'
   import { isMac, shortcutText } from '../lib/session/shortcuts'
   import { count } from '../lib/words'
@@ -62,15 +64,15 @@
   // The lines before the first topic show as a card only when they hold points.
   const cards = $derived(doc.topics.map((topic, t) => ({ topic, t })).filter(({ topic, t }) => t > 0 || pointsOf(topic).length > 0))
 
-  /** Puts the cursor in the field `key` once the change has rendered: at its start, its end, or all selected. */
-  async function focus(key: string, caret: 'start' | 'end' | 'all' = 'end') {
+  /** Puts the cursor in the field `key` once the change has rendered: at its start, its end, a place in it, or all selected. */
+  async function focus(key: string, caret: 'start' | 'end' | 'all' | number = 'end') {
     await tick()
     const el = box?.querySelector<HTMLInputElement>(`[data-f="${key}"]`)
     if (!el) return
     el.focus()
     if (caret === 'all') el.select()
     else {
-      const at = caret === 'start' ? 0 : el.value.length
+      const at = typeof caret === 'number' ? caret : caret === 'start' ? 0 : el.value.length
       el.setSelectionRange(at, at)
     }
   }
@@ -88,7 +90,11 @@
     if (e.isComposing) return
     const topic = doc.topics[t]
     const input = e.currentTarget
-    if (e.key === 'Enter') {
+    const step = moveStep(e)
+    if (step !== null) {
+      e.preventDefault()
+      if (!drag) keyMovePoint(t, i, step, input.selectionStart ?? input.value.length)
+    } else if (e.key === 'Enter') {
       e.preventDefault()
       const at = input.selectionStart ?? input.value.length
       const before = input.value.slice(0, at)
@@ -116,6 +122,36 @@
         next.focus()
       }
     }
+  }
+
+  /** Alt+↑ / Alt+↓ on a point: one place among its siblings, with the cursor kept where it was. */
+  async function keyMovePoint(t: number, i: number, step: -1 | 1, caret: number) {
+    const siblings = pointSiblings(doc.topics[t], i)
+    const to = siblings.indexOf(i) + step
+    // The first and last stay where they are.
+    if (to < 0 || to >= siblings.length) return
+    const moved = movePointBy(doc, t, i, step)
+    if (await pointMoved(moved, 'keyboard', `card=${t} item=${i} to=${moved.index} check=epic-042/V2`)) focus(`${t}:${moved.index}`, caret)
+  }
+
+  /** Writes a point's move, or says why it didn't happen; true when it moved. */
+  async function pointMoved(moved: { doc: NoteDoc; index: number }, by: 'keyboard' | 'drag', ids: string): Promise<boolean> {
+    if (moved.doc === doc) {
+      logAction('deck.point_move_refused', `by=${by} ${ids}`)
+      await refuse('That point can’t move there: a line would read as part of the point above it. Change it in Markdown.')
+      return false
+    }
+    refused = ''
+    logAction('deck.point_moved', `by=${by} ${ids}`)
+    onchange(moved.doc)
+    return true
+  }
+
+  /** Says why a move didn't happen. The note is after the last card, which may be below the fold. */
+  async function refuse(why: string) {
+    refused = why
+    await tick()
+    box?.querySelector('.refused')?.scrollIntoView({ block: 'nearest' })
   }
 
   function firstPoint(t: number) {
@@ -228,7 +264,7 @@
   }
 
   function onGripKey(e: KeyboardEvent, t: number) {
-    const step = cardMoveStep(e)
+    const step = moveStep(e)
     if (step === null || drag) return
     e.preventDefault()
     // The first and last cards stay where they are.
@@ -239,10 +275,7 @@
   async function move(from: number, moved: { doc: NoteDoc; index: number }, check: string) {
     if (moved.doc === doc) {
       logAction(`${word === 'card' ? 'deck' : 'note'} move ${word} refused`)
-      refused = `That ${word} can’t move there: a code block that isn’t closed would take in the ${word}s after it. Close it in Markdown.`
-      // The note is after the last card, which may be below the fold.
-      await tick()
-      box?.querySelector('.refused')?.scrollIntoView({ block: 'nearest' })
+      await refuse(`That ${word} can’t move there: a code block that isn’t closed would take in the ${word}s after it. Close it in Markdown.`)
       return
     }
     refused = ''

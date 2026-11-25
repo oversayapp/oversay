@@ -377,6 +377,12 @@ export function setFrontValue(doc: NoteDoc, key: string, value: string): NoteDoc
 
 const isBlank = (item: Item) => item.kind === 'kept' && body(item.line).trim() === ''
 
+/** `doc` with its topics rearranged, read again. A file that did not end its last line still doesn't. */
+function rereadMoved(doc: NoteDoc, topics: Topic[]): NoteDoc {
+  const text = writeNoteDoc({ ...doc, topics })
+  return parseNoteDoc(ENDING.test(writeNoteDoc(doc)) ? text : text.replace(ENDING, ''))
+}
+
 /** A topic's items, apart from the blank lines at its end, which separate it from what follows. */
 function splitGap(items: Item[]): { content: Item[]; gap: Item[] } {
   const end = items.findLastIndex((item) => !isBlank(item)) + 1
@@ -396,10 +402,7 @@ export function moveTopic(doc: NoteDoc, from: number, position: number): { doc: 
   if (order === parts) return unmoved
   // Each card takes its own lines with it; the blank lines stay where they are in the file.
   const topics = [doc.topics[0], ...order.map((part, n) => ({ ...part.topic, items: [...part.content, ...parts[n].gap] }))]
-  let text = writeNoteDoc({ ...doc, topics })
-  // A file that did not end its last line still doesn't.
-  if (!ENDING.test(writeNoteDoc(doc))) text = text.replace(ENDING, '')
-  const next = parseNoteDoc(text)
+  const next = rereadMoved(doc, topics)
   const headings = (list: Topic[]) => list.map((t) => (t.heading === null ? '' : body(t.heading))).join('\n')
   return headings(next.topics) === headings(topics) ? { doc: next, index: 1 + order.indexOf(parts[from - 1]) } : unmoved
 }
@@ -407,6 +410,90 @@ export function moveTopic(doc: NoteDoc, from: number, position: number): { doc: 
 /** Moves topic `from` one place up (-1) or down (1), as moveTopic does. */
 export const moveTopicBy = (doc: NoteDoc, from: number, step: -1 | 1): { doc: NoteDoc; index: number } =>
   moveTopic(doc, from, step === 1 ? from + 2 : from - 1)
+
+// ---- moving a point within its topic
+
+const isPoint = (item: Item): item is PointItem => item.kind === 'point'
+
+/**
+ * The items point `i` can trade places with, itself included, by their index: a point's are the
+ * topic's points; a sub-point's are the sub-points of the same point. Empty when `i` is no point.
+ */
+export function pointSiblings(topic: Topic, i: number): number[] {
+  const item = topic.items[i]
+  if (item?.kind !== 'point') return []
+  const points = topic.items.flatMap((x, n) => (x.kind === 'point' ? [{ n, depth: x.depth }] : []))
+  if (item.depth === 0) return points.filter((p) => p.depth === 0).map((p) => p.n)
+  const parent = points.findLast((p) => p.depth === 0 && p.n < i)?.n ?? -1
+  const end = points.find((p) => p.depth === 0 && p.n > i)?.n ?? topic.items.length
+  return points.filter((p) => p.n > parent && p.n < end).map((p) => p.n)
+}
+
+const NUMBERED = /^([ \t]*)(\d+)(?=[.)])/
+
+/** `point` with its list marker, on its first line and in its prefix, rewritten by `change`. */
+function remark(point: PointItem, change: (text: string) => string): PointItem {
+  return { ...point, prefix: change(point.prefix), lines: [change(point.lines[0]), ...point.lines.slice(1)] }
+}
+
+const pointsRead = (topics: Topic[]) => JSON.stringify(topics.map((t) => pointsOf(t).map((p) => [p.depth, p.text.trim()])))
+
+/**
+ * Moves point `i` of topic `t` to the insertion position `position` among its siblings
+ * (`pointSiblings`), counted before the move. A point takes its sub-points with it. Kept lines stay
+ * where they are, and so do a numbered list's numbers. Returns the note and the point's new index
+ * among the topic's items. The same note when the point would not move, or when the move would
+ * change how the points read.
+ */
+export function movePoint(doc: NoteDoc, t: number, i: number, position: number): { doc: NoteDoc; index: number } {
+  const unmoved = { doc, index: i }
+  const topic = doc.topics[t]
+  const siblings = topic ? pointSiblings(topic, i) : []
+  const from = siblings.indexOf(i)
+  if (from < 0) return unmoved
+  const points = topic.items.filter(isPoint)
+  // Each sibling with what moves along with it, as a run of the topic's points.
+  const blocks = siblings.map((n) => {
+    const start = points.indexOf(topic.items[n] as PointItem)
+    let end = start + 1
+    if (points[start].depth === 0) while (points[end]?.depth === 1) end++
+    return points.slice(start, end)
+  })
+  const order = moveItemTo(blocks, from, position)
+  if (order === blocks) return unmoved
+  const numbers = blocks.flatMap(([head]) => NUMBERED.exec(head.prefix)?.[2] ?? [])
+  let used = 0
+  const renumbered = order.map(([head, ...rest]) => {
+    if (!NUMBERED.test(head.prefix)) return [head, ...rest]
+    const number = numbers[used++]
+    return [remark(head, (s) => s.replace(NUMBERED, `$1${number}`)), ...rest]
+  })
+  const first = points.indexOf(blocks[0][0])
+  const moved = [...points.slice(0, first), ...renumbered.flat(), ...points.slice(first + blocks.flat().length)]
+  // A point indented with nothing above it shows as a point; moved below one, it must not turn into
+  // its sub-point.
+  const arranged = moved.map((p, n) =>
+    n > 0 && p.depth === 0 && p.prefix.trim() !== '' && indentWidth(p.prefix.match(/^[ \t]*/)![0]) >= 2
+      ? remark(p, (s) => s.replace(/^[ \t]+/, ''))
+      : p,
+  )
+  // The points fill the places points had, in their new order.
+  let at = 0
+  const items = topic.items.map((item) => (isPoint(item) ? arranged[at++] : item))
+  const topics = doc.topics.map((x, n) => (n === t ? { ...topic, items } : x))
+  const next = rereadMoved(doc, topics)
+  if (pointsRead(next.topics) !== pointsRead(topics)) return unmoved
+  const landed = renumbered.slice(0, order.indexOf(blocks[from])).flat().length + first
+  const places = next.topics[t].items.flatMap((x, n) => (x.kind === 'point' ? [n] : []))
+  return { doc: next, index: places[landed] }
+}
+
+/** Moves point `i` one place up (-1) or down (1) among its siblings, as movePoint does. */
+export function movePointBy(doc: NoteDoc, t: number, i: number, step: -1 | 1): { doc: NoteDoc; index: number } {
+  const topic = doc.topics[t]
+  const from = topic ? pointSiblings(topic, i).indexOf(i) : -1
+  return from < 0 ? { doc, index: i } : movePoint(doc, t, i, step === 1 ? from + 2 : from - 1)
+}
 
 // ---- where each topic is in the text, for keeping the place when switching between tabs
 
