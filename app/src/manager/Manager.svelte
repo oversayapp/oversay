@@ -35,7 +35,7 @@
   import { decks, loadDecks } from '../lib/decks/store'
   import { WORKSPACES_CHANGED_EVENT, loadWorkspaces, moveProjectLines, workspaces } from '../lib/workspaces/store'
   import { justRan, recordFinishedDecks } from '../lib/decks/sessions'
-  import { loadDeckSessions } from '../lib/sessions/store'
+  import { openFinishedRun, loadDeckSessions } from '../lib/sessions/store'
   import { followRecording } from '../lib/sessions/recording'
   import { followVoiceWork, transcribeAfterRun } from '../lib/sessions/whisper'
   import { moveIntoDecks } from '../lib/decks/migrate'
@@ -117,7 +117,7 @@
     // being transcribed straight away; the deck editor is a click away.
     const stopDecks = recordFinishedDecks((path, startedAt) => {
       justRan.set(path)
-      goSession(path, startedAt, 'run')
+      attempt(() => openFinishedRun(path, () => goSession(path, startedAt, 'run')))
       // Its recording, if it made one, becomes a transcript on this computer (ADR 0041).
       void transcribeAfterRun(path)
     })
@@ -235,7 +235,6 @@
   main.fills {
     display: flex;
     flex-direction: column;
-    overflow: hidden;
   }
 
   .notice {

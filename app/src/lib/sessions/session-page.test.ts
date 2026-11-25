@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest'
-import { audioInTrash, logArrived, logAudioNote, logCardWords, logOpenDeck, logReviewEarly, reviewEarly, logLabels, logPaneShown, logTopState, noteLabel, reviewLabel, runLabelFor, topState, wordsByCard, type TopInput } from './session-page'
+import { CHANGES, audioInTrash, logArrived, logAudioNote, logCardWords, logOpenDeck, logReviewEarly, reviewEarly, logLabels, logPaneShown, logTopState, noteLabel, reviewLabel, runLabelFor, topState, wordsByCard, type TopInput } from './session-page'
 import { readReview } from './review'
+import SESSION_FORMAT from './session-format.json'
 import { VOICE_SOURCE } from './whisper'
 import { logAction } from '../log'
 import { readTranscript, transcriptMarkdown } from './transcript'
@@ -86,6 +87,13 @@ describe('what was said, beside each card', () => {
     expect(extra.map((c) => c.title)).toEqual(['Aside'])
   })
 
+  it('goes by place when a file heads every card its own way', () => {
+    const edited = readTranscript('## 1. Intro\n- 0:01 Morning.\n## 2. Atlas\n- 1:01 Atlas shipped.\n## 3. Wrap-up\n- 2:05 Bye.\n')
+    const { byCard, extra } = wordsByCard(run.cards, edited)
+    expect(byCard.map((lines) => lines.map((l) => l.text))).toEqual([['Morning.'], ['Atlas shipped.'], ['Bye.']])
+    expect(extra).toEqual([])
+  })
+
   it('finds a card whose name has a dot in it', () => {
     const cards = [{ ...run.cards[0], name: 'Q&A · pricing' }]
     const t = readTranscript(transcriptMarkdown({ ...run, cards }, 'Stand-up', 'zoom', [{ at: 1000, speaker: '', text: 'Price.' }]).markdown)
@@ -100,6 +108,10 @@ describe('what was said, beside each card', () => {
 })
 
 describe('the state labels', () => {
+  it('count the changes under a section the review format has', () => {
+    expect(SESSION_FORMAT.review.sections).toContain(CHANGES)
+  })
+
   it('say where the transcript stands', () => {
     const label = (state: Parameters<typeof runLabelFor>[0]['state'], percent = 0, refused = false) => runLabelFor({ state, percent, refused })
     expect(label('transcript')).toEqual({ text: 'Ready', tone: 'good' })

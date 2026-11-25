@@ -7,7 +7,6 @@ import type { DeckSessionCard } from '../decks/sessions'
 import type { TranscriptLine, readTranscript } from './transcript'
 import { VOICE_SOURCE } from './whisper'
 import type { Review } from './review'
-import SESSION_FORMAT from './session-format.json'
 
 type Transcript = ReturnType<typeof readTranscript>
 
@@ -42,25 +41,32 @@ export function topState(i: TopInput): TopState {
 }
 
 /**
- * Each card's lines from a transcript, matched by the card's name, in order. A heading that is
- * no card's (an edited file) is kept, to show after the cards.
+ * Each card's lines from a transcript, matched by the card's name, in order. When there is a
+ * heading per card, one that names no card goes to the card in its place, if that card has none.
+ * Any other heading (an edited file) is kept, to show after the cards.
  */
 export function wordsByCard(cards: readonly DeckSessionCard[], transcript: Transcript): { byCard: TranscriptLine[][]; extra: Transcript['cards'] } {
   const byCard: TranscriptLine[][] = cards.map(() => [])
-  const extra: Transcript['cards'] = []
+  const unnamed: number[] = []
   const taken = new Set<number>()
   // A heading is read up to its first " · ", so a name with one in it is matched by its start.
   const is = (name: string, title: string) => {
     const flat = name.replace(/\s+/g, ' ').trim()
     return flat === title || flat.startsWith(`${title} · `)
   }
-  for (const section of transcript.cards) {
-    const i = cards.findIndex((c, at) => !taken.has(at) && is(c.name, section.title))
-    if (i < 0) extra.push(section)
-    else {
-      taken.add(i)
-      byCard[i] = section.lines
-    }
+  const give = (card: number, section: number) => {
+    taken.add(card)
+    byCard[card] = transcript.cards[section].lines
+  }
+  transcript.cards.forEach((section, at) => {
+    const i = cards.findIndex((c, card) => !taken.has(card) && is(c.name, section.title))
+    if (i < 0) unnamed.push(at)
+    else give(i, at)
+  })
+  const extra: Transcript['cards'] = []
+  for (const at of unnamed) {
+    if (transcript.cards.length === cards.length && !taken.has(at)) give(at, at)
+    else extra.push(transcript.cards[at])
   }
   return { byCard, extra }
 }
@@ -104,8 +110,8 @@ export function runLabelFor({ state, percent, refused }: { state: TopState; perc
 
 export const noteLabel = (note: string): Label => (note.trim() ? label('Written', 'plain') : label('Not written', 'none'))
 
-/** The review's section that lists what to change in the deck, as the skill writes it. */
-const CHANGES = SESSION_FORMAT.review.sections[3]
+/** The review's section that lists what to change in the deck, as the review format names it. */
+export const CHANGES = 'What to change in the deck'
 
 export function reviewLabel(there: boolean, review: Review | null): Label {
   if (!there) return label('Not yet', 'none')

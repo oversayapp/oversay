@@ -37,3 +37,13 @@ export async function reloadDeckSessions(path: string): Promise<void> {
   const runs = await runsOf(path)
   deckSessions.update((all) => new Map(all ?? []).set(path, runs))
 }
+
+/**
+ * Reads the deck's runs again, then opens the one that has just ended. Nothing else is sure to:
+ * the folder watcher ignores sessions.json, and a deck run twice in a row is the same "just ran"
+ * as before.
+ */
+export async function openFinishedRun(path: string, open: () => void): Promise<void> {
+  await reloadDeckSessions(path)
+  open()
+}

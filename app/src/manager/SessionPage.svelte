@@ -119,8 +119,10 @@
   let transcript = $state<ReturnType<typeof readTranscript> | null>(null)
   let reading = $state(false)
   const hasTranscript = $derived(!!name && !!runs?.files.transcripts.includes(name))
+  // Read again whenever the deck's runs are: a transcript or review replaced or rewritten keeps
+  // its name, so nothing else says it changed.
   $effect(() => {
-    const [p, n, has] = [path, name, hasTranscript]
+    const [p, n, has] = [path, name, hasTranscript, runs]
     if (!has) {
       transcript = null
       return
@@ -157,7 +159,7 @@
   let review = $state<Review | null>(null)
   const hasReview = $derived(!!name && !!runs?.files.reviews.includes(name))
   $effect(() => {
-    const [p, n, has] = [path, name, hasReview]
+    const [p, n, has] = [path, name, hasReview, runs]
     if (!has) {
       review = null
       return
@@ -424,7 +426,7 @@
               {#if top === 'transcript'}<button class="small" onclick={readAll}>{allOpen ? 'Close all' : 'Read it all'}</button>{/if}
             </div>
             <p class="src">
-              {transcript.source ? `From ${transcript.source === VOICE_SOURCE ? `y${VOICE_SOURCE.slice(1)}` : transcript.source}` : 'Transcript'} · <button class="link" onclick={pick}>Replace…</button>{#if trashed}{' '}· audio in the Trash{/if}
+              {transcript.source ? `From ${transcript.source === VOICE_SOURCE ? VOICE_SOURCE.charAt(0).toLowerCase() + VOICE_SOURCE.slice(1) : transcript.source}` : 'Transcript'} · <button class="link" onclick={pick}>Replace…</button>{#if trashed}{' '}· audio in the Trash{/if}
             </p>
             {#if top === 'silent'}
               <p class="faint">Nothing was heard{transcript.source === VOICE_SOURCE ? ' in the recording' : ''}.</p>
@@ -624,9 +626,10 @@
     padding: 18px 32px 0;
   }
 
-  /* The run at the left; the note and the review at the right. */
+  /* The run at the left; the note and the review at the right. They keep this much height: under
+     a tall header in a short window, the whole page scrolls to them. */
   .split {
-    flex: 1;
+    flex: 1 0 240px;
     min-height: 0;
     width: 100%;
     max-width: 1180px;
