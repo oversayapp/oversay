@@ -3,10 +3,14 @@ import {
   addTopic,
   frontValue,
   insertPoint,
+  movePoint,
+  movePointBy,
   moveTopic,
   moveTopicBy,
+  pointSiblings,
   parseNoteDoc,
   parseTopicTime,
+  pointBlockEnd,
   pointsOf,
   removePoint,
   removeTopic,
@@ -324,5 +328,120 @@ describe('moveTopic: reordering cards (epic 041)', () => {
     expect([names(down.doc), down.index]).toEqual([['1', '3', '2'], 3])
     expect(moveTopicBy(doc, 1, -1).doc).toBe(doc)
     expect(moveTopicBy(doc, 3, 1).doc).toBe(doc)
+  })
+})
+
+describe('movePoint: reordering the points of a card (epic 042)', () => {
+  const ABC = '## Card\n- A\n- B\n- C\n'
+  const moved = (text: string, t: number, i: number, position: number) => writeNoteDoc(movePoint(parseNoteDoc(text), t, i, position).doc)
+
+  it('moves the third point above the first (epic-042/V2)', () => {
+    const { doc, index } = movePoint(parseNoteDoc(ABC), 1, 2, 0)
+    expect(writeNoteDoc(doc)).toBe('## Card\n- C\n- A\n- B\n')
+    expect(index).toBe(0)
+  })
+
+  it('moves one place at a time, and not past the first or last (epic-042/V2)', () => {
+    const doc = parseNoteDoc(ABC)
+    expect(writeNoteDoc(movePointBy(doc, 1, 1, -1).doc)).toBe('## Card\n- B\n- A\n- C\n')
+    expect(writeNoteDoc(movePointBy(doc, 1, 1, 1).doc)).toBe('## Card\n- A\n- C\n- B\n')
+    expect(movePointBy(doc, 1, 0, -1).doc).toBe(doc)
+    expect(movePointBy(doc, 1, 2, 1).doc).toBe(doc)
+  })
+
+  const SUBS = '## Card\n- A\n- B\n  - b1\n  - b2\n- C\n'
+
+  it('takes a point’s sub-points with it (epic-042/V4)', () => {
+    const up = movePointBy(parseNoteDoc(SUBS), 1, 1, -1)
+    expect(writeNoteDoc(up.doc)).toBe('## Card\n- B\n  - b1\n  - b2\n- A\n- C\n')
+    expect(up.index).toBe(0)
+    const down = movePointBy(parseNoteDoc(SUBS), 1, 0, 1)
+    expect(writeNoteDoc(down.doc)).toBe('## Card\n- B\n  - b1\n  - b2\n- A\n- C\n')
+    expect(down.index).toBe(3)
+  })
+
+  it('moves a sub-point only among its own point’s sub-points (epic-042/V4)', () => {
+    const doc = parseNoteDoc(SUBS)
+    expect(writeNoteDoc(movePointBy(doc, 1, 3, -1).doc)).toBe('## Card\n- A\n- B\n  - b2\n  - b1\n- C\n')
+    expect(movePointBy(doc, 1, 2, -1).doc).toBe(doc)
+    expect(movePointBy(doc, 1, 3, 1).doc).toBe(doc)
+    expect(pointSiblings(doc.topics[1], 3)).toEqual([2, 3])
+    expect(pointSiblings(doc.topics[1], 1)).toEqual([0, 1, 4])
+  })
+
+  it('leaves kept lines and every other card where they are; wrapped lines travel with their point (epic-042/V4)', () => {
+    const text = '---\nid: d_k3x9a2bq\n---\n\n## One\n- first\n  wrapped on\n> quote\n\n| a | b |\n- second\n```\n- code\n```\n- third\n\n## Two\n- untouched\n'
+    expect(moved(text, 1, 8, 0)).toBe(
+      '---\nid: d_k3x9a2bq\n---\n\n## One\n- third\n> quote\n\n| a | b |\n- first\n  wrapped on\n```\n- code\n```\n- second\n\n## Two\n- untouched\n',
+    )
+  })
+
+  it('keeps a numbered list’s numbers in order, with each point’s own marker (epic-042/V4)', () => {
+    expect(moved('## C\n1. one\n2. two\n3. three\n', 1, 2, 0)).toBe('## C\n1. three\n2. one\n3. two\n')
+    expect(moved('## C\n- plain\n3) x\n4) y\n', 1, 2, 0)).toBe('## C\n3) y\n- plain\n4) x\n')
+    expect(moved('## C\n1. a\n  1. a1\n  2. a2\n2. b\n', 1, 2, 0)).toBe('## C\n1. a\n  1. a2\n  2. a1\n2. b\n')
+    expect(moved('## C\n1. a\n  1. a1\n2. b\n  1. b1\n', 1, 2, 0)).toBe('## C\n1. b\n  1. b1\n2. a\n  1. a1\n')
+  })
+
+  it.each([
+    ['no final newline', '## C\n- A\n- B', '## C\n- B\n- A'],
+    ['CRLF', '## C\r\n- A\r\n- B\r\n', '## C\r\n- B\r\n- A\r\n'],
+    ['the points above the first heading', '- A\n- B\n\n## Next\n', '- B\n- A\n\n## Next\n'],
+  ])('handles %s (epic-042/V4)', (_, before, after) => {
+    const t = before.startsWith('##') ? 1 : 0
+    expect(moved(before, t, 1, 0)).toBe(after)
+  })
+
+  it('keeps a point a point when it showed as one only because nothing was above it', () => {
+    // Its parent was deleted: it is still indented in the file, and must not become B’s sub-point.
+    expect(moved('## C\n  - left over\n- B\n', 1, 0, 2)).toBe('## C\n- B\n- left over\n')
+  })
+
+  it('changes nothing when the move would change how the points read', () => {
+    // An indented plain line placed under a point would read as the rest of that point.
+    const doc = parseNoteDoc('## C\n> q\n  indented plain\n- B\n')
+    expect(movePoint(doc, 1, 2, 0).doc).toBe(doc)
+  })
+
+  it('changes nothing when the point would stay where it is, or is not a point', () => {
+    const doc = parseNoteDoc(ABC)
+    for (const position of [1, 2]) expect(movePoint(doc, 1, 1, position)).toEqual({ doc, index: 1 })
+    expect(movePoint(doc, 1, 9, 0).doc).toBe(doc)
+  })
+})
+
+describe('removePoint: deleting one point (epic 042)', () => {
+  const removed = (text: string, t: number, i: number) => writeNoteDoc(removePoint(parseNoteDoc(text), t, i))
+
+  it('takes the point with its wrapped lines, and no other line (epic-042/V3, V4)', () => {
+    const text = '---\nid: d_k3x9a2bq\n---\n\n## One\n1. a\n2. b\n  wrapped\n  - sub\n> quote\n3. c\n\n## Two\n- two\n'
+    expect(removed(text, 1, 1)).toBe('---\nid: d_k3x9a2bq\n---\n\n## One\n1. a\n  - sub\n> quote\n3. c\n\n## Two\n- two\n')
+  })
+
+  it.each([
+    ['no final newline', '## C\n- A\n- B', '## C\n- A'],
+    ['CRLF', '## C\r\n- A\r\n- B\r\n', '## C\r\n- A\r\n'],
+  ])('handles deleting the last line: %s (epic-042/V4)', (_, before, after) => expect(removed(before, 1, 1)).toBe(after))
+
+  it('keeps its sub-points: as points when nothing is above them (epic-042/V4)', () => {
+    const next = removePoint(parseNoteDoc('## C\n- A\n  - a1\n- B\n'), 1, 0)
+    expect(writeNoteDoc(next)).toBe('## C\n  - a1\n- B\n')
+    expect(pointsOf(next.topics[1]).map((p) => [p.text, p.depth])).toEqual([['a1', 0], ['B', 0]])
+  })
+})
+
+describe('pointBlockEnd: what moves with a point (epic 042)', () => {
+  const topic = parseNoteDoc('## C\n- A\n  - a1\n> quote\n  - a2\n- B\n').topics[1]
+
+  it('is its last sub-point, kept lines between them included (epic-042/V1)', () => {
+    expect(pointBlockEnd(topic, 0)).toBe(3)
+    expect(pointBlockEnd(topic, 1)).toBe(1)
+    expect(pointBlockEnd(topic, 4)).toBe(4)
+  })
+
+  it('is the index itself when the file changed under a drag and no point is there any more', () => {
+    expect(pointBlockEnd(topic, 9)).toBe(9)
+    expect(pointBlockEnd(topic, 2)).toBe(2)
+    expect(pointBlockEnd(undefined, 3)).toBe(3)
   })
 })

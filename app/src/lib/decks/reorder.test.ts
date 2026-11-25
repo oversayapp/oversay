@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { cardMoveStep, edgeScrollStep } from './reorder'
+import { moveStep, edgeScrollStep } from './reorder'
 
 describe('edgeScrollStep: scrolling while a card is dragged near an edge', () => {
   it.each([
@@ -17,7 +17,7 @@ describe('edgeScrollStep: scrolling while a card is dragged near an edge', () =>
   })
 })
 
-describe('cardMoveStep: the keyboard move on a focused grip', () => {
+describe('moveStep: the keyboard move on a focused card grip or point', () => {
   const press = (key: string, held: Partial<Record<'altKey' | 'ctrlKey' | 'metaKey' | 'shiftKey', boolean>> = {}) => ({
     key,
     altKey: false,
@@ -28,8 +28,8 @@ describe('cardMoveStep: the keyboard move on a focused grip', () => {
   })
 
   it('is one place up for Alt+ArrowUp and one down for Alt+ArrowDown (keyboard-move-card/V4)', () => {
-    expect(cardMoveStep(press('ArrowUp', { altKey: true }))).toBe(-1)
-    expect(cardMoveStep(press('ArrowDown', { altKey: true }))).toBe(1)
+    expect(moveStep(press('ArrowUp', { altKey: true }))).toBe(-1)
+    expect(moveStep(press('ArrowDown', { altKey: true }))).toBe(1)
   })
 
   it.each([
@@ -39,5 +39,5 @@ describe('cardMoveStep: the keyboard move on a focused grip', () => {
     ['Control+Alt', press('ArrowUp', { altKey: true, ctrlKey: true })],
     ['Command+Alt', press('ArrowUp', { altKey: true, metaKey: true })],
     ['Shift+Alt', press('ArrowDown', { altKey: true, shiftKey: true })],
-  ])('is nothing for %s', (_, e) => expect(cardMoveStep(e)).toBeNull())
+  ])('is nothing for %s', (_, e) => expect(moveStep(e)).toBeNull())
 })
