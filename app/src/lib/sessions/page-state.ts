@@ -15,3 +15,6 @@ export interface SessionsPageState {
 export const START_STATE: SessionsPageState = { filters: NO_BROWSE, group: 'recent', limit: PAGE_RUNS }
 
 export const sessionsPage = writable<SessionsPageState>({ ...START_STATE })
+
+/** The list showing every run again: no filters, its first page, grouped as it was. */
+export const withEveryRun = (s: SessionsPageState): SessionsPageState => ({ ...s, filters: NO_BROWSE, limit: PAGE_RUNS })

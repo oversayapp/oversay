@@ -98,6 +98,9 @@ export function cardAt(session: DeckSession, ms: number): number {
   return -1
 }
 
+/** Text on one line, as a heading or a line of the transcript holds it. */
+export const oneLine = (s: string) => s.replace(/\s+/g, ' ').trim()
+
 const pad = (n: number) => String(n).padStart(2, '0')
 /** `0:07`, `12:30`, `1:02:03`: when it was said, from Start. */
 function since(ms: number): string {
@@ -124,14 +127,13 @@ export function transcriptMarkdown(session: DeckSession, deckName: string, sourc
     else byCard[card].push(line)
   }
   // A line break or a stray `#` in what was said would start a heading of its own.
-  const flat = (s: string) => s.replace(/\s+/g, ' ').trim()
   const body = session.cards
     .map((c, i) => {
-      const said = byCard[i].map((l) => `- ${since(l.at)} ${l.speaker ? `**${flat(l.speaker).replace(/\*/g, '')}:** ` : ''}${flat(l.text)}`)
-      return [`## ${flat(c.name)} · ${cardTimes(c)}`, ...said].join('\n')
+      const said = byCard[i].map((l) => `- ${since(l.at)} ${l.speaker ? `**${oneLine(l.speaker).replace(/\*/g, '')}:** ` : ''}${oneLine(l.text)}`)
+      return [`## ${oneLine(c.name)} · ${cardTimes(c)}`, ...said].join('\n')
     })
     .join('\n\n')
-  const markdown = `---\nsession: ${session.startedAt}\nsource: ${flat(source)}\n---\n\n# ${flat(deckName)} · ${runLabel(session.startedAt)}\n\n${body}\n`
+  const markdown = `---\nsession: ${session.startedAt}\nsource: ${oneLine(source)}\n---\n\n# ${oneLine(deckName)} · ${runLabel(session.startedAt)}\n\n${body}\n`
   return { markdown, kept: lines.length - leftOut, leftOut }
 }
 
@@ -164,7 +166,8 @@ export function readTranscript(markdown: string): { source: string; cards: { tit
   const source = /^source:\s*(.*)$/m.exec(markdown)?.[1].trim() ?? ''
   const cards: { title: string; times: string; lines: TranscriptLine[] }[] = []
   for (const line of markdown.split(/\r?\n/)) {
-    const card = /^## (.*?)(?: · (.*))?$/.exec(line)
+    // The times come after the last " · ": a card's name may have one too.
+    const card = /^## (.*?)(?: · ([^·]*))?$/.exec(line)
     if (card) {
       cards.push({ title: card[1], times: card[2] ?? '', lines: [] })
       continue

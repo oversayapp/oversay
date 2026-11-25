@@ -35,7 +35,7 @@
   import { decks, loadDecks } from '../lib/decks/store'
   import { WORKSPACES_CHANGED_EVENT, loadWorkspaces, moveProjectLines, workspaces } from '../lib/workspaces/store'
   import { justRan, recordFinishedDecks } from '../lib/decks/sessions'
-  import { loadDeckSessions } from '../lib/sessions/store'
+  import { openFinishedRun, loadDeckSessions } from '../lib/sessions/store'
   import { followRecording } from '../lib/sessions/recording'
   import { followVoiceWork, transcribeAfterRun } from '../lib/sessions/whisper'
   import { moveIntoDecks } from '../lib/decks/migrate'
@@ -117,20 +117,17 @@
     // being transcribed straight away; the deck editor is a click away.
     const stopDecks = recordFinishedDecks((path, startedAt) => {
       justRan.set(path)
-      goSession(path, startedAt)
+      attempt(() => openFinishedRun(path, () => goSession(path, startedAt, 'run')))
       // Its recording, if it made one, becomes a transcript on this computer (ADR 0041).
       void transcribeAfterRun(path)
     })
     // Record my voice: with Auto record on, every deck records from Start (ADR 0041).
     const stopRecording = followRecording(() => !!get(settings).autoRecord)
     const stopVoiceWork = followVoiceWork()
-    // Every deck's sessions, for Sessions and search (ADR 0041): read again with the decks, and once a run is kept.
+    // Every deck's sessions, for Sessions and search (ADR 0041): read again with the decks. A run
+    // just kept is read as its page opens (above).
     const stopSessions = decks.subscribe((all) => {
       if (all) attempt(() => loadDeckSessions(all))
-    })
-    const stopJustRan = justRan.subscribe((path) => {
-      const all = get(decks)
-      if (path && all) attempt(() => loadDeckSessions(all))
     })
     // Decks written outside Oversay (an AI, another editor) as they land (ADR 0034).
     const folderListener = listen<QuickKind>(QUICK_FILES_CHANGED_EVENT, (e) => {
@@ -155,7 +152,6 @@
       stopSessions()
       stopRecording()
       stopVoiceWork()
-      stopJustRan()
       stopDecks()
       stopTray()
       stopTrayDecks()
@@ -177,7 +173,8 @@
   <div class="col">
   <!-- One search for the whole app, above every page (task 253). -->
   <GlobalSearch />
-  <main>
+  <!-- A session's page fills the window and scrolls its own two sides. -->
+  <main class:fills={$nav.view === 'sessions' && !!$nav.session}>
     {#if $notice}<p class="error notice" role="alert">{$notice}</p>{/if}
     <MovedBanner />
 
@@ -194,7 +191,7 @@
     {:else if $nav.view === 'templates'}
       <TemplatesPage />
     {:else if $nav.view === 'sessions' && $nav.session}
-      {#key $nav.session}<SessionPage path={$nav.session.deck} startedAt={$nav.session.startedAt} />{/key}
+      {#key $nav.session}<SessionPage path={$nav.session.deck} startedAt={$nav.session.startedAt} from={$nav.session.from} />{/key}
     {:else if $nav.view === 'sessions'}
       <SessionsPage />
     {:else}
@@ -229,6 +226,11 @@
     min-width: 0;
     overflow: auto;
     background: var(--bg);
+  }
+
+  main.fills {
+    display: flex;
+    flex-direction: column;
   }
 
   .notice {

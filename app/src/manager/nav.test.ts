@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { closeDeck, showAi, showDeck, showHome, showLibrary, showSession, showSessions, showSettings, showTemplates, showWorkspace, start } from './nav'
+import { closeDeck, sessionWayBack, showAi, showDeck, showHome, showLibrary, showSession, showSessions, showSettings, showTemplates, showWorkspace, start } from './nav'
 
 describe('navigation state', () => {
   it('starts on Home', () => {
@@ -21,6 +21,24 @@ describe('sessions (ADR 0041)', () => {
     const page = showSession(start, '/Decks/Stand-up/deck.md', '2026-10-28T09:00:00.000Z')
     expect(page).toEqual({ view: 'sessions', session: { deck: '/Decks/Stand-up/deck.md', startedAt: '2026-10-28T09:00:00.000Z' } })
     expect(showSessions(page)).toEqual({ view: 'sessions' })
+  })
+
+  it('carries how a page was arrived at, until it is left (epic 044 (#100))', () => {
+    const after = showSession(start, '/a/deck.md', 't', 'run')
+    expect(after.session).toEqual({ deck: '/a/deck.md', startedAt: 't', from: 'run' })
+    // Opened again from the list, it is no longer just finished.
+    expect(showSession(showSessions(after), '/a/deck.md', 't').session).toEqual({ deck: '/a/deck.md', startedAt: 't' })
+  })
+
+  it('after a run and from View last session, the way back is Sessions, with every run', () => {
+    expect(sessionWayBack('run', 'Needs a review')).toEqual({ label: 'Sessions', everyRun: true })
+    expect(sessionWayBack('last-session', 'Atlas')).toEqual({ label: 'Sessions', everyRun: true })
+  })
+
+  it('otherwise it names the view left and goes back to it', () => {
+    expect(sessionWayBack(undefined, 'Needs a review')).toEqual({ label: 'Needs a review', everyRun: false })
+    expect(sessionWayBack(undefined, 'All')).toEqual({ label: 'Sessions', everyRun: false })
+    expect(sessionWayBack(undefined, undefined)).toEqual({ label: 'Sessions', everyRun: false })
   })
 
   it("a deck opened from a session's page goes back to the Library", () => {
