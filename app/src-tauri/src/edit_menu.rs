@@ -84,6 +84,8 @@ mod tests {
 
     #[test]
     fn only_its_own_items_are_undo_and_redo() {
+        // The same names as edit-menu.test.ts hears.
+        assert_eq!(EDIT_MENU_EVENT, "edit-menu");
         assert_eq!(way("edit-undo").map(Way::name), Some("undo"));
         assert_eq!(way("edit-redo").map(Way::name), Some("redo"));
         assert_eq!(way("quit"), None);

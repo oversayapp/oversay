@@ -1,8 +1,15 @@
 import { describe, expect, it, vi } from 'vitest'
 
 const sent: unknown[] = []
+/** Set to hold the next call until it is let go. */
+let hold: Promise<void> | null = null
 vi.mock('@tauri-apps/api/core', () => ({
-  invoke: async (command: string, args: unknown) => void sent.push([command, args]),
+  invoke: async (command: string, args: unknown) => {
+    sent.push([command, args])
+    const held = hold
+    hold = null
+    await held
+  },
 }))
 
 import { EDIT_MENU_EVENT, checkEditMenuChoice, editMenuState, sendEditMenu } from './edit-menu'
@@ -32,6 +39,19 @@ describe('Edit › Undo and Redo (epic-043/V5)', () => {
       ['set_edit_menu', { deck: { undo: true, redo: false } }],
       ['set_edit_menu', { deck: null }],
     ])
+  })
+
+  it('are told in order: a call waits for the one before, as commands can overtake each other', async () => {
+    sent.length = 0
+    let letGo = () => {}
+    hold = new Promise((r) => (letGo = r))
+    const first = sendEditMenu({ undo: true, redo: true })
+    const second = sendEditMenu(null)
+    await new Promise((r) => setTimeout(r))
+    expect(sent).toHaveLength(1)
+    letGo()
+    await Promise.all([first, second])
+    expect(sent.at(-1)).toEqual(['set_edit_menu', { deck: null }])
   })
 
   it('arrive by the name the Rust side sends, as undo or redo only', () => {

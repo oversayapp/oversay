@@ -389,8 +389,10 @@
       return
     }
     const parsed = parseTopicTime(value)
-    if (parsed?.time) onchange(setTopic(doc, t, { time: parsed.time }), { card: t, before: control(t, 'ttime'), after: control(t, 'ttime') })
-    else input.value = timeText(topic)
+    const next = parsed?.time ? setTopic(doc, t, { time: parsed.time }) : null
+    if (next) onchange(next, { card: t, before: control(t, 'ttime'), after: control(t, 'ttime') })
+    // As saved, so brackets or spacing alone don't leave the field holding something uncommitted.
+    input.value = timeText(next ? next.topics[t] : topic)
   }
 </script>
 

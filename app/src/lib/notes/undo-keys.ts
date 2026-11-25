@@ -32,3 +32,14 @@ export function deckTakesUndo(at: UndoTarget): boolean {
   if (!at.textEntry || at.savedAsTyped) return true
   return at.committed !== null && at.value === at.committed
 }
+
+/**
+ * What to do when the webview is about to undo or redo what is in `target`, with focus on
+ * `focused`. Its history is page-wide, so with nothing left to undo where focus is it reaches
+ * another field: a deck field is never changed by it, and the deck's undo runs only when it takes
+ * undo where focus is.
+ */
+export function fieldHistory(target: UndoTarget, focused: UndoTarget): 'leave' | 'stop' | 'deck' {
+  if (!deckTakesUndo(target)) return 'leave'
+  return deckTakesUndo(focused) ? 'deck' : 'stop'
+}

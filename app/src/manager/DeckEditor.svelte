@@ -28,7 +28,7 @@
   import { session, sessionCommands } from '../lib/session/store'
   import { closeNote, dismissChanged, editNote, flushNote, keepBothVersions, noteSaveError, openNote, openNoteAt, redoNote, renameOpenNote, undoNote, useOutsideVersion, type UndoBy } from '../lib/notes/store'
   import type { Change, Focus, Spot } from '../lib/notes/history'
-  import { deckTakesUndo, undoKey, type UndoTarget, type Way } from '../lib/notes/undo-keys'
+  import { deckTakesUndo, fieldHistory, undoKey, type UndoTarget, type Way } from '../lib/notes/undo-keys'
   import { EDIT_MENU_EVENT, checkEditMenuChoice, editMenuState, sendEditMenu } from '../lib/notes/edit-menu'
   import { listen } from '@tauri-apps/api/event'
   import { isMac } from '../lib/session/shortcuts'
@@ -226,7 +226,8 @@
     const before = here(current, md(mdSelected))
     const text = el.value
     const after = md(selectionOf(el))
-    followCursor()
+    // From the text as it now is: `doc` is still the one before this keystroke.
+    current = topicAtLine(parseNoteDoc(text), el.value.slice(0, el.selectionStart).split('\n').length - 1)
     editNote(text, { what: 'typing', before, after: here(current, after) })
   }
 
@@ -244,6 +245,12 @@
       value: node instanceof HTMLInputElement ? node.value : '',
       committed: node?.dataset.committed ?? null,
     }
+  }
+
+  /** `undoTarget` for where the person is: nowhere in the editor while a modal dialog is over it. */
+  function underFocus(el: EventTarget | null): UndoTarget {
+    const at = undoTarget(el)
+    return document.querySelector('[aria-modal="true"]') ? { ...at, inEditor: false } : at
   }
 
   async function travel(way: Way, by: UndoBy) {
@@ -272,7 +279,7 @@
   function onUndoKey(e: KeyboardEvent) {
     if (e.defaultPrevented || e.isComposing || !deck) return
     const way = undoKey(e, isMac())
-    if (!way || !deckTakesUndo(undoTarget(e.target))) return
+    if (!way || !deckTakesUndo(underFocus(e.target))) return
     // Stops the field's own undo too.
     e.preventDefault()
     void attempt(() => travel(way, 'keys'))
@@ -286,7 +293,7 @@
   $effect(() => {
     void looked
     const history = deck?.history
-    void sendEditMenu(history && windowFocused ? editMenuState(undoTarget(document.activeElement), history) : null)
+    void sendEditMenu(history && windowFocused ? editMenuState(underFocus(document.activeElement), history) : null)
   })
   $effect(() => {
     const heard = listen<unknown>(EDIT_MENU_EVENT, (e) => {
@@ -296,12 +303,15 @@
     return () => void heard.then((stop) => stop()).catch(() => {})
   })
 
-  // A field's own undo asked for another way (its context menu): the deck's takes its place.
+  // The webview's own undo asked for another way (a context menu, or reaching a deck field from
+  // elsewhere): it never changes a deck field.
   function onHistoryInput(e: InputEvent) {
     const way: Way | null = e.inputType === 'historyUndo' ? 'undo' : e.inputType === 'historyRedo' ? 'redo' : null
-    if (!way || !deck || !deckTakesUndo(undoTarget(e.target))) return
+    if (!way || !deck) return
+    const what = fieldHistory(undoTarget(e.target), underFocus(document.activeElement))
+    if (what === 'leave') return
     e.preventDefault()
-    void attempt(() => travel(way, 'menu'))
+    if (what === 'deck') void attempt(() => travel(way, 'menu'))
   }
 
   async function showView(next: 'edit' | 'markdown') {
@@ -497,7 +507,16 @@
               <div class="front">
       <label>
         <span>Audience</span>
-        <input value={deckAudience(doc)} data-committed={deckAudience(doc)} placeholder="Who it is for" onchange={(e) => setAudience(e.currentTarget.value)} />
+        <input
+          value={deckAudience(doc)}
+          data-committed={deckAudience(doc)}
+          placeholder="Who it is for"
+          onchange={(e) => {
+            setAudience(e.currentTarget.value)
+            // As saved, so spacing alone doesn't leave the field holding something uncommitted.
+            e.currentTarget.value = e.currentTarget.value.trim()
+          }}
+        />
       </label>
       <div class="tags" role="group" aria-label="Tags">
         <span>Tags</span>

@@ -22,11 +22,16 @@ export function editMenuState(at: UndoTarget, history: History): DeckUndo | null
 /** The menu starts, and is left, with its items the field's. */
 let told = 'null'
 
-export async function sendEditMenu(deck: DeckUndo | null): Promise<void> {
+/** The calls so far: each waits for the one before, as two sent at once can arrive out of order. */
+let sending: Promise<unknown> = Promise.resolve()
+
+export function sendEditMenu(deck: DeckUndo | null): Promise<unknown> {
   const text = JSON.stringify(deck)
-  if (text === told) return
-  told = text
-  await invoke('set_edit_menu', { deck }).catch(() => {})
+  if (text !== told) {
+    told = text
+    sending = sending.then(() => invoke('set_edit_menu', { deck }).catch(() => {}))
+  }
+  return sending
 }
 
 /** The item chosen, or null when the event isn't one (it is checked, not trusted). */

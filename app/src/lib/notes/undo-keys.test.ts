@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { deckTakesUndo, undoKey } from './undo-keys'
+import { deckTakesUndo, fieldHistory, undoKey } from './undo-keys'
 
 const key = (k: string, mods: Partial<Record<'metaKey' | 'ctrlKey' | 'shiftKey' | 'altKey', boolean>>) => ({
   key: k,
@@ -49,5 +49,26 @@ describe('whose undo the keys are in the deck editor', () => {
     expect(deckTakesUndo({ ...there, value: 'a search' })).toBe(false)
     expect(deckTakesUndo({ ...there, inEditor: false, textEntry: false })).toBe(false)
     expect(deckTakesUndo({ ...there, inEditor: false, savedAsTyped: true })).toBe(false)
+  })
+})
+
+describe('a field’s own undo asked for by the webview', () => {
+  const point = { inEditor: true, textEntry: true, savedAsTyped: true, value: 'typed', committed: null }
+  const button = { ...point, textEntry: false, savedAsTyped: false }
+  const search = { ...point, inEditor: false, savedAsTyped: false }
+
+  it('on a deck field becomes the deck’s undo where the deck takes undo', () => {
+    expect(fieldHistory(point, point)).toBe('deck')
+    expect(fieldHistory(point, button)).toBe('deck')
+  })
+
+  // Its history is page-wide: with nothing left to undo where focus is, it reaches another field.
+  it('on a deck field is only stopped while focus is in another field (epic-043/V5)', () => {
+    expect(fieldHistory(point, search)).toBe('stop')
+  })
+
+  it('on any other field is left alone', () => {
+    expect(fieldHistory(search, search)).toBe('leave')
+    expect(fieldHistory(search, point)).toBe('leave')
   })
 })
