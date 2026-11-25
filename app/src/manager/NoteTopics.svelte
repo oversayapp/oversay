@@ -5,12 +5,14 @@
   // keys move between points. Lines the editor doesn't show are listed, read-only, where they are.
   // The deck editor uses it too, where a topic is a card with a kind beside its time.
   // A topic with its own heading is dragged into another place by its grip, or moved one place
-  // with Alt+↑ / Alt+↓ while the grip has focus.
+  // with Alt+↑ / Alt+↓ while the grip has focus. A point is dragged by its own grip, or moved with
+  // those keys from the point or its grip, among the points it can trade places with.
   import { onDestroy, tick } from 'svelte'
   import {
     addTopic,
     endOfTopic,
     insertPoint,
+    movePoint,
     movePointBy,
     moveTopic,
     moveTopicBy,
@@ -130,14 +132,24 @@
     focus(previous >= 0 ? `${t}:${previous}` : t > 0 ? `name:${t}` : '')
   }
 
-  /** Alt+↑ / Alt+↓ on a point: one place among its siblings, with the cursor kept where it was. */
-  async function keyMovePoint(t: number, i: number, step: -1 | 1, caret: number) {
+  /** Alt+↑ / Alt+↓ on a point or its grip: one place among its siblings, with focus, and the cursor, kept. */
+  async function keyMovePoint(t: number, i: number, step: -1 | 1, caret: number | 'grip') {
     const siblings = pointSiblings(doc.topics[t], i)
     const to = siblings.indexOf(i) + step
     // The first and last stay where they are.
     if (to < 0 || to >= siblings.length) return
     const moved = movePointBy(doc, t, i, step)
-    if (await pointMoved(moved, 'keyboard', `card=${t} item=${i} to=${moved.index} check=epic-042/V2`)) focus(`${t}:${moved.index}`, caret)
+    if (await pointMoved(moved, 'keyboard', `card=${t} item=${i} to=${moved.index} check=epic-042/V2`)) {
+      if (caret === 'grip') focusPointGrip(t, moved.index)
+      else focus(`${t}:${moved.index}`, caret)
+    }
+  }
+
+  function onPointGripKey(e: KeyboardEvent, t: number, i: number) {
+    const step = moveStep(e)
+    if (step === null || drag) return
+    e.preventDefault()
+    keyMovePoint(t, i, step, 'grip')
   }
 
   /** Writes a point's move, or says why it didn't happen; true when it moved. */
@@ -183,9 +195,13 @@
     focus(`name:${added.index}`, 'all')
   }
 
-  // Reordering (pointer events, ADR 0010): the dragged topic and where it would land, as
-  // moveTopic counts positions. The text is kept to tell if the file changed under the drag.
-  let drag = $state<{ pointer: number; from: number; position: number; text: string } | null>(null)
+  /** A point being dragged: its topic, its index there, and its siblings' indexes (`pointSiblings`). */
+  type DraggedPoint = { t: number; i: number; siblings: number[] }
+
+  // Reordering (pointer events, ADR 0010): what is dragged and where it would land, counted as
+  // moveTopic counts topics, or movePoint a point's siblings (`point` set). The text is kept to
+  // tell if the file changed under the drag.
+  let drag = $state<{ pointer: number; point: DraggedPoint | null; from: number; position: number; text: string } | null>(null)
   /** Why the last move didn't happen. */
   let refused = $state('')
   let pointerY = 0
@@ -195,11 +211,45 @@
 
   const dragMoves = $derived(drag !== null && drag.position !== drag.from && drag.position !== drag.from + 1)
 
-  /** The insertion position under the pointer: only topics with a heading have places between them. */
-  function positionAt(y: number): number {
-    const rows = [...(box?.querySelectorAll<HTMLElement>('[data-card]') ?? [])]
-    return 1 + dropIndex(rows.map((row) => row.getBoundingClientRect()).map((r) => r.top + r.height / 2), y)
+  /** The last item that moves with point `i`: its last sub-point, kept lines between them included, or itself. */
+  function blockEnd(topic: Topic, i: number): number {
+    let end = i
+    if ((topic.items[i] as PointItem).depth === 1) return end
+    for (let n = i + 1; n < topic.items.length; n++) {
+      const item = topic.items[n]
+      if (item.kind !== 'point') continue
+      if (item.depth === 0) break
+      end = n
+    }
+    return end
   }
+
+  /**
+   * The insertion position under the pointer. Only topics with a heading have places between them;
+   * a point has places only among its siblings, and the card drag never measures a point's rows.
+   */
+  function positionAt(y: number, point: DraggedPoint | null): number {
+    const middle = (top: Element | null | undefined, bottom: Element | null | undefined = top) =>
+      top && bottom ? (top.getBoundingClientRect().top + bottom.getBoundingClientRect().bottom) / 2 : 0
+    if (!point) return 1 + dropIndex([...(box?.querySelectorAll('[data-card]') ?? [])].map((card) => middle(card)), y)
+    const row = (n: number) => box?.querySelector(`[data-point="${point.t}:${n}"]`)
+    return dropIndex(
+      point.siblings.map((n) => middle(row(n), row(blockEnd(doc.topics[point.t], n)))),
+      y,
+    )
+  }
+
+  /** Where the drop line goes beside point row `i` of topic `t`, while a point is dragged. */
+  function pointDrop(t: number, i: number): 'before' | 'after' | null {
+    const point = drag?.point
+    if (!dragMoves || !drag || !point || point.t !== t) return null
+    if (point.siblings[drag.position] === i) return 'before'
+    const last = point.siblings.at(-1)!
+    return drag.position === point.siblings.length && i === blockEnd(doc.topics[t], last) ? 'after' : null
+  }
+
+  /** Whether point row `i` of topic `t` is being dragged: the point or one of its sub-points. */
+  const pointDragged = (t: number, i: number) => !!drag?.point && drag.point.t === t && i >= drag.point.i && i <= blockEnd(doc.topics[t], drag.point.i)
 
   /** The nearest part of the page that scrolls the cards. */
   function scroller(): HTMLElement | null {
@@ -210,10 +260,10 @@
   }
 
   function followPointer() {
-    if (drag) drag = { ...drag, position: positionAt(pointerY) }
+    if (drag) drag = { ...drag, position: positionAt(pointerY, drag.point) }
   }
 
-  // Each frame of a drag: a card held near the top or bottom edge scrolls the cards under it, and
+  // Each frame of a drag: what is held near the top or bottom edge scrolls the cards under it, and
   // however they scrolled (the wheel too), the place under the pointer is found again.
   function followScroll() {
     if (!drag) return
@@ -230,7 +280,8 @@
     frame = requestAnimationFrame(followScroll)
   }
 
-  function startDrag(e: PointerEvent & { currentTarget: HTMLButtonElement }, t: number) {
+  /** Starts dragging topic `t`, or its point `i`. */
+  function startDrag(e: PointerEvent & { currentTarget: HTMLButtonElement }, t: number, i?: number) {
     if (e.button !== 0 || drag) return
     e.preventDefault()
     e.currentTarget.focus({ preventScroll: true })
@@ -243,7 +294,9 @@
     pointerY = e.clientY
     view = scroller()
     scrolledTo = view?.scrollTop ?? 0
-    drag = { pointer: e.pointerId, from: t, position: positionAt(pointerY), text: writeNoteDoc(doc) }
+    const point = i === undefined ? null : { t, i, siblings: pointSiblings(doc.topics[t], i) }
+    const from = point ? point.siblings.indexOf(point.i) : t
+    drag = { pointer: e.pointerId, point, from, position: positionAt(pointerY, point), text: writeNoteDoc(doc) }
     frame = requestAnimationFrame(followScroll)
   }
 
@@ -264,9 +317,21 @@
     cancelAnimationFrame(frame)
     // A drop where the card already is changes nothing.
     if (!commit || !d || d.position === d.from || d.position === d.from + 1) return
-    // The position counts the cards as they were: if the file changed outside Oversay while the
-    // card was held, nothing moves.
-    if (writeNoteDoc(doc) === d.text) move(d.from, moveTopic(doc, d.from, d.position), 'drag-card-order/V1')
+    // The position counts what was there: if the file changed outside Oversay while it was held,
+    // nothing moves.
+    if (writeNoteDoc(doc) !== d.text) return
+    if (d.point) dropPoint(d.point, d.position)
+    else move(d.from, moveTopic(doc, d.from, d.position), 'drag-card-order/V1')
+  }
+
+  const focusPointGrip = async (t: number, i: number) => {
+    await tick()
+    box?.querySelector<HTMLElement>(`[data-pgrip="${t}:${i}"]`)?.focus()
+  }
+
+  async function dropPoint({ t, i }: DraggedPoint, position: number) {
+    const moved = movePoint(doc, t, i, position)
+    if (await pointMoved(moved, 'drag', `card=${t} item=${i} to=${moved.index} check=epic-042/V1`)) focusPointGrip(t, moved.index)
   }
 
   function onGripKey(e: KeyboardEvent, t: number) {
@@ -326,9 +391,9 @@
       class="topic"
       class:cur={current === t}
       class:kinded={kinds}
-      class:dragging={drag?.from === t}
-      class:drop-before={dragMoves && drag?.position === t}
-      class:drop-after={dragMoves && t === doc.topics.length - 1 && drag?.position === doc.topics.length}
+      class:dragging={!drag?.point && drag?.from === t}
+      class:drop-before={dragMoves && !drag?.point && drag?.position === t}
+      class:drop-after={dragMoves && !drag?.point && t === doc.topics.length - 1 && drag?.position === doc.topics.length}
       data-card={t > 0 ? t : undefined}
       style:--k={kinds ? `var(--k-${topic.segmentKind ?? 'topic'})` : null}
       onfocusin={() => (current = t)}
@@ -403,7 +468,23 @@
       <div class="pts">
         {#each topic.items as item, i (i)}
           {#if item.kind === 'point'}
-            <div class="pl" class:sub={item.depth === 1}>
+            <div
+              class="pl"
+              class:sub={item.depth === 1}
+              class:dragging={pointDragged(t, i)}
+              class:drop-before={pointDrop(t, i) === 'before'}
+              class:drop-after={pointDrop(t, i) === 'after'}
+              data-point="{t}:{i}"
+            >
+              <button
+                class="pgrip"
+                data-pgrip="{t}:{i}"
+                tabindex="-1"
+                aria-label="Move {item.depth === 1 ? 'sub-point' : 'point'}: drag, or press {moveKeys}"
+                title="Drag to reorder, or press {moveKeys}"
+                onkeydown={(e) => onPointGripKey(e, t, i)}
+                onpointerdown={(e) => startDrag(e, t, i)}><Icon name="grip" size={13} /></button
+              >
               <span class="bul" aria-hidden="true">{item.depth === 1 ? '–' : '•'}</span>
               <input
                 data-f="{t}:{i}"
@@ -435,7 +516,7 @@
   {/each}
   {#if refused}<p class="refused" role="status">{refused}</p>{/if}
   <button class="addtopic" onclick={newTopic}><Icon name="plus" size={16} /> Add {word}</button>
-  <p class="keys muted">Drag a {word}’s handle to reorder, or focus it and press {moveKeys} · Enter adds a point · Tab makes a sub-point · Shift+Tab undoes it · Backspace on an empty point removes it</p>
+  <p class="keys muted">Drag a handle to reorder a {word} or a point, or press {moveKeys} on it or in the point · Enter adds a point · Tab makes a sub-point · Shift+Tab undoes it · Backspace on an empty point removes it</p>
 </div>
 
 <style>
@@ -473,7 +554,8 @@
   }
 
   .moving,
-  .moving .grip {
+  .moving .grip,
+  .moving .pgrip {
     cursor: grabbing;
     user-select: none;
   }
@@ -593,18 +675,20 @@
   }
 
   .pts {
-    margin: 4px 0 0 30px;
+    margin: 4px 0 0 26px;
   }
 
   .pl {
     display: grid;
-    grid-template-columns: 14px minmax(0, 1fr) 26px;
+    grid-template-columns: 18px 14px minmax(0, 1fr) 26px;
+    position: relative;
     align-items: center;
     gap: 4px;
   }
 
   /* A point's controls show on its row under the pointer or with the cursor in it. They always take
      their space, so the text never moves. */
+  .pgrip,
   .pdel {
     border: 0;
     background: none;
@@ -623,16 +707,69 @@
     opacity: 1;
   }
 
+  .pgrip {
+    width: 18px;
+    cursor: grab;
+    touch-action: none;
+  }
+
+  .pgrip:hover {
+    background: var(--hover);
+    color: var(--text);
+  }
+
   .pdel:hover {
     background: var(--danger-bg);
     color: var(--danger);
   }
 
+  /* While something is dragged, only the dragged point keeps its handle. */
   .moving .pl > button {
     opacity: 0;
   }
 
+  .moving .pl.dragging > .pgrip {
+    opacity: 1;
+  }
+
+  .moving .pl:hover input:not(:focus) {
+    background: none;
+  }
+
+  .pl.dragging {
+    opacity: 0.5;
+  }
+
+  /* Where the dragged point will land, indented for a sub-point. */
+  .pl.drop-before::before,
+  .pl.drop-after::after {
+    content: '';
+    position: absolute;
+    left: 0;
+    right: 0;
+    height: 2px;
+    border-radius: 2px;
+    background: var(--accent);
+  }
+
+  .pl.sub.drop-before::before,
+  .pl.sub.drop-after::after {
+    left: 22px;
+  }
+
+  .pl.drop-before::before {
+    top: -1px;
+  }
+
+  .pl.drop-after::after {
+    bottom: -1px;
+  }
+
   .pl.sub {
+    grid-template-columns: 40px 14px minmax(0, 1fr) 26px;
+  }
+
+  .pl.sub .pgrip {
     margin-left: 22px;
   }
 
@@ -664,7 +801,7 @@
   }
 
   .kept {
-    margin: 2px 0 2px 18px;
+    margin: 2px 0 2px 40px;
     font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
     font-size: 12px;
     color: var(--faint);
@@ -681,7 +818,7 @@
     color: var(--accent-text);
     font-weight: 600;
     padding: 4px 6px;
-    margin-left: 30px;
+    margin-left: 48px;
     font-size: 13px;
   }
 
