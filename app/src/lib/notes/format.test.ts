@@ -10,6 +10,7 @@ import {
   pointSiblings,
   parseNoteDoc,
   parseTopicTime,
+  pointBlockEnd,
   pointsOf,
   removePoint,
   removeTopic,
@@ -426,5 +427,21 @@ describe('removePoint: deleting one point (epic 042)', () => {
     const next = removePoint(parseNoteDoc('## C\n- A\n  - a1\n- B\n'), 1, 0)
     expect(writeNoteDoc(next)).toBe('## C\n  - a1\n- B\n')
     expect(pointsOf(next.topics[1]).map((p) => [p.text, p.depth])).toEqual([['a1', 0], ['B', 0]])
+  })
+})
+
+describe('pointBlockEnd: what moves with a point (epic 042)', () => {
+  const topic = parseNoteDoc('## C\n- A\n  - a1\n> quote\n  - a2\n- B\n').topics[1]
+
+  it('is its last sub-point, kept lines between them included (epic-042/V1)', () => {
+    expect(pointBlockEnd(topic, 0)).toBe(3)
+    expect(pointBlockEnd(topic, 1)).toBe(1)
+    expect(pointBlockEnd(topic, 4)).toBe(4)
+  })
+
+  it('is the index itself when the file changed under a drag and no point is there any more', () => {
+    expect(pointBlockEnd(topic, 9)).toBe(9)
+    expect(pointBlockEnd(topic, 2)).toBe(2)
+    expect(pointBlockEnd(undefined, 3)).toBe(3)
   })
 })

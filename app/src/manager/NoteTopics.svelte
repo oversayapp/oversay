@@ -17,6 +17,7 @@
     moveTopic,
     moveTopicBy,
     parseTopicTime,
+    pointBlockEnd,
     pointSiblings,
     pointsOf,
     removePoint,
@@ -211,19 +212,6 @@
 
   const dragMoves = $derived(drag !== null && drag.position !== drag.from && drag.position !== drag.from + 1)
 
-  /** The last item that moves with point `i`: its last sub-point, kept lines between them included, or itself. */
-  function blockEnd(topic: Topic, i: number): number {
-    let end = i
-    if ((topic.items[i] as PointItem).depth === 1) return end
-    for (let n = i + 1; n < topic.items.length; n++) {
-      const item = topic.items[n]
-      if (item.kind !== 'point') continue
-      if (item.depth === 0) break
-      end = n
-    }
-    return end
-  }
-
   /**
    * The insertion position under the pointer. Only topics with a heading have places between them;
    * a point has places only among its siblings, and the card drag never measures a point's rows.
@@ -234,7 +222,7 @@
     if (!point) return 1 + dropIndex([...(box?.querySelectorAll('[data-card]') ?? [])].map((card) => middle(card)), y)
     const row = (n: number) => box?.querySelector(`[data-point="${point.t}:${n}"]`)
     return dropIndex(
-      point.siblings.map((n) => middle(row(n), row(blockEnd(doc.topics[point.t], n)))),
+      point.siblings.map((n) => middle(row(n), row(pointBlockEnd(doc.topics[point.t], n)))),
       y,
     )
   }
@@ -245,11 +233,11 @@
     if (!dragMoves || !drag || !point || point.t !== t) return null
     if (point.siblings[drag.position] === i) return 'before'
     const last = point.siblings.at(-1)!
-    return drag.position === point.siblings.length && i === blockEnd(doc.topics[t], last) ? 'after' : null
+    return drag.position === point.siblings.length && i === pointBlockEnd(doc.topics[t], last) ? 'after' : null
   }
 
   /** Whether point row `i` of topic `t` is being dragged: the point or one of its sub-points. */
-  const pointDragged = (t: number, i: number) => !!drag?.point && drag.point.t === t && i >= drag.point.i && i <= blockEnd(doc.topics[t], drag.point.i)
+  const pointDragged = (t: number, i: number) => !!drag?.point && drag.point.t === t && i >= drag.point.i && i <= pointBlockEnd(doc.topics[t], drag.point.i)
 
   /** The nearest part of the page that scrolls the cards. */
   function scroller(): HTMLElement | null {
@@ -699,12 +687,15 @@
     justify-content: center;
     border-radius: 6px;
     color: var(--faint);
+    /* Hidden, a button takes no taps either: on a touch screen it can't be pressed unseen. */
     opacity: 0;
+    pointer-events: none;
   }
 
   .pl:hover > button,
   .pl:focus-within > button {
     opacity: 1;
+    pointer-events: auto;
   }
 
   .pgrip {

@@ -430,6 +430,24 @@ export function pointSiblings(topic: Topic, i: number): number[] {
   return points.filter((p) => p.n > parent && p.n < end).map((p) => p.n)
 }
 
+/**
+ * The last item that moves with point `i`: its last sub-point, kept lines between them included,
+ * or `i` itself. `i` may be out of date during a drag, when the file changed outside while a point
+ * was held; it is then given back.
+ */
+export function pointBlockEnd(topic: Topic | undefined, i: number): number {
+  let end = i
+  const point = topic?.items[i]
+  if (!topic || point?.kind !== 'point' || point.depth === 1) return end
+  for (let n = i + 1; n < topic.items.length; n++) {
+    const item = topic.items[n]
+    if (item.kind !== 'point') continue
+    if (item.depth === 0) break
+    end = n
+  }
+  return end
+}
+
 const NUMBERED = /^([ \t]*)(\d+)(?=[.)])/
 
 /** `point` with its list marker, on its first line and in its prefix, rewritten by `change`. */
@@ -454,12 +472,7 @@ export function movePoint(doc: NoteDoc, t: number, i: number, position: number):
   if (from < 0) return unmoved
   const points = topic.items.filter(isPoint)
   // Each sibling with what moves along with it, as a run of the topic's points.
-  const blocks = siblings.map((n) => {
-    const start = points.indexOf(topic.items[n] as PointItem)
-    let end = start + 1
-    if (points[start].depth === 0) while (points[end]?.depth === 1) end++
-    return points.slice(start, end)
-  })
+  const blocks = siblings.map((n) => topic.items.slice(n, pointBlockEnd(topic, n) + 1).filter(isPoint))
   const order = moveItemTo(blocks, from, position)
   if (order === blocks) return unmoved
   const numbers = blocks.flatMap(([head]) => NUMBERED.exec(head.prefix)?.[2] ?? [])
