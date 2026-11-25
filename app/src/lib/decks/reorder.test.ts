@@ -17,7 +17,7 @@ describe('edgeScrollStep: scrolling while a card is dragged near an edge', () =>
   })
 })
 
-describe('moveStep: the keyboard move on a focused grip', () => {
+describe('moveStep: the keyboard move on a focused card grip or point', () => {
   const press = (key: string, held: Partial<Record<'altKey' | 'ctrlKey' | 'metaKey' | 'shiftKey', boolean>> = {}) => ({
     key,
     altKey: false,

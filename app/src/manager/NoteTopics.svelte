@@ -456,12 +456,13 @@
       <div class="pts">
         {#each topic.items as item, i (i)}
           {#if item.kind === 'point'}
+            {@const drop = pointDrop(t, i)}
             <div
               class="pl"
               class:sub={item.depth === 1}
               class:dragging={pointDragged(t, i)}
-              class:drop-before={pointDrop(t, i) === 'before'}
-              class:drop-after={pointDrop(t, i) === 'after'}
+              class:drop-before={drop === 'before'}
+              class:drop-after={drop === 'after'}
               data-point="{t}:{i}"
             >
               <button
