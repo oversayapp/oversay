@@ -2,6 +2,7 @@ mod about;
 mod account;
 mod check;
 mod control_panel;
+mod edit_menu;
 mod example_decks;
 mod files;
 mod hotkeys;
@@ -62,6 +63,7 @@ pub fn run() {
                 .with_denylist(&[control_panel::LABEL])
                 .build(),
         )
+        .on_menu_event(|app, event| edit_menu::chosen(app, event.id().as_ref()))
         .setup(|app| {
             if cfg!(debug_assertions) {
                 app.handle().plugin(
@@ -83,6 +85,7 @@ pub fn run() {
             // The icon is there from the start, with its menu and the Look card (ADR 0051).
             tray::refresh(app.handle());
             platform::install_dock_menu(app.handle());
+            platform::install_edit_menu(app.handle());
             platform::install_jump_list(app.handle());
             // Files written outside Oversay (an AI, another editor) show up as they land (ADR 0034).
             quick::watch(app.handle());
@@ -210,6 +213,7 @@ pub fn run() {
             hotkeys::check_shortcut,
             tray::set_tray_title,
             tray::set_tray_decks,
+            edit_menu::set_edit_menu,
             session::session_next,
             session::session_advance,
             session::session_preview_deck,

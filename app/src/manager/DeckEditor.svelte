@@ -29,6 +29,8 @@
   import { closeNote, dismissChanged, editNote, flushNote, keepBothVersions, noteSaveError, openNote, openNoteAt, redoNote, renameOpenNote, undoNote, useOutsideVersion, type UndoBy } from '../lib/notes/store'
   import type { Change, Focus, Spot } from '../lib/notes/history'
   import { deckTakesUndo, undoKey, type UndoTarget, type Way } from '../lib/notes/undo-keys'
+  import { EDIT_MENU_EVENT, checkEditMenuChoice, editMenuState, sendEditMenu } from '../lib/notes/edit-menu'
+  import { listen } from '@tauri-apps/api/event'
   import { isMac } from '../lib/session/shortcuts'
   import { quickName } from '../lib/notes/files'
   import { formatDuration } from '../lib/project/duration'
@@ -71,6 +73,7 @@
   )
 
   onDestroy(() => {
+    void sendEditMenu(null)
     if (previewing) void attempt(sessionCommands.end)
     void attempt(closeNote)
   })
@@ -275,6 +278,24 @@
     void attempt(() => travel(way, 'keys'))
   }
 
+  // The Mac's Edit › Undo and Redo follow the keys: the deck's wherever the keys would be, greyed
+  // by its history, and the field's own elsewhere. Looked at again when focus or typing moves.
+  let looked = $state(0)
+  let windowFocused = $state(true)
+  const lookAgain = () => queueMicrotask(() => looked++)
+  $effect(() => {
+    void looked
+    const history = deck?.history
+    void sendEditMenu(history && windowFocused ? editMenuState(undoTarget(document.activeElement), history) : null)
+  })
+  $effect(() => {
+    const heard = listen<unknown>(EDIT_MENU_EVENT, (e) => {
+      const way = checkEditMenuChoice(e.payload)
+      if (way && deck) void attempt(() => travel(way, 'menu'))
+    })
+    return () => void heard.then((stop) => stop()).catch(() => {})
+  })
+
   // A field's own undo asked for another way (its context menu): the deck's takes its place.
   function onHistoryInput(e: InputEvent) {
     const way: Way | null = e.inputType === 'historyUndo' ? 'undo' : e.inputType === 'historyRedo' ? 'redo' : null
@@ -335,7 +356,16 @@
   )
 </script>
 
-<svelte:window onkeydown={onUndoKey} onbeforeinputcapture={onHistoryInput} />
+<svelte:window
+  onkeydown={onUndoKey}
+  onbeforeinputcapture={onHistoryInput}
+  onfocusincapture={lookAgain}
+  onfocusoutcapture={lookAgain}
+  oninput={lookAgain}
+  onchange={lookAgain}
+  onfocus={() => (windowFocused = true)}
+  onblur={() => (windowFocused = false)}
+/>
 
 <div class="page" bind:this={root}>
   {#if deck && doc && options}

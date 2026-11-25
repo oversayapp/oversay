@@ -180,7 +180,7 @@ async function travel(way: 'undo' | 'redo', by: UndoBy): Promise<Undone> {
   const note = get(openNote)
   const to = note && (way === 'undo' ? stepBack : stepForward)(note.history)
   if (!note || !to) return null
-  logAction(`${word(note.kind)}.${way}`, `by=${by} what=${to.step.what} check=epic-043/${UNDO_CHECK[to.step.what]}`)
+  logAction(`${word(note.kind)}.${way}`, `by=${by} what=${to.step.what} check=epic-043/${by === 'menu' ? 'V5' : UNDO_CHECK[to.step.what]}`)
   change(note, to.to.text, to.history)
   return { spot: to.to.spot }
 }

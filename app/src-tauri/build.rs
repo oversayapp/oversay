@@ -76,6 +76,7 @@ const COMMANDS: &[&str] = &[
     "check_shortcut",
     "set_tray_title",
     "set_tray_decks",
+    "set_edit_menu",
     "session_next",
     "session_advance",
     "session_preview_deck",
