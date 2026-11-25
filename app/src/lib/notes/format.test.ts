@@ -408,3 +408,23 @@ describe('movePoint: reordering the points of a card (epic 042)', () => {
     expect(movePoint(doc, 1, 9, 0).doc).toBe(doc)
   })
 })
+
+describe('removePoint: deleting one point (epic 042)', () => {
+  const removed = (text: string, t: number, i: number) => writeNoteDoc(removePoint(parseNoteDoc(text), t, i))
+
+  it('takes the point with its wrapped lines, and no other line (epic-042/V3, V4)', () => {
+    const text = '---\nid: d_k3x9a2bq\n---\n\n## One\n1. a\n2. b\n  wrapped\n  - sub\n> quote\n3. c\n\n## Two\n- two\n'
+    expect(removed(text, 1, 1)).toBe('---\nid: d_k3x9a2bq\n---\n\n## One\n1. a\n  - sub\n> quote\n3. c\n\n## Two\n- two\n')
+  })
+
+  it.each([
+    ['no final newline', '## C\n- A\n- B', '## C\n- A'],
+    ['CRLF', '## C\r\n- A\r\n- B\r\n', '## C\r\n- A\r\n'],
+  ])('handles deleting the last line: %s (epic-042/V4)', (_, before, after) => expect(removed(before, 1, 1)).toBe(after))
+
+  it('keeps its sub-points: as points when nothing is above them (epic-042/V4)', () => {
+    const next = removePoint(parseNoteDoc('## C\n- A\n  - a1\n- B\n'), 1, 0)
+    expect(writeNoteDoc(next)).toBe('## C\n  - a1\n- B\n')
+    expect(pointsOf(next.topics[1]).map((p) => [p.text, p.depth])).toEqual([['a1', 0], ['B', 0]])
+  })
+})

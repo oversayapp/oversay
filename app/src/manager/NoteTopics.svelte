@@ -111,9 +111,7 @@
       focus(`${t}:${i}`)
     } else if (e.key === 'Backspace' && input.value === '') {
       e.preventDefault()
-      const previous = topic.items.slice(0, i).findLastIndex((x) => x.kind === 'point')
-      onchange(removePoint(doc, t, i))
-      focus(previous >= 0 ? `${t}:${previous}` : t > 0 ? `name:${t}` : '')
+      deletePoint(t, i)
     } else if (e.key === 'ArrowUp' || e.key === 'ArrowDown') {
       const fields = [...(box?.querySelectorAll<HTMLInputElement>('input[data-f]') ?? [])]
       const next = fields[fields.indexOf(input) + (e.key === 'ArrowUp' ? -1 : 1)]
@@ -122,6 +120,14 @@
         next.focus()
       }
     }
+  }
+
+  /** Removes a point, and puts the cursor at the end of the one before, or in the card's name. */
+  function deletePoint(t: number, i: number) {
+    const previous = doc.topics[t].items.slice(0, i).findLastIndex((x) => x.kind === 'point')
+    refused = ''
+    onchange(removePoint(doc, t, i))
+    focus(previous >= 0 ? `${t}:${previous}` : t > 0 ? `name:${t}` : '')
   }
 
   /** Alt+↑ / Alt+↓ on a point: one place among its siblings, with the cursor kept where it was. */
@@ -407,6 +413,17 @@
                 oninput={(e) => onchange(setPointText(doc, t, i, e.currentTarget.value))}
                 onkeydown={(e) => onPointKey(e, t, i, item)}
               />
+              <!-- Not in the Tab order: Tab and Shift+Tab in a point make and undo a sub-point. -->
+              <button
+                class="pdel"
+                tabindex="-1"
+                aria-label="Delete {item.depth === 1 ? 'sub-point' : 'point'}"
+                title="Delete {item.depth === 1 ? 'sub-point' : 'point'}"
+                onclick={() => {
+                  logAction('deck.point_deleted', `card=${t} item=${i} check=epic-042/V3`)
+                  deletePoint(t, i)
+                }}><Icon name="trash" size={14} /></button
+              >
             </div>
           {:else if item.line.trim() !== ''}
             <div class="kept" title="Kept as written; not shown on screen">{item.line.replace(/\r?\n$/, '')}</div>
@@ -581,9 +598,38 @@
 
   .pl {
     display: grid;
-    grid-template-columns: 14px minmax(0, 1fr);
+    grid-template-columns: 14px minmax(0, 1fr) 26px;
     align-items: center;
     gap: 4px;
+  }
+
+  /* A point's controls show on its row under the pointer or with the cursor in it. They always take
+     their space, so the text never moves. */
+  .pdel {
+    border: 0;
+    background: none;
+    padding: 0;
+    height: 24px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 6px;
+    color: var(--faint);
+    opacity: 0;
+  }
+
+  .pl:hover > button,
+  .pl:focus-within > button {
+    opacity: 1;
+  }
+
+  .pdel:hover {
+    background: var(--danger-bg);
+    color: var(--danger);
+  }
+
+  .moving .pl > button {
+    opacity: 0;
   }
 
   .pl.sub {
@@ -603,7 +649,7 @@
     width: 100%;
   }
 
-  .pl input:hover {
+  .pl:hover input {
     background: var(--hover);
   }
 

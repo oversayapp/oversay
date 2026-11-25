@@ -312,7 +312,8 @@ export function insertPoint(doc: NoteDoc, t: number, after: number, depth: 0 | 1
 
 /** Removes a point; its sub-points then belong to the point before it. */
 export function removePoint(doc: NoteDoc, t: number, i: number): NoteDoc {
-  return withTopic(doc, t, (topic) => ({ ...topic, items: topic.items.filter((_, n) => n !== i) }))
+  const topics = doc.topics.map((topic, n) => (n === t ? { ...topic, items: topic.items.filter((_, x) => x !== i) } : topic))
+  return rereadKeepingEnd(doc, topics)
 }
 
 /** Makes a point a sub-point of the point before it (1), or a point again (0). */
@@ -377,8 +378,8 @@ export function setFrontValue(doc: NoteDoc, key: string, value: string): NoteDoc
 
 const isBlank = (item: Item) => item.kind === 'kept' && body(item.line).trim() === ''
 
-/** `doc` with its topics rearranged, read again. A file that did not end its last line still doesn't. */
-function rereadMoved(doc: NoteDoc, topics: Topic[]): NoteDoc {
+/** `doc` with other topics, read again. A file that did not end its last line still doesn't. */
+function rereadKeepingEnd(doc: NoteDoc, topics: Topic[]): NoteDoc {
   const text = writeNoteDoc({ ...doc, topics })
   return parseNoteDoc(ENDING.test(writeNoteDoc(doc)) ? text : text.replace(ENDING, ''))
 }
@@ -402,7 +403,7 @@ export function moveTopic(doc: NoteDoc, from: number, position: number): { doc: 
   if (order === parts) return unmoved
   // Each card takes its own lines with it; the blank lines stay where they are in the file.
   const topics = [doc.topics[0], ...order.map((part, n) => ({ ...part.topic, items: [...part.content, ...parts[n].gap] }))]
-  const next = rereadMoved(doc, topics)
+  const next = rereadKeepingEnd(doc, topics)
   const headings = (list: Topic[]) => list.map((t) => (t.heading === null ? '' : body(t.heading))).join('\n')
   return headings(next.topics) === headings(topics) ? { doc: next, index: 1 + order.indexOf(parts[from - 1]) } : unmoved
 }
@@ -481,7 +482,7 @@ export function movePoint(doc: NoteDoc, t: number, i: number, position: number):
   let at = 0
   const items = topic.items.map((item) => (isPoint(item) ? arranged[at++] : item))
   const topics = doc.topics.map((x, n) => (n === t ? { ...topic, items } : x))
-  const next = rereadMoved(doc, topics)
+  const next = rereadKeepingEnd(doc, topics)
   if (pointsRead(next.topics) !== pointsRead(topics)) return unmoved
   const landed = renumbered.slice(0, order.indexOf(blocks[from])).flat().length + first
   const places = next.topics[t].items.flatMap((x, n) => (x.kind === 'point' ? [n] : []))
