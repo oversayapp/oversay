@@ -12,6 +12,8 @@ import { forgetQuickPath, listedQuickFiles, markOpened, renameQuickPath } from '
 import { diskChange, outsideName, whatChanged } from './outside'
 import { createDeck, deckNameOf, decks, findDeck, loadDecks, summariseDeck } from '../decks/store'
 import { deckId, setDeckTitle } from '../decks/deck'
+import { NO_HISTORY, record, retitle, stepBack, stepForward, type Edit, type EditKind, type History, type Spot } from './history'
+import type { Way } from './undo-keys'
 
 export interface NoteEntry {
   path: string
@@ -116,6 +118,8 @@ export interface OpenNote {
   changed: string
   /** Where a deck was before its folder was renamed or moved outside Oversay, once it is found again by its id. */
   movedFrom?: string
+  /** What can be undone and redone while it is open (ADR 0052). */
+  history: History
 }
 
 export const openNote = writable<OpenNote | null>(null)
@@ -138,16 +142,55 @@ export async function openNoteAt(path: string, kind: EditedKind = 'notes'): Prom
   logAction(`open ${word(kind)}`, name)
   void markOpened(word(kind), path, kind === 'decks' ? deckId(parseNoteDoc(text)) || undefined : undefined)
   noteSaveError.set('')
-  openNote.set({ kind, path, name, text, saved: true, known: text, outside: null, changed: '' })
+  openNote.set({ kind, path, name, text, saved: true, known: text, outside: null, changed: '', history: NO_HISTORY })
 }
 
-/** The editor changed the note's text: it is written shortly. */
-export function editNote(text: string): void {
+/** The editor changed the note's text: it is written shortly, and can be undone. */
+export function editNote(text: string, edit?: Edit): void {
   const note = get(openNote)
   if (!note || note.text === text) return
-  openNote.set({ ...note, text, saved: false })
+  change(note, text, record(note.history, note.text, text, edit, Date.now()))
+}
+
+function change(note: OpenNote, text: string, history: History): void {
+  openNote.set({ ...note, text, history, saved: false })
   clearTimeout(timer)
   timer = setTimeout(() => void flushNote(), SAVE_DELAY_MS)
+}
+
+// ---- undo and redo (ADR 0052)
+
+/** The validation check each kind of step shows in the log. */
+const UNDO_CHECK: Record<EditKind, string> = { 'delete-point': 'V1', edit: 'V2', typing: 'V3' }
+
+/** What asked for an undo or a redo, for the debug log. */
+export type UndoBy = 'keys' | 'menu'
+
+/** Where the editor should go after an undo or a redo, or null when nothing changed. */
+export type Undone = { spot: Spot | null } | null
+
+export const undoNote = (by: UndoBy): Promise<Undone> => travel('undo', by)
+export const redoNote = (by: UndoBy): Promise<Undone> => travel('redo', by)
+
+async function travel(way: Way, by: UndoBy): Promise<Undone> {
+  const kind = get(openNote)?.kind
+  if (!kind) return null
+  // The file is looked at first: a change from outside not yet noticed drops the history here,
+  // so no text from before it is written.
+  await checkOpenNote(kind)
+  const note = get(openNote)
+  const to = note && (way === 'undo' ? stepBack : stepForward)(note.history)
+  if (!note || !to) return null
+  logAction(`${word(note.kind)}.${way}`, `by=${by} what=${to.step.what} check=epic-043/${by === 'menu' ? 'V5' : UNDO_CHECK[to.step.what]}`)
+  change(note, to.to.text, to.history)
+  return { spot: to.to.spot }
+}
+
+/** The history to keep when text from outside comes into the editor: none, as it never merges. */
+function dropHistory(note: OpenNote, why: 'reload' | 'conflict' | 'use-theirs'): History {
+  const steps = note.history.past.length + note.history.future.length
+  if (steps) logAction(`${word(note.kind)}.undo_history_cleared`, `why=${why} steps=${steps} check=epic-043/V4`)
+  return NO_HISTORY
 }
 
 /** Writes the open note now if it has unsaved edits, and waits for any write in progress. */
@@ -195,7 +238,9 @@ export async function renameOpenNote(name: string): Promise<string> {
   openNote.update((n) => (n && (n.path === note.path || n.path === to) ? { ...n, path: to, name: named } : n))
   if (note.kind === 'decks') {
     const now = get(openNote)
-    if (now?.path === to) editNote(writeNoteDoc(setDeckTitle(parseNoteDoc(now.text), named)))
+    // Not a step to undo: undoing keeps the new name, so every step takes it too.
+    const title = (text: string) => writeNoteDoc(setDeckTitle(parseNoteDoc(text), named))
+    if (now?.path === to && title(now.text) !== now.text) change(now, title(now.text), retitle(now.history, title))
     await flushNote()
   }
   await renameQuickPath(note.path, to, named)
@@ -211,7 +256,7 @@ async function keepOutside(kind: EditedKind, path: string, text: string): Promis
   // A deck's copy is a deck of its own, with its own id.
   const copy = kind === 'decks' ? await createDeck(outsideName(name), text) : await createQuickFile(kind, outsideName(name), text)
   logAction(`${word(kind)} changed outside while typing`, name)
-  openNote.update((n) => (n && n.path === path ? { ...n, known: text, outside: { path: copy, text } } : n))
+  openNote.update((n) => (n && n.path === path ? { ...n, known: text, outside: { path: copy, text }, history: dropHistory(n, 'conflict') } : n))
 }
 
 /** The folder `kind` changed: the open note or deck is read again if it changed outside Oversay. */
@@ -232,7 +277,7 @@ export function checkOpenNote(kind: EditedKind = 'notes'): Promise<void> {
     const change = diskChange(now, disk)
     if (change === 'reload') {
       logAction(`${word(kind)} read again`, now.name)
-      openNote.set({ ...now, text: disk, known: disk, changed: whatChanged(now.text, disk) })
+      openNote.set({ ...now, text: disk, known: disk, changed: whatChanged(now.text, disk), history: dropHistory(now, 'reload') })
     } else if (change === 'conflict') {
       await keepOutside(kind, now.path, disk)
     }
@@ -255,7 +300,7 @@ export async function useOutsideVersion(): Promise<void> {
   if (!note?.outside) return
   const { path, text } = note.outside
   logAction(`${word(note.kind)} use outside version`, note.name)
-  openNote.set({ ...note, text, saved: false, outside: null })
+  openNote.set({ ...note, text, saved: false, outside: null, history: dropHistory(note, 'use-theirs') })
   await flushNote()
   await trashQuickFile(note.kind, path)
   await forgetQuickPath(path)

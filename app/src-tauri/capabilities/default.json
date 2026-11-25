@@ -80,6 +80,7 @@
     "allow-check-shortcut",
     "allow-set-tray-title",
     "allow-set-tray-decks",
+    "allow-set-edit-menu",
     "allow-session-next",
     "allow-session-advance",
     "allow-session-preview-deck",

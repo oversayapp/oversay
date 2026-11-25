@@ -382,6 +382,108 @@ fn jump_list() -> windows::core::Result<()> {
     Ok(())
 }
 
+/// Puts Oversay's own Undo and Redo in the Mac's Edit menu, in place of the standard two of
+/// Tauri's default menu (ADR 0052, edit_menu.rs): the standard ones can only undo what a field
+/// holds, and send the page nothing when that is nothing. Elsewhere there is no menu bar.
+pub fn install_edit_menu(app: &AppHandle) {
+    #[cfg(target_os = "macos")]
+    match edit_menu::install(app) {
+        Ok(true) => log::debug!("menu.edit_installed check=epic-043/V5"),
+        Ok(false) => log::warn!("Edit menu not found: undo and redo stay the standard ones"),
+        Err(e) => log::warn!("Edit menu not changed: {e}"),
+    }
+    #[cfg(not(target_os = "macos"))]
+    let _ = app;
+}
+
+/// Enables or greys Edit > Undo and Redo.
+pub fn enable_edit_menu(undo: bool, redo: bool) {
+    #[cfg(target_os = "macos")]
+    if let Err(e) = edit_menu::enable(undo, redo) {
+        log::warn!("Edit menu not updated: {e}");
+    }
+    #[cfg(not(target_os = "macos"))]
+    let _ = (undo, redo);
+}
+
+/// What the standard Edit > Undo or Redo does: sends `undo:` or `redo:` to whatever has focus.
+pub fn send_native_undo(app: &AppHandle, redo: bool) {
+    #[cfg(target_os = "macos")]
+    {
+        let _ = app.run_on_main_thread(move || {
+            let send = std::panic::AssertUnwindSafe(|| edit_menu::send(redo));
+            if let Err(exception) = objc2::exception::catch(send) {
+                log::error!("undo not sent: {exception:?}");
+            }
+        });
+    }
+    #[cfg(not(target_os = "macos"))]
+    let _ = (app, redo);
+}
+
+#[cfg(target_os = "macos")]
+mod edit_menu {
+    use crate::edit_menu::{REDO_ID, UNDO_ID};
+    use objc2::runtime::AnyObject;
+    use objc2::{class, msg_send, sel};
+    use std::sync::OnceLock;
+    use tauri::menu::{MenuItem, Submenu};
+    use tauri::{AppHandle, Wry};
+
+    /// Undo and Redo, once they are in the menu.
+    static ITEMS: OnceLock<[MenuItem<Wry>; 2]> = OnceLock::new();
+
+    fn submenu(app: &AppHandle) -> tauri::Result<Option<Submenu<Wry>>> {
+        let Some(menu) = app.menu() else {
+            return Ok(None);
+        };
+        for item in menu.items()? {
+            if let Some(submenu) = item.as_submenu()
+                && submenu.text()? == "Edit"
+            {
+                return Ok(Some(submenu.clone()));
+            }
+        }
+        Ok(None)
+    }
+
+    /// False when the default menu has no Edit submenu to change.
+    pub fn install(app: &AppHandle) -> tauri::Result<bool> {
+        let Some(edit) = submenu(app)? else {
+            return Ok(false);
+        };
+        let undo = MenuItem::with_id(app, UNDO_ID, "Undo", true, Some("CmdOrCtrl+Z"))?;
+        let redo = MenuItem::with_id(app, REDO_ID, "Redo", true, Some("CmdOrCtrl+Shift+Z"))?;
+        // The default menu's Edit starts with its own Undo and Redo.
+        edit.remove_at(0)?;
+        edit.remove_at(0)?;
+        edit.insert(&undo, 0)?;
+        edit.insert(&redo, 1)?;
+        let _ = ITEMS.set([undo, redo]);
+        Ok(true)
+    }
+
+    pub fn enable(undo: bool, redo: bool) -> tauri::Result<()> {
+        if let Some(items) = ITEMS.get() {
+            for (item, on) in items.iter().zip([undo, redo]) {
+                item.set_enabled(on)?;
+            }
+        }
+        Ok(())
+    }
+
+    pub fn send(redo: bool) {
+        let action = if redo { sel!(redo:) } else { sel!(undo:) };
+        let nil: *mut AnyObject = std::ptr::null_mut();
+        // SAFETY: a plain AppKit message on the main thread; with no target the action goes
+        // to the first responder that takes it.
+        unsafe {
+            let ns_app: *mut AnyObject = msg_send![class!(NSApplication), sharedApplication];
+            let _: bool = msg_send![ns_app, sendAction: action, to: nil, from: nil];
+        }
+    }
+}
+
 /// Puts "Control panel" in the Dock icon's right-click menu (ADR 0028, ADR 0051), so the card opens with
 /// nothing running and without the menu bar. Tauri has no Dock menu, so the app delegate (tao's)
 /// gets `applicationDockMenu:` and the item's action added at run time. Elsewhere nothing: the

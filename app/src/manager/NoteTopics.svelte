@@ -34,6 +34,7 @@
   import { SEGMENT_KINDS, type SegmentKind } from '../lib/project/types'
   import { dropIndex } from '../lib/project/lists'
   import { moveStep, edgeScrollStep } from '../lib/decks/reorder'
+  import { selectionOf, type Change, type Focus, type Selection } from '../lib/notes/history'
   import { logAction } from '../lib/log'
   import { isMac, shortcutText } from '../lib/session/shortcuts'
   import { count } from '../lib/words'
@@ -50,7 +51,8 @@
   }: {
     doc: NoteDoc
     noteName: string
-    onchange: (doc: NoteDoc) => void
+    /** The cards changed, and how, for undo. */
+    onchange: (doc: NoteDoc, how?: Change) => void
     current?: number
     /** What a topic is called: `card` in a deck. */
     word?: 'topic' | 'card'
@@ -80,6 +82,25 @@
     }
   }
 
+  /** The field `key` as a place undo can put focus back: the cursor at `select`, or at its end. */
+  const inField = (key: string, select: Selection | null = null): Focus => ({ field: `[data-f="${key}"]`, select })
+
+  /** A move grip, and a field with no key of its own, as places undo can put focus back. */
+  const grip = (t: number): Focus => ({ field: `[data-grip="${t}"]`, select: null })
+  const pointGrip = (t: number, i: number): Focus => ({ field: `[data-pgrip="${t}:${i}"]`, select: null })
+  const control = (t: number, name: 'ttime' | 'tkind'): Focus => ({ field: `[data-card="${t}"] .${name}`, select: null })
+
+  /** A change in card `t` after which focus is where it was. */
+  const keeping = (t: number, focus: Focus): Change => ({ card: t, before: focus, after: focus })
+
+  /** What was selected before the keystroke under way, in the field it is typed in. */
+  let selected: Selection = [0, 0]
+
+  /** A keystroke in the field `key` of card `t`: a run of them is undone in one step. */
+  function typed(doc: NoteDoc, t: number, key: string, input: HTMLInputElement) {
+    onchange(doc, { what: 'typing', card: t, before: inField(key, selected), after: inField(key, selectionOf(input)) })
+  }
+
   const timeText = (topic: Topic) => topicTimeText(topic.time).replace(/^ \[|\]$/g, '')
 
   /** A point's last sub-point, so a new point after it goes below them. */
@@ -99,18 +120,18 @@
       if (!drag) keyMovePoint(t, i, step, input.selectionStart ?? input.value.length)
     } else if (e.key === 'Enter') {
       e.preventDefault()
-      const at = input.selectionStart ?? input.value.length
-      const before = input.value.slice(0, at)
-      const rest = input.value.slice(input.selectionEnd ?? at)
+      const cut = input.selectionStart ?? input.value.length
+      const before = input.value.slice(0, cut)
+      const rest = input.value.slice(input.selectionEnd ?? cut)
       let next = rest === '' ? doc : setPointText(doc, t, i, before)
       const after = p.depth === 0 && rest === '' ? pointEnd(topic, i) : i
       const added = insertPoint(next, t, after, p.depth, rest)
       next = added.doc
-      onchange(next)
+      onchange(next, { card: t, before: inField(`${t}:${i}`, selectionOf(input)), after: inField(`${t}:${added.index}`, [0, 0]) })
       focus(`${t}:${added.index}`, 'start')
     } else if (e.key === 'Tab') {
       e.preventDefault()
-      onchange(setPointDepth(doc, t, i, e.shiftKey ? 0 : 1))
+      onchange(setPointDepth(doc, t, i, e.shiftKey ? 0 : 1), keeping(t, inField(`${t}:${i}`, selectionOf(input))))
       focus(`${t}:${i}`)
     } else if (e.key === 'Backspace' && input.value === '') {
       e.preventDefault()
@@ -129,8 +150,9 @@
   function deletePoint(t: number, i: number) {
     const previous = doc.topics[t].items.slice(0, i).findLastIndex((x) => x.kind === 'point')
     refused = ''
-    onchange(removePoint(doc, t, i))
-    focus(previous >= 0 ? `${t}:${previous}` : t > 0 ? `name:${t}` : '')
+    const next = previous >= 0 ? `${t}:${previous}` : t > 0 ? `name:${t}` : ''
+    onchange(removePoint(doc, t, i), { what: 'delete-point', card: t, before: inField(`${t}:${i}`), after: next ? inField(next) : undefined })
+    focus(next)
   }
 
   /** Alt+↑ / Alt+↓ on a point or its grip: one place among its siblings, with focus, and the cursor, kept. */
@@ -140,7 +162,9 @@
     // The first and last stay where they are.
     if (to < 0 || to >= siblings.length) return
     const moved = movePointBy(doc, t, i, step)
-    if (await pointMoved(moved, 'keyboard', `card=${t} item=${i} to=${moved.index} check=epic-042/V2`)) {
+    const place = (n: number) => (caret === 'grip' ? pointGrip(t, n) : inField(`${t}:${n}`, [caret, caret]))
+    const how = { card: t, before: place(i), after: place(moved.index) }
+    if (await pointMoved(moved, 'keyboard', `card=${t} item=${i} to=${moved.index} check=epic-042/V2`, how)) {
       if (caret === 'grip') focusPointGrip(t, moved.index)
       else focus(`${t}:${moved.index}`, caret)
     }
@@ -154,7 +178,7 @@
   }
 
   /** Writes a point's move, or says why it didn't happen; true when it moved. */
-  async function pointMoved(moved: { doc: NoteDoc; index: number }, by: 'keyboard' | 'drag', ids: string): Promise<boolean> {
+  async function pointMoved(moved: { doc: NoteDoc; index: number }, by: 'keyboard' | 'drag', ids: string, how: Change): Promise<boolean> {
     if (moved.doc === doc) {
       logAction('deck.point_move_refused', `by=${by} ${ids}`)
       await refuse('That point can’t move there: a line would read as part of the point above it. Change it in Markdown.')
@@ -162,7 +186,7 @@
     }
     refused = ''
     logAction('deck.point_moved', `by=${by} ${ids}`)
-    onchange(moved.doc)
+    onchange(moved.doc, how)
     return true
   }
 
@@ -178,20 +202,21 @@
     const first = topic.items.findIndex((x) => x.kind === 'point')
     if (first >= 0) return focus(`${t}:${first}`)
     const added = insertPoint(doc, t, endOfTopic(topic), 0)
-    onchange(added.doc)
+    onchange(added.doc, { card: t, before: inField(`name:${t}`), after: inField(`${t}:${added.index}`) })
     focus(`${t}:${added.index}`)
   }
 
   function addPoint(t: number) {
     const added = insertPoint(doc, t, endOfTopic(doc.topics[t]), 0)
-    onchange(added.doc)
+    onchange(added.doc, { card: t, after: inField(`${t}:${added.index}`) })
     focus(`${t}:${added.index}`)
   }
 
   function newTopic() {
     logAction(`${word === 'card' ? 'deck' : 'note'} add ${word}`)
     const added = addTopic(doc, doc.topics.length - 1, `New ${word}`)
-    onchange(added.doc)
+    const name = added.doc.topics[added.index].name
+    onchange(added.doc, { card: current, to: added.index, after: inField(`name:${added.index}`, [0, name.length]) })
     current = added.index
     focus(`name:${added.index}`, 'all')
   }
@@ -319,7 +344,8 @@
 
   async function dropPoint({ t, i }: DraggedPoint, position: number) {
     const moved = movePoint(doc, t, i, position)
-    if (await pointMoved(moved, 'drag', `card=${t} item=${i} to=${moved.index} check=epic-042/V1`)) focusPointGrip(t, moved.index)
+    const how = { card: t, before: pointGrip(t, i), after: pointGrip(t, moved.index) }
+    if (await pointMoved(moved, 'drag', `card=${t} item=${i} to=${moved.index} check=epic-042/V1`, how)) focusPointGrip(t, moved.index)
   }
 
   function onGripKey(e: KeyboardEvent, t: number) {
@@ -340,7 +366,7 @@
     refused = ''
     removing = null
     logAction(`${word === 'card' ? 'deck' : 'note'} move ${word}`, `${from} to ${moved.index} check=${check}`)
-    onchange(moved.doc)
+    onchange(moved.doc, { card: from, to: moved.index, before: grip(from), after: grip(moved.index) })
     current = moved.index
     await tick()
     box?.querySelector<HTMLElement>(`[data-grip="${moved.index}"]`)?.focus()
@@ -348,16 +374,21 @@
 
   onDestroy(() => cancelAnimationFrame(frame))
 
+  /** Undo or redo changed the cards: a question or a note about them as they were goes. */
+  export function settle() {
+    removing = null
+    refused = ''
+  }
+
   function setTime(t: number, input: HTMLInputElement) {
     const value = input.value.trim().replace(/^\[|\]$/g, '')
     const topic = doc.topics[t]
-    if (value === '') {
-      onchange(setTopic(doc, t, { time: null }))
-      return
-    }
-    const parsed = parseTopicTime(value)
-    if (parsed?.time) onchange(setTopic(doc, t, { time: parsed.time }))
-    else input.value = timeText(topic)
+    // No text takes the time away; text that isn't a time changes nothing.
+    const time = value === '' ? null : (parseTopicTime(value)?.time ?? undefined)
+    const next = time === undefined ? null : setTopic(doc, t, { time })
+    if (next) onchange(next, keeping(t, control(t, 'ttime')))
+    // As saved, so brackets or spacing alone don't leave the field holding something uncommitted.
+    input.value = timeText(next ? next.topics[t] : topic)
   }
 </script>
 
@@ -404,10 +435,12 @@
           <input
             class="tname"
             data-f="name:{t}"
+            data-undo="deck"
             value={topic.name}
             aria-label="{Word} name"
             placeholder={Word}
-            oninput={(e) => onchange(setTopic(doc, t, { name: e.currentTarget.value }))}
+            onbeforeinput={(e) => (selected = selectionOf(e.currentTarget))}
+            oninput={(e) => typed(setTopic(doc, t, { name: e.currentTarget.value }), t, `name:${t}`, e.currentTarget)}
             onkeydown={(e) => {
               if (e.key === 'Enter' && !e.isComposing) {
                 e.preventDefault()
@@ -418,6 +451,7 @@
           <input
             class="ttime"
             value={timeText(topic)}
+            data-committed={timeText(topic)}
             aria-label="Time for {topic.name}"
             title="About how long: 5m, 30s, ~5m, 1:30 or open"
             placeholder={kinds ? 'no time' : 'time'}
@@ -430,7 +464,7 @@
               aria-label="Kind of {topic.name}"
               onchange={(e) => {
                 const kind = e.currentTarget.value as SegmentKind
-                onchange(setTopic(doc, t, { segmentKind: kind === 'topic' ? null : kind }))
+                onchange(setTopic(doc, t, { segmentKind: kind === 'topic' ? null : kind }), keeping(t, control(t, 'tkind')))
               }}
             >
               {#each SEGMENT_KINDS as kind (kind)}<option value={kind}>{kind[0].toUpperCase() + kind.slice(1)}</option>{/each}
@@ -446,8 +480,9 @@
             onconfirm={() => {
               removing = null
               logAction(`${word === 'card' ? 'deck' : 'note'} remove ${word}`)
-              onchange(removeTopic(doc, t))
-              current = Math.max(0, t - 1)
+              const left = Math.max(0, t - 1)
+              onchange(removeTopic(doc, t), { card: t, to: left, before: inField(`name:${t}`), after: left > 0 ? inField(`name:${left}`) : undefined })
+              current = left
             }}
             oncancel={() => (removing = null)}>Remove “{topic.name || Word}” and its {count(pointsOf(topic).length, 'point')}?</ConfirmDelete
           >
@@ -477,10 +512,12 @@
               <span class="bul" aria-hidden="true">{item.depth === 1 ? '–' : '•'}</span>
               <input
                 data-f="{t}:{i}"
+                data-undo="deck"
                 value={item.text}
                 aria-label={item.depth === 1 ? 'Sub-point' : 'Point'}
                 placeholder={item.depth === 1 ? 'Sub-point' : 'Point'}
-                oninput={(e) => onchange(setPointText(doc, t, i, e.currentTarget.value))}
+                onbeforeinput={(e) => (selected = selectionOf(e.currentTarget))}
+                oninput={(e) => typed(setPointText(doc, t, i, e.currentTarget.value), t, `${t}:${i}`, e.currentTarget)}
                 onkeydown={(e) => onPointKey(e, t, i, item)}
               />
               <!-- Not in the Tab order: Tab and Shift+Tab in a point make and undo a sub-point. -->

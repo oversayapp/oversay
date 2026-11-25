@@ -26,7 +26,12 @@
   import { logAction } from '../lib/log'
   import { showBlockedBy } from '../lib/notes/show'
   import { session, sessionCommands } from '../lib/session/store'
-  import { closeNote, dismissChanged, editNote, flushNote, keepBothVersions, noteSaveError, openNote, openNoteAt, renameOpenNote, useOutsideVersion } from '../lib/notes/store'
+  import { closeNote, dismissChanged, editNote, flushNote, keepBothVersions, noteSaveError, openNote, openNoteAt, redoNote, renameOpenNote, undoNote, useOutsideVersion, type UndoBy } from '../lib/notes/store'
+  import { selectionOf, type Change, type Focus, type Selection, type Spot } from '../lib/notes/history'
+  import { deckTakesUndo, fieldHistory, undoKey, type UndoTarget, type Way } from '../lib/notes/undo-keys'
+  import { EDIT_MENU_EVENT, checkEditMenuChoice, editMenuState, sendEditMenu } from '../lib/notes/edit-menu'
+  import { listen } from '@tauri-apps/api/event'
+  import { isMac } from '../lib/session/shortcuts'
   import { quickName } from '../lib/notes/files'
   import { formatDuration } from '../lib/project/duration'
   import { count } from '../lib/words'
@@ -68,6 +73,7 @@
   )
 
   onDestroy(() => {
+    void sendEditMenu(null)
     if (previewing) void attempt(sessionCommands.end)
     void attempt(closeNote)
   })
@@ -85,7 +91,7 @@
 
   function setAudience(value: string) {
     if (!doc || deckAudience(doc) === value.trim()) return
-    editNote(writeNoteDoc(setDeckAudience(doc, value)))
+    edit(setDeckAudience(doc, value))
   }
 
   // The workspaces this deck is in (ADR 0040): each opens with a click and has × to take the
@@ -98,7 +104,7 @@
   const tags = $derived(doc ? deckTags(doc) : [])
   let tagText = $state('')
   function setTags(next: string[]) {
-    if (doc) editNote(writeNoteDoc(setDeckTags(doc, next)))
+    if (doc) edit(setDeckTags(doc, next))
   }
   function addTag() {
     const tag = tagText.replace(/,/g, ' ').trim()
@@ -134,13 +140,13 @@
     if (!topic || topic.time?.seconds === seconds) return
     // `[~3m]` stays an estimate; an untimed card becomes timed.
     const about = !!topic.time?.open && topic.time.seconds > 0
-    change(setTopic(doc, t, { time: { seconds, open: about } }))
+    edit(setTopic(doc, t, { time: { seconds, open: about } }))
   }
 
   function setOption<K extends keyof DeckOptions>(option: K, value: DeckOptions[K]) {
     if (!doc || !options || options[option] === value) return
     logAction('deck option', `${option} ${String(value)}`)
-    editNote(writeNoteDoc(setDeckOption(doc, option, value)))
+    edit(setDeckOption(doc, option, value))
   }
 
   const PART_LABELS: Record<DeckPart, string> = { position: '2/4', bar: 'Deck bar', next: 'Next card', left: 'Time left', ends: 'Ends at' }
@@ -198,7 +204,114 @@
   const editing = $derived(doc ? cardAt(doc, current) : 0)
   let area: HTMLTextAreaElement | undefined = $state()
 
-  const change = (next: NoteDoc) => editNote(writeNoteDoc(next))
+  // Undo and redo (ADR 0052). Where the editor is goes with each change, so undoing it can go
+  // back there.
+  let root: HTMLElement | undefined = $state()
+  const here = (card = current, focus: Focus | null = null): Spot => ({ view: page === 'settings' ? 'settings' : view === 'markdown' ? 'markdown' : 'cards', card, focus })
+  /** An edit that moves neither the card being edited nor focus: the plan bar and the settings. */
+  const edit = (next: NoteDoc) => editNote(writeNoteDoc(next), { before: here(), after: here() })
+  const change = (next: NoteDoc, how: Change = {}) =>
+    editNote(writeNoteDoc(next), {
+      what: how.what,
+      before: here(how.card, how.before),
+      after: here(how.to ?? how.card, how.after),
+    })
+  let topics: NoteTopics | undefined = $state()
+
+  // Typing in the Markdown view: where the cursor was before each keystroke.
+  let mdSelected: Selection = [0, 0]
+  const md = (select: Selection): Focus => ({ field: 'textarea.md', select })
+  function typeMarkdown(el: HTMLTextAreaElement) {
+    const before = here(current, md(mdSelected))
+    const text = el.value
+    const after = md(selectionOf(el))
+    // From the text as it now is: `doc` is still the one before this keystroke.
+    current = cursorCard(parseNoteDoc(text), el)
+    editNote(text, { what: 'typing', before, after: here(current, after) })
+  }
+
+  /** Where a key or a menu choice at `el` goes: whether the deck's undo takes it. */
+  function undoTarget(el: EventTarget | null): UndoTarget {
+    const node = el instanceof HTMLElement ? el : null
+    const textEntry =
+      node instanceof HTMLTextAreaElement ||
+      (node instanceof HTMLInputElement && !['checkbox', 'radio', 'button', 'range'].includes(node.type)) ||
+      !!node?.isContentEditable
+    return {
+      inEditor: !node || node === document.body || (!!root?.contains(node) && !node.closest('[role="dialog"]')),
+      textEntry,
+      savedAsTyped: node?.dataset.undo === 'deck',
+      value: node instanceof HTMLInputElement ? node.value : '',
+      committed: node?.dataset.committed ?? null,
+    }
+  }
+
+  /** `undoTarget` for where the person is: nowhere in the editor while a modal dialog is over it. */
+  function underFocus(el: EventTarget | null): UndoTarget {
+    const at = undoTarget(el)
+    return document.querySelector('[aria-modal="true"]') ? { ...at, inEditor: false } : at
+  }
+
+  async function travel(way: Way, by: UndoBy) {
+    const done = await (way === 'undo' ? undoNote : redoNote)(by)
+    if (!done) return
+    topics?.settle()
+    if (done.spot) await goTo(done.spot)
+  }
+
+  /** Shows where an undone or redone change was made, with focus where it was. */
+  async function goTo(spot: Spot) {
+    page = spot.view === 'settings' ? 'settings' : 'cards'
+    if (spot.view !== 'settings') view = spot.view === 'markdown' ? 'markdown' : 'edit'
+    current = spot.card
+    await tick()
+    const el = spot.focus && root?.querySelector<HTMLElement>(spot.focus.field)
+    if (!el) {
+      root?.querySelector(`[data-card="${spot.card}"]`)?.scrollIntoView({ block: 'nearest' })
+      return
+    }
+    el.focus()
+    if (el instanceof HTMLInputElement || el instanceof HTMLTextAreaElement) el.setSelectionRange(...(spot.focus?.select ?? [el.value.length, el.value.length]))
+    el.scrollIntoView({ block: 'nearest' })
+  }
+
+  function onUndoKey(e: KeyboardEvent) {
+    if (e.defaultPrevented || e.isComposing || !deck) return
+    const way = undoKey(e, isMac())
+    if (!way || !deckTakesUndo(underFocus(e.target))) return
+    // Stops the field's own undo too.
+    e.preventDefault()
+    void attempt(() => travel(way, 'keys'))
+  }
+
+  // The Mac's Edit › Undo and Redo follow the keys: the deck's wherever the keys would be, greyed
+  // by its history, and the field's own elsewhere. Looked at again when focus or typing moves.
+  let looked = $state(0)
+  let windowFocused = $state(true)
+  const lookAgain = () => queueMicrotask(() => looked++)
+  $effect(() => {
+    void looked
+    const history = deck?.history
+    void sendEditMenu(history && windowFocused ? editMenuState(underFocus(document.activeElement), history) : null)
+  })
+  $effect(() => {
+    const heard = listen<unknown>(EDIT_MENU_EVENT, (e) => {
+      const way = checkEditMenuChoice(e.payload)
+      if (way && deck) void attempt(() => travel(way, 'menu'))
+    })
+    return () => void heard.then((stop) => stop()).catch(() => {})
+  })
+
+  // The webview's own undo asked for another way (a context menu, or reaching a deck field from
+  // elsewhere): it never changes a deck field.
+  function onHistoryInput(e: InputEvent) {
+    const way: Way | null = e.inputType === 'historyUndo' ? 'undo' : e.inputType === 'historyRedo' ? 'redo' : null
+    if (!way || !deck) return
+    const what = fieldHistory(undoTarget(e.target), underFocus(document.activeElement))
+    if (what === 'leave') return
+    e.preventDefault()
+    if (what === 'deck') void attempt(() => travel(way, 'menu'))
+  }
 
   async function showView(next: 'edit' | 'markdown') {
     if (next === view) return
@@ -216,8 +329,11 @@
 
   function followCursor() {
     if (!area || !doc) return
-    current = topicAtLine(doc, area.value.slice(0, area.selectionStart).split('\n').length - 1)
+    current = cursorCard(doc, area)
   }
+
+  /** The card the Markdown view's cursor is in. */
+  const cursorCard = (of: NoteDoc, el: HTMLTextAreaElement) => topicAtLine(of, el.value.slice(0, el.selectionStart).split('\n').length - 1)
 
   // Not while a talk, a note or another deck is on screen; not before there is a card to show.
   const blocked = $derived(cards.length === 0 ? 'Add a card to show' : showBlockedBy($session))
@@ -252,13 +368,25 @@
   )
 </script>
 
-<div class="page">
+<svelte:window
+  onkeydown={onUndoKey}
+  onbeforeinputcapture={onHistoryInput}
+  onfocusincapture={lookAgain}
+  onfocusoutcapture={lookAgain}
+  oninput={lookAgain}
+  onchange={lookAgain}
+  onfocus={() => (windowFocused = true)}
+  onblur={() => (windowFocused = false)}
+/>
+
+<div class="page" bind:this={root}>
   {#if deck && doc && options}
     <header class="nhead">
       <span class="kicon"><Icon name="deck" size={20} /></span>
       <input
         class="name"
         value={deck.name}
+        data-committed={deck.name}
         aria-label="Deck name"
         onchange={rename}
         onkeydown={(e) => {
@@ -353,19 +481,18 @@
         {#if page === 'cards'}
           <div class="main">
         {#if view === 'edit'}
-          <NoteTopics {doc} noteName={deck.name} onchange={change} bind:current word="card" kinds />
+          <NoteTopics bind:this={topics} {doc} noteName={deck.name} onchange={change} bind:current word="card" kinds />
           {#if $justRan !== deck.path}<DeckAfter path={deck.path} />{/if}
         {:else}
           <textarea
             class="md"
+            data-undo="deck"
             aria-label="The deck in Markdown"
             spellcheck="true"
             bind:this={area}
             value={deck.text}
-            oninput={(e) => {
-              editNote(e.currentTarget.value)
-              followCursor()
-            }}
+            onbeforeinput={(e) => (mdSelected = selectionOf(e.currentTarget))}
+            oninput={(e) => typeMarkdown(e.currentTarget)}
             onclick={followCursor}
             onkeyup={followCursor}
           ></textarea>
@@ -382,7 +509,16 @@
               <div class="front">
       <label>
         <span>Audience</span>
-        <input value={deckAudience(doc)} placeholder="Who it is for" onchange={(e) => setAudience(e.currentTarget.value)} />
+        <input
+          value={deckAudience(doc)}
+          data-committed={deckAudience(doc)}
+          placeholder="Who it is for"
+          onchange={(e) => {
+            setAudience(e.currentTarget.value)
+            // As saved, so spacing alone doesn't leave the field holding something uncommitted.
+            e.currentTarget.value = e.currentTarget.value.trim()
+          }}
+        />
       </label>
       <div class="tags" role="group" aria-label="Tags">
         <span>Tags</span>
@@ -397,6 +533,7 @@
           class="tagin"
           placeholder={tags.length ? 'Add' : 'weekly, platform…'}
           aria-label="Add a tag"
+          data-committed=""
           bind:value={tagText}
           onkeydown={(e) => {
             if ((e.key === 'Enter' || e.key === ',') && !e.isComposing) {
